@@ -3,6 +3,7 @@ package middleware
 import (
 	"bufio"
 	"bytes"
+	"io"
 	"net"
 	"net/http"
 	"strconv"
@@ -136,16 +137,13 @@ func hwHeaderNameSet(header http.Header) map[string]bool {
 	return names
 }
 
-// hwMaskSkipped reports whether a response must not be buffered or rewritten,
-// e.g. a WebSocket upgrade or an already hijacked connection.
+// hwMaskSkipped reports whether a response must not be buffered or rewritten.
+// The decision never looks at request headers: a customer can send "Upgrade" or
+// "Connection: upgrade" on any route, and honouring those would hand out the
+// unfiltered supplier answer. Only a connection the server itself hijacked is
+// passed through, and the masking writer learns that from its own Hijack call.
 func hwMaskSkipped(c *gin.Context) bool {
-	if c == nil || c.Request == nil {
-		return true
-	}
-	if c.GetHeader("Upgrade") != "" {
-		return true
-	}
-	return strings.Contains(strings.ToLower(c.GetHeader("Connection")), "upgrade")
+	return c == nil || c.Request == nil
 }
 
 func hwAnthropicPath(c *gin.Context) bool {
@@ -237,9 +235,88 @@ func (w *hwMaskWriter) Flush() {
 	w.ResponseWriter.Flush()
 }
 
+// Hijack hands the connection to the protocol upgrade handler (WebSocket) and
+// wraps its writer so the handshake response block is filtered before it leaves
+// the process. Everything after the handshake — the WebSocket frames — is
+// protocol data the HTTP mask cannot read, so it passes through unchanged; the
+// handshake is the only place a supplier header could reach the customer.
 func (w *hwMaskWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	conn, readWriter, err := w.ResponseWriter.Hijack()
+	if err != nil {
+		return nil, nil, err
+	}
 	w.hijacked = true
-	return w.ResponseWriter.Hijack()
+	readWriter.Writer = bufio.NewWriter(&hwHandshakeWriter{
+		target: readWriter.Writer,
+		ctx:    w.ctx,
+	})
+	return conn, readWriter, nil
+}
+
+// hwHandshakeWriter filters the status line and headers of a hijacked
+// connection, then passes every following byte through untouched.
+type hwHandshakeWriter struct {
+	target io.Writer
+	ctx    *gin.Context
+	head   []byte
+	open   bool
+}
+
+func (h *hwHandshakeWriter) Write(data []byte) (int, error) {
+	if h.open {
+		return h.target.Write(data)
+	}
+	h.head = append(h.head, data...)
+	end := bytes.Index(h.head, []byte("\r\n\r\n"))
+	if end < 0 {
+		return len(data), nil
+	}
+	block := h.head[:end+4]
+	rest := h.head[end+4:]
+	h.head = nil
+	h.open = true
+	if _, err := h.target.Write(hwFilterHandshake(block)); err != nil {
+		return 0, err
+	}
+	if len(rest) > 0 {
+		if _, err := h.target.Write(rest); err != nil {
+			return 0, err
+		}
+	}
+	return len(data), nil
+}
+
+// hwFilterHandshake keeps the status line and drops every header line that names
+// a supplier. Protocol headers (Upgrade, Connection, Sec-WebSocket-Accept) carry
+// no supplier trace, so the handshake stays intact.
+func hwFilterHandshake(block []byte) []byte {
+	lines := bytes.Split(bytes.TrimSuffix(block, []byte("\r\n\r\n")), []byte("\r\n"))
+	var out bytes.Buffer
+	for index, line := range lines {
+		if index == 0 {
+			out.Write(line)
+			out.WriteString("\r\n")
+			continue
+		}
+		if len(line) == 0 {
+			continue
+		}
+		name, value, found := bytes.Cut(line, []byte(":"))
+		if !found {
+			out.Write(line)
+			out.WriteString("\r\n")
+			continue
+		}
+		if common.HwHasProviderTrace(string(name)) {
+			continue
+		}
+		out.Write(name)
+		out.WriteString(":")
+		out.WriteString(common.HwReplaceProviderWords(string(value)))
+		out.WriteString("\r\n")
+	}
+	out.WriteString("\r\n")
+	return out.Bytes()
 }
 
 // planTransform decides from the committed content type whether the body needs

@@ -485,6 +485,13 @@ func (e *hwEnv) addChannel(name, group, tag string, priority int64, supplier *hw
 // post sends one relay request through the customer-facing router.
 func (e *hwEnv) post(path string, payload map[string]any) *httptest.ResponseRecorder {
 	e.t.Helper()
+	return e.postWithHeaders(path, payload, nil)
+}
+
+// postWithHeaders sends one relay request with extra request headers, so a test
+// can prove that a header the customer controls cannot influence the mask.
+func (e *hwEnv) postWithHeaders(path string, payload map[string]any, headers map[string]string) *httptest.ResponseRecorder {
+	e.t.Helper()
 	body, err := common.Marshal(payload)
 	require.NoError(e.t, err)
 	request := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
@@ -492,6 +499,9 @@ func (e *hwEnv) post(path string, payload map[string]any) *httptest.ResponseReco
 	request.Header.Set("Authorization", "Bearer sk-"+e.token.Key)
 	if strings.Contains(path, "/messages") {
 		request.Header.Set("anthropic-version", "2023-06-01")
+	}
+	for name, value := range headers {
+		request.Header.Set(name, value)
 	}
 	recorder := httptest.NewRecorder()
 	e.engine.ServeHTTP(recorder, request)

@@ -73,6 +73,38 @@ func TestHwFreeAndUnknownGroupsNeverReachEmergencySupplier(t *testing.T) {
 	}
 }
 
+// T9: the mask never depends on request headers. A customer that sends an
+// Upgrade header, or a Connection header that says upgrade, on a plain
+// /v1/chat/completions request still gets the filtered answer instead of the
+// raw supplier response.
+func TestHwUpgradeRequestHeadersNeverBypassTheMask(t *testing.T) {
+	for _, testCase := range []struct {
+		name    string
+		headers map[string]string
+	}{
+		{name: "upgrade header", headers: map[string]string{"Upgrade": "x"}},
+		{name: "connection upgrade", headers: map[string]string{"Connection": "upgrade"}},
+		{name: "both", headers: map[string]string{"Upgrade": "websocket", "Connection": "Upgrade"}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			env := hwNewEnv(t, "paid", 1_000_000)
+			lumia := env.fake("lumia")
+			env.addChannel("lumia-primary", "paid", "lumia", 0, lumia)
+
+			recorder := env.postWithHeaders("/v1/chat/completions", hwChatRequest(hwTestModel, false), testCase.headers)
+
+			require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+			body := recorder.Body.String()
+			assert.Contains(t, body, "hello from the supplier", "the answer itself must still reach the customer")
+			assert.Empty(t, recorder.Header().Get("X-OpenRouter-Id"), "no supplier response header may reach the customer")
+			assert.Empty(t, recorder.Header().Get("X-Provider-Slug"))
+			assert.NotContains(t, body, "gen-", "the supplier response id must be rewritten")
+			assert.NotContains(t, strings.ToLower(body), "lumia")
+			hwAssertCleanResponse(t, recorder, false)
+		})
+	}
+}
+
 func (e *hwEnv) lastConsumeLogOther(t *testing.T) map[string]any {
 	t.Helper()
 	var stored model.Log
