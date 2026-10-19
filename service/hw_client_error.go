@@ -19,10 +19,17 @@ const (
 )
 
 // HwIsOwnErrorCode reports whether code belongs to an error this fork generated
-// itself, so its message can be shown to the customer unchanged.
+// itself, so its message can be shown to the customer unchanged. Besides the
+// routing codes above this covers the gateway's own rejections that happen
+// before a supplier is involved: quota, request validation and access control.
+// Supplier wording keeps arriving under different codes (for example the
+// upstream quota variant "insufficient_quota") and is still replaced.
 func HwIsOwnErrorCode(code string) bool {
 	switch code {
-	case string(HwErrorCodeServiceBusy), string(HwErrorCodeStreamInterrupted):
+	case string(HwErrorCodeServiceBusy), string(HwErrorCodeStreamInterrupted),
+		string(types.ErrorCodeInsufficientUserQuota), string(types.ErrorCodePreConsumeTokenQuotaFailed),
+		string(types.ErrorCodeInvalidRequest), string(types.ErrorCodeAccessDenied),
+		string(types.ErrorCodeSensitiveWordsDetected):
 		return true
 	}
 	return false

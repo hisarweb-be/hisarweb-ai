@@ -106,6 +106,32 @@ func TestHwMaskKeepsUsableResponseIds(t *testing.T) {
 	assert.Contains(t, body, `"id":"resp_hw-`, "the supplier id is rewritten to our own prefix:\n%s", body)
 }
 
+// Errors this gateway generated itself keep their own readable wording; only
+// upstream errors are replaced by the generic text. The quota case shows the
+// split: our code survives, the supplier's variant does not.
+func TestHwMaskKeepsOwnErrorText(t *testing.T) {
+	engine := hwMaskRoute(t, http.MethodPost, "/v1/chat/completions", func(c *gin.Context) {
+		c.Header("Content-Type", "application/json")
+		c.String(http.StatusForbidden, `{"error":{"message":"user quota is not enough, please recharge",`+
+			`"type":"insufficient_user_quota","code":"insufficient_user_quota"}}`)
+	})
+	recorder := hwMaskDo(t, engine, http.MethodPost, "/v1/chat/completions", "", nil)
+	require.Equal(t, http.StatusForbidden, recorder.Code, recorder.Body.String())
+	assert.Contains(t, recorder.Body.String(), "user quota is not enough, please recharge",
+		"the gateway's own quota error keeps its readable wording:\n%s", recorder.Body.String())
+
+	engine = hwMaskRoute(t, http.MethodPost, "/v1/chat/completions", func(c *gin.Context) {
+		c.Header("Content-Type", "application/json")
+		c.String(http.StatusTooManyRequests, `{"error":{"message":"OpenRouter billing limit reached for lumia",`+
+			`"type":"insufficient_quota","code":"insufficient_quota"}}`)
+	})
+	recorder = hwMaskDo(t, engine, http.MethodPost, "/v1/chat/completions", "", nil)
+	require.Equal(t, http.StatusTooManyRequests, recorder.Code, recorder.Body.String())
+	body := recorder.Body.String()
+	assert.NotContains(t, body, "billing limit reached", "upstream wording is replaced:\n%s", body)
+	assert.NotContains(t, body, "lumia", "no supplier name in the replacement:\n%s", body)
+}
+
 // The "x-or-" token is a header-name pattern. A header that carries it is
 // dropped, while body text with the same letters is left alone.
 func TestHwMaskAppliesHeaderPatternToHeaderNamesOnly(t *testing.T) {
