@@ -306,7 +306,9 @@ func ListUserCreditPackages(userID int) ([]HwPackageView, error) {
 //
 // Each user is handled on its own: a user that fails (for example a deleted
 // account) is logged with its id and error class only, the remaining users are
-// still processed, and the first error is returned at the end.
+// still processed, and the first error is returned at the end. The closing log
+// line counts the failed users and names the first error class; the error text
+// itself never reaches the log, because a driver error can quote row data.
 func RetireExpiredPackages(now int64) (int, error) {
 	if now <= 0 {
 		return 0, ErrHwInvalidCreditGrant
@@ -320,29 +322,40 @@ func RetireExpiredPackages(now int64) (int, error) {
 	}
 	slices.Sort(userIDs)
 	total := 0
+	failed := 0
 	var firstErr error
+	firstClass := ""
 	for _, userID := range userIDs {
 		retired, err := retireExpiredPackagesForUser(userID, now)
 		if err != nil {
 			if firstErr == nil {
 				firstErr = err
+				firstClass = hwErrorClass(err)
 			}
-			// Never the error text: a driver error can quote row data.
-			class := "internal"
-			switch {
-			case errors.Is(err, gorm.ErrRecordNotFound):
-				class = "record_not_found"
-			case errors.Is(err, ErrWalletQuotaLimitExceeded):
-				class = "wallet_quota_limit"
-			case errors.Is(err, ErrHwInvalidCreditGrant):
-				class = "invalid_grant"
-			}
-			common.SysError(common.LogText("credit package expiry failed for user %d (class %s); continuing with the next user", userID, class))
+			failed++
+			common.SysError(common.LogText("credit package expiry failed for user %d (class %s); continuing with the next user", userID, hwErrorClass(err)))
 			continue
 		}
 		total += retired
 	}
+	if failed > 0 {
+		common.SysError(common.LogText("credit package expiry failed for %d users (first class %s); the first error is returned to the caller", failed, firstClass))
+	}
 	return total, firstErr
+}
+
+// hwErrorClass maps an error of the expiry run to its log class. Log lines carry
+// the class and never the error text: a driver error can quote row data.
+func hwErrorClass(err error) string {
+	switch {
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		return "record_not_found"
+	case errors.Is(err, ErrWalletQuotaLimitExceeded):
+		return "wallet_quota_limit"
+	case errors.Is(err, ErrHwInvalidCreditGrant):
+		return "invalid_grant"
+	}
+	return "internal"
 }
 
 // RetireExpiredPackagesForUser is the lazy path for a single user: it runs the
@@ -489,7 +502,8 @@ func runHwCreditExpiryOnceSafely() {
 	}()
 	retired, err := RetireExpiredPackages(common.GetTimestamp())
 	if err != nil {
-		common.SysError(common.LogText("credit package expiry job failed: %s", err.Error()))
+		// Already logged inside RetireExpiredPackages as a user count and an
+		// error class. The text stays out of the log on purpose.
 		return
 	}
 	if retired > 0 {

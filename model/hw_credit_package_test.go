@@ -1,10 +1,13 @@
 package model
 
 import (
+	"bytes"
+	"fmt"
 	"sync"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -228,6 +231,66 @@ func getBufferedUserQuota(userID int) int {
 	batchUpdateLocks[BatchUpdateTypeUserQuota].Lock()
 	defer batchUpdateLocks[BatchUpdateTypeUserQuota].Unlock()
 	return batchUpdateStores[BatchUpdateTypeUserQuota][userID]
+}
+
+// hwCaptureErrorLog redirects the server error log into a buffer for the length
+// of one assertion block. The model package logs through common.SysError, which
+// writes to gin.DefaultErrorWriter behind a lock the swap respects.
+func hwCaptureErrorLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	buf := &bytes.Buffer{}
+	common.LogWriterMu.Lock()
+	previous := gin.DefaultErrorWriter
+	gin.DefaultErrorWriter = buf
+	common.LogWriterMu.Unlock()
+	t.Cleanup(func() {
+		common.LogWriterMu.Lock()
+		gin.DefaultErrorWriter = previous
+		common.LogWriterMu.Unlock()
+	})
+	return buf
+}
+
+func TestHwRetireExpiredPackagesLogsCountAndClassWithoutErrorText(t *testing.T) {
+	hwCreditTestSetup(t)
+	now := int64(1_700_000_000)
+	blocked := createHwTestUser(t, 50)
+	later := createHwTestUser(t, 60)
+	require.Greater(t, later.Id, blocked.Id, "the blocked account is processed first")
+	_, err := GrantCreditPackage(nil, blocked.Id, 40, HwSourcePurchase, "order-blocked", now)
+	require.NoError(t, err)
+	_, err = GrantCreditPackage(nil, later.Id, 40, HwSourcePurchase, "order-later", now)
+	require.NoError(t, err)
+	require.NoError(t, DB.Model(&HwCreditPackage{}).
+		Where("user_id IN ?", []int{blocked.Id, later.Id}).
+		Update("expires_at", now-1).Error)
+
+	// A BEFORE UPDATE trigger makes the balance deduction of the first user fail
+	// with a driver error whose text quotes this marker; the log must not.
+	// SQLite triggers take no bound parameters, so the id is formatted in; it is
+	// an integer the database itself produced.
+	require.NoError(t, DB.Exec(fmt.Sprintf(
+		"CREATE TRIGGER hw_test_block_quota BEFORE UPDATE OF quota ON users WHEN NEW.id = %d "+
+			"BEGIN SELECT RAISE(ABORT, 'hw-test-blocked-deduction'); END", blocked.Id)).Error)
+	t.Cleanup(func() { DB.Exec("DROP TRIGGER IF EXISTS hw_test_block_quota") })
+
+	logBuf := hwCaptureErrorLog(t)
+	retired, err := RetireExpiredPackages(now)
+	require.Error(t, err, "the first error is still returned to the caller")
+	assert.Contains(t, err.Error(), "hw-test-blocked-deduction", "the caller still gets the error text")
+	assert.Equal(t, 1, retired, "the user after the failure is still retired")
+	assert.Equal(t, 60, getUserQuotaFromDB(t, later.Id), "the later user's balance is lowered")
+	assert.Equal(t, 90, getUserQuotaFromDB(t, blocked.Id), "the blocked user's balance is untouched")
+
+	logs := logBuf.String()
+	assert.Contains(t, logs, "credit package expiry failed for 1 users")
+	assert.Contains(t, logs, "first class internal")
+	assert.NotContains(t, logs, "hw-test-blocked-deduction", "the error text never reaches the log")
+
+	// The periodic job wraps the same run and used to print the error text.
+	logBuf.Reset()
+	runHwCreditExpiryOnceSafely()
+	assert.NotContains(t, logBuf.String(), "hw-test-blocked-deduction", "the job log also stays without the error text")
 }
 
 func TestHwGrantCreditPackageIsIdempotent(t *testing.T) {
