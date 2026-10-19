@@ -267,7 +267,7 @@ func formatLogOtherJSON(value string, visibility logOtherVisibility) string {
 	}
 
 	if !changed {
-		return value
+		return hwScrubCustomerTrace(value, visibility)
 	}
 	formatted, err := common.Marshal(values)
 	if err != nil {
@@ -276,5 +276,15 @@ func formatLogOtherJSON(value string, visibility logOtherVisibility) string {
 		}
 		return "{}"
 	}
-	return string(formatted)
+	return hwScrubCustomerTrace(string(formatted), visibility)
+}
+
+// hwScrubCustomerTrace is the last-resort scan of the customer projection: a
+// supplier name must never reach a customer, not even through a public
+// diagnostic field such as the model name the upstream declared.
+func hwScrubCustomerTrace(text string, visibility logOtherVisibility) string {
+	if visibility != logOtherVisibilityUser || !common.HwHasProviderTrace(text) {
+		return text
+	}
+	return common.HwReplaceProviderWords(text)
 }
