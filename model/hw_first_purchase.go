@@ -48,7 +48,9 @@ func (HwFirstPurchaseClaim) TableName() string {
 // The check across users reads before it writes; two orders of two accounts that
 // share a card or phone and are created in the same instant can both pass. The
 // second payment is caught when the claim of the first one exists, so the window
-// is one in-flight order, not a repeatable hole.
+// is one in-flight order, not a repeatable hole. The claim stores only the most
+// recent phone hash and card fingerprint of the claiming user; a value the user
+// later replaced stays outside that record.
 //
 // Passing a transaction makes the claim part of the caller's order transaction.
 func HwClaimFirstPurchaseDiscount(tx *gorm.DB, userID int, orderRef string, now int64) (bool, string, error) {
