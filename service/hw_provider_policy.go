@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -63,18 +64,42 @@ type HwRouteState struct {
 	upstreamIDs     []string
 }
 
-// HwChannelProvider maps a channel tag onto its supplier role.
+// HwChannelProvider maps a channel onto its supplier role. The tag is the
+// primary signal, but an emergency supplier must also be recognised without an
+// exact tag: a channel of the OpenRouter type, a tag that merely prefixes the
+// supplier name (openrouter-eu) and a base URL that points at the supplier host
+// all count. Missing one of those would let a free account reach the emergency
+// supplier, so the check is deliberately broad.
 func HwChannelProvider(channel *model.Channel) string {
 	if channel == nil {
 		return ""
 	}
-	switch strings.ToLower(strings.TrimSpace(channel.GetTag())) {
-	case HwProviderLumia:
+	tag := strings.ToLower(strings.TrimSpace(channel.GetTag()))
+	switch {
+	case tag == HwProviderLumia:
 		return HwProviderLumia
-	case HwProviderOpenRouter:
+	case tag == HwProviderOpenRouter, strings.HasPrefix(tag, HwProviderOpenRouter+"-"):
+		return HwProviderOpenRouter
+	}
+	if channel.Type == constant.ChannelTypeOpenRouter || hwChannelHostsOpenRouter(channel.GetBaseURL()) {
 		return HwProviderOpenRouter
 	}
 	return HwProviderInternal
+}
+
+// hwChannelHostsOpenRouter reports whether a channel base URL points at the
+// emergency supplier's host.
+func hwChannelHostsOpenRouter(baseURL string) bool {
+	trimmed := strings.TrimSpace(baseURL)
+	if trimmed == "" {
+		return false
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return host == "openrouter.ai" || strings.HasSuffix(host, ".openrouter.ai")
 }
 
 // HwChannelAllowedForGroup enforces the hard rule that the emergency supplier

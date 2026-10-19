@@ -482,6 +482,36 @@ func (e *hwEnv) addChannel(name, group, tag string, priority int64, supplier *hw
 	return channel
 }
 
+// addUntaggedChannel registers a supplier channel without a tag, so a test can
+// prove that the supplier role is recognised from the channel type too.
+func (e *hwEnv) addUntaggedChannel(name, group string, channelType int, priority int64, supplier *hwFakeSupplier) *model.Channel {
+	e.t.Helper()
+	baseURL := supplier.server.URL
+	weight := uint(1)
+	channel := &model.Channel{
+		Name:     name,
+		Type:     channelType,
+		Key:      "sk-fake-untagged",
+		Status:   common.ChannelStatusEnabled,
+		BaseURL:  &baseURL,
+		Group:    group,
+		Models:   "claude-sonnet-5-5",
+		Priority: &priority,
+		Weight:   &weight,
+		AutoBan:  common.GetPointer(0),
+	}
+	require.NoError(e.t, e.db.Create(channel).Error)
+	require.NoError(e.t, e.db.Create(&model.Ability{
+		Group:     group,
+		Model:     "claude-sonnet-5-5",
+		ChannelId: channel.Id,
+		Enabled:   true,
+		Priority:  &priority,
+		Weight:    weight,
+	}).Error)
+	return channel
+}
+
 // post sends one relay request through the customer-facing router.
 func (e *hwEnv) post(path string, payload map[string]any) *httptest.ResponseRecorder {
 	e.t.Helper()

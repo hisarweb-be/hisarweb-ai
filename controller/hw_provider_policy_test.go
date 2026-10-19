@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
@@ -94,6 +95,23 @@ func TestHwFreeAccountWithPaidTokenNeverReachesEmergencySupplier(t *testing.T) {
 	assert.Contains(t, recorder.Body.String(), "service_busy")
 	assert.Equal(t, 0, openrouter.callCount(), "a free account must never reach the emergency supplier through a paid token")
 	assert.Equal(t, 2, lumia.callCount(), "the primary supplier keeps its own outage retry")
+}
+
+// T3c: a channel that is the emergency supplier without carrying the exact tag
+// (here: the OpenRouter channel type, no tag) must not serve a free group. The
+// group has no tagged supplier for the model, so before the fix the request was
+// relayed to the emergency channel untouched.
+func TestHwUntaggedEmergencyChannelNeverServesFreeGroup(t *testing.T) {
+	env := hwNewEnv(t, "free", 1_000_000)
+	openrouter := env.fake("openrouter")
+	env.addUntaggedChannel("tagless-emergency", "free", constant.ChannelTypeOpenRouter, 0, openrouter)
+
+	recorder := env.post("/v1/chat/completions", hwChatRequest(hwTestModel, false))
+
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code, recorder.Body.String())
+	assert.Contains(t, recorder.Body.String(), "service_busy")
+	assert.Equal(t, 0, openrouter.callCount(), "an untagged emergency channel must never answer a free request")
+	assert.NotContains(t, strings.ToLower(recorder.Body.String()), "openrouter")
 }
 
 // T9: the mask never depends on request headers. A customer that sends an
