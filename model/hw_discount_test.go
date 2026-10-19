@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -216,6 +217,42 @@ func TestHwClaimFirstPurchaseDiscount(t *testing.T) {
 		eligible, reason, err := HwClaimFirstPurchaseDiscount(nil, second.Id, "ord-b", now)
 		require.NoError(t, err)
 		assert.True(t, eligible, "reason: %s", reason)
+	})
+
+	t.Run("racing orders of one user produce one eligible claim", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		user := createHwTestUser(t, 0)
+		hwMarkPhoneVerified(t, user.Id)
+
+		// SQLite in this suite runs on a single connection, so these goroutines
+		// queue instead of writing concurrently. The case still pins the
+		// contract: the unique user_id index lets exactly one racing order claim
+		// the discount; every other order is answered already_claimed.
+		var wg sync.WaitGroup
+		eligible := make([]bool, 5)
+		reasons := make([]string, 5)
+		errs := make([]error, 5)
+		for i := range 5 {
+			wg.Go(func() {
+				eligible[i], reasons[i], errs[i] = HwClaimFirstPurchaseDiscount(nil, user.Id, "ord-race-"+strconv.Itoa(i), now)
+			})
+		}
+		wg.Wait()
+
+		claims := 0
+		for i := range eligible {
+			require.NoError(t, errs[i])
+			if eligible[i] {
+				claims++
+			} else {
+				assert.Equal(t, HwFirstPurchaseAlreadyClaimed, reasons[i])
+			}
+		}
+		assert.Equal(t, 1, claims)
+
+		var rows int64
+		require.NoError(t, DB.Model(&HwFirstPurchaseClaim{}).Where("user_id = ?", user.Id).Count(&rows).Error)
+		assert.Equal(t, int64(1), rows, "one claim row survives the race")
 	})
 }
 

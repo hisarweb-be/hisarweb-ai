@@ -2,6 +2,7 @@ package model
 
 import (
 	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -409,6 +410,42 @@ func TestHwGrantFreeTrialCreditGuards(t *testing.T) {
 		var count int64
 		require.NoError(t, DB.Model(&HwCreditPackage{}).Where("user_id = ?", user.Id).Count(&count).Error)
 		assert.Zero(t, count)
+	})
+
+	t.Run("two accounts with the same phone race for one claim", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		first := createHwTestUser(t, 0)
+		second := createHwTestUser(t, 0)
+		require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{Phone: "0555 987 65 43"}))
+		require.NoError(t, UpsertHwUserSignals(second.Id, HwUserSignals{Phone: "+90 555 987 65 43"}))
+
+		// SQLite in this suite runs on a single connection, so these goroutines
+		// queue instead of writing concurrently. The case still pins the
+		// contract: whichever account reaches the phone claim first wins, the
+		// other is refused with shared_phone, and the credit is granted once.
+		var wg sync.WaitGroup
+		grantedFlags := make([]bool, 2)
+		reasons := make([]string, 2)
+		errs := make([]error, 2)
+		for i, id := range []int{first.Id, second.Id} {
+			wg.Go(func() {
+				grantedFlags[i], reasons[i], errs[i] = HwGrantFreeTrialCredit(id, 100, now)
+			})
+		}
+		wg.Wait()
+
+		granted := 0
+		for i := range grantedFlags {
+			require.NoError(t, errs[i])
+			if grantedFlags[i] {
+				granted++
+				assert.Empty(t, reasons[i])
+			} else {
+				assert.Equal(t, HwFreeTrialSharedSignal+"phone", reasons[i])
+			}
+		}
+		assert.Equal(t, 1, granted)
+		assert.Equal(t, 100, getUserQuotaFromDB(t, first.Id)+getUserQuotaFromDB(t, second.Id), "exactly one free package exists")
 	})
 
 	t.Run("the cap itself is allowed", func(t *testing.T) {

@@ -302,6 +302,12 @@ func TestHwRetireExpiredPackagesLogsCountAndClassWithoutErrorText(t *testing.T) 
 	assert.Contains(t, logs, "first class internal")
 	assert.NotContains(t, logs, "hw-test-blocked-deduction", "the error text never reaches the log")
 
+	// The failed user keeps a consistent state: the transaction rolls back, so
+	// the package is not half-retired and the balance keeps its value.
+	var blockedPkg HwCreditPackage
+	require.NoError(t, DB.Where("order_ref = ?", "order-blocked").First(&blockedPkg).Error)
+	assert.Zero(t, blockedPkg.RetiredAt, "a failed deduction retires nothing")
+
 	// The periodic job wraps the same run and used to print the error text.
 	logBuf.Err.Reset()
 	runHwCreditExpiryOnceSafely()
