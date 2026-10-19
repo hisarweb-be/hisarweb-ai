@@ -65,8 +65,13 @@ func HwComputePurchase(listValueTRY decimal.Decimal, firstPurchase bool) (HwPurc
 }
 
 // HwIsFirstPaidPurchase reports whether the user has no completed paid purchase
-// yet. A purchase-sourced credit package is the record of a completed purchase,
-// so the order flow of the payment module can rely on the same ledger.
+// yet. A purchase-sourced credit package is the record of a completed purchase.
+//
+// It is no longer the source of the first-purchase decision: the order flow calls
+// HwClaimFirstPurchaseDiscount, which records the claim at order creation and
+// therefore also catches a second account on the same card or phone. This
+// function remains for reporting and back-office checks, where the question is
+// what was actually paid.
 func HwIsFirstPaidPurchase(tx *gorm.DB, userID int) (bool, error) {
 	if userID <= 0 {
 		return false, ErrHwInvalidCreditGrant

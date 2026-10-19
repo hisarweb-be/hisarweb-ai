@@ -7,6 +7,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestHwComputePurchase(t *testing.T) {
@@ -58,6 +59,123 @@ func TestHwIsFirstPaidPurchase(t *testing.T) {
 	first, err = HwIsFirstPaidPurchase(nil, user.Id)
 	require.NoError(t, err)
 	assert.False(t, first, "a purchase-sourced package counts as a completed purchase")
+}
+
+func TestHwClaimFirstPurchaseDiscount(t *testing.T) {
+	now := int64(1_700_000_000)
+
+	t.Run("claims once and answers the same order the same way", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		user := createHwTestUser(t, 0)
+
+		eligible, reason, err := HwClaimFirstPurchaseDiscount(nil, user.Id, "ord-1", now)
+		require.NoError(t, err)
+		assert.True(t, eligible, "reason: %s", reason)
+		assert.Empty(t, reason)
+
+		eligible, reason, err = HwClaimFirstPurchaseDiscount(nil, user.Id, "ord-1", now)
+		require.NoError(t, err)
+		assert.True(t, eligible, "the same order keeps its answer")
+		assert.Empty(t, reason)
+
+		eligible, reason, err = HwClaimFirstPurchaseDiscount(nil, user.Id, "ord-2", now)
+		require.NoError(t, err)
+		assert.False(t, eligible)
+		assert.Equal(t, HwFirstPurchaseAlreadyClaimed, reason)
+
+		var count int64
+		require.NoError(t, DB.Model(&HwFirstPurchaseClaim{}).Where("user_id = ?", user.Id).Count(&count).Error)
+		assert.Equal(t, int64(1), count)
+	})
+
+	t.Run("runs inside the caller's transaction", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		user := createHwTestUser(t, 0)
+
+		var eligible bool
+		require.NoError(t, DB.Transaction(func(tx *gorm.DB) error {
+			var reason string
+			var err error
+			eligible, reason, err = HwClaimFirstPurchaseDiscount(tx, user.Id, "ord-tx", now)
+			require.Empty(t, reason)
+			return err
+		}))
+		assert.True(t, eligible)
+	})
+
+	t.Run("releasing gives the discount back for another order", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		user := createHwTestUser(t, 0)
+		_, _, err := HwClaimFirstPurchaseDiscount(nil, user.Id, "ord-1", now)
+		require.NoError(t, err)
+
+		require.NoError(t, HwReleaseFirstPurchaseClaim(nil, user.Id, "ord-other"))
+		eligible, reason, err := HwClaimFirstPurchaseDiscount(nil, user.Id, "ord-2", now)
+		require.NoError(t, err)
+		assert.False(t, eligible, "another order's release changes nothing (reason: %s)", reason)
+
+		require.NoError(t, HwReleaseFirstPurchaseClaim(nil, user.Id, "ord-1"))
+		require.NoError(t, HwReleaseFirstPurchaseClaim(nil, user.Id, "ord-1"), "releasing twice changes nothing")
+		eligible, reason, err = HwClaimFirstPurchaseDiscount(nil, user.Id, "ord-2", now)
+		require.NoError(t, err)
+		assert.True(t, eligible, "reason: %s", reason)
+	})
+
+	t.Run("refuses a phone another claim already used", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		first := createHwTestUser(t, 0)
+		second := createHwTestUser(t, 0)
+		require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{Phone: "0555 123 45 67"}))
+		require.NoError(t, UpsertHwUserSignals(second.Id, HwUserSignals{Phone: "+90 555 123 45 67"}))
+
+		eligible, _, err := HwClaimFirstPurchaseDiscount(nil, first.Id, "ord-a", now)
+		require.NoError(t, err)
+		require.True(t, eligible)
+
+		eligible, reason, err := HwClaimFirstPurchaseDiscount(nil, second.Id, "ord-b", now)
+		require.NoError(t, err)
+		assert.False(t, eligible)
+		assert.Equal(t, HwFirstPurchaseSharedPhone, reason)
+
+		var count int64
+		require.NoError(t, DB.Model(&HwFirstPurchaseClaim{}).Where("user_id = ?", second.Id).Count(&count).Error)
+		assert.Zero(t, count, "a refused claim is not recorded")
+
+		require.NoError(t, HwReleaseFirstPurchaseClaim(nil, first.Id, "ord-a"))
+		eligible, reason, err = HwClaimFirstPurchaseDiscount(nil, second.Id, "ord-b", now)
+		require.NoError(t, err)
+		assert.True(t, eligible, "the discount returns when the first claim is released (reason: %s)", reason)
+	})
+
+	t.Run("refuses a card another claim already used", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		first := createHwTestUser(t, 0)
+		second := createHwTestUser(t, 0)
+		require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{CardFingerprint: "fp-card-1"}))
+		require.NoError(t, UpsertHwUserSignals(second.Id, HwUserSignals{CardFingerprint: "fp-card-1"}))
+
+		eligible, _, err := HwClaimFirstPurchaseDiscount(nil, first.Id, "ord-a", now)
+		require.NoError(t, err)
+		require.True(t, eligible)
+
+		eligible, reason, err := HwClaimFirstPurchaseDiscount(nil, second.Id, "ord-b", now)
+		require.NoError(t, err)
+		assert.False(t, eligible)
+		assert.Equal(t, HwFirstPurchaseSharedCard, reason)
+	})
+
+	t.Run("two users without shared signals both claim", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		first := createHwTestUser(t, 0)
+		second := createHwTestUser(t, 0)
+
+		eligible, _, err := HwClaimFirstPurchaseDiscount(nil, first.Id, "ord-a", now)
+		require.NoError(t, err)
+		require.True(t, eligible)
+		eligible, reason, err := HwClaimFirstPurchaseDiscount(nil, second.Id, "ord-b", now)
+		require.NoError(t, err)
+		assert.True(t, eligible, "reason: %s", reason)
+	})
 }
 
 func TestHwComputePurchaseRejectsNonPositiveValue(t *testing.T) {
