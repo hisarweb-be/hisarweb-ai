@@ -161,6 +161,7 @@ func main() {
 	if os.Getenv("BATCH_UPDATE_ENABLED") == "true" {
 		common.BatchUpdateEnabled = true
 		common.SysLog(common.LogText("batch update enabled with interval %ss", strconv.Itoa(common.BatchUpdateInterval)))
+		common.SysError(common.LogText("HisarWeb AI is meant to run with BATCH_UPDATE_ENABLED unset: the credit ledger reads users.quota, and consumption still in the buffer can be deducted twice by an expiry run"))
 		model.InitBatchUpdater()
 	}
 

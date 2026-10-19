@@ -306,6 +306,7 @@ func retireExpiredPackagesForUser(userID int, now int64) (int, error) {
 	if userID <= 0 || now <= 0 {
 		return 0, ErrHwInvalidCreditGrant
 	}
+	hwFlushPendingQuotaUpdates()
 	retired := 0
 	decrease := 0
 	err := DB.Transaction(func(tx *gorm.DB) error {
@@ -367,6 +368,20 @@ func retireExpiredPackagesForUser(userID int, now int64) (int, error) {
 		}
 	}
 	return retired, nil
+}
+
+// hwFlushPendingQuotaUpdates writes buffered quota deltas to the database before
+// the ledger reads users.quota. With BATCH_UPDATE_ENABLED the consumption of the
+// last interval still sits in memory; retiring a package against the stored
+// balance would deduct that consumption a second time when the buffer flushes.
+// Flushing always works here because the batch updater lives in this package; a
+// node that does not hold the buffer flushes it on its own interval.
+func hwFlushPendingQuotaUpdates() {
+	if !common.BatchUpdateEnabled {
+		return
+	}
+	common.SysLog(common.LogText("credit package expiry flushes the batch update buffer first"))
+	batchUpdate()
 }
 
 var hwCreditExpiryOnce sync.Once

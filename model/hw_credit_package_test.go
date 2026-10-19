@@ -197,6 +197,37 @@ func TestHwRetireExpiredPackagesKeepsGoingAfterAFailedUser(t *testing.T) {
 	assert.Equal(t, 90, deletedUser.Quota, "the deleted account's balance is not touched")
 }
 
+func TestHwRetireExpiredPackagesFlushesPendingBatchUpdates(t *testing.T) {
+	hwCreditTestSetup(t)
+	resetBatchUpdateTestState(t)
+	now := int64(1_700_000_000)
+	user := createHwTestUser(t, 0)
+	_, err := GrantCreditPackage(nil, user.Id, 100, HwSourcePurchase, "order-batch", now)
+	require.NoError(t, err)
+
+	common.BatchUpdateEnabled = true
+	require.NoError(t, DecreaseUserQuota(user.Id, 100, false))
+	require.Equal(t, 100, getUserQuotaFromDB(t, user.Id), "the consumption is still in the batch buffer")
+	require.NoError(t, DB.Model(&HwCreditPackage{}).Where("user_id = ?", user.Id).Update("expires_at", now-1).Error)
+
+	retired, err := RetireExpiredPackages(now)
+	require.NoError(t, err)
+	assert.Equal(t, 1, retired)
+	assert.Equal(t, 0, getUserQuotaFromDB(t, user.Id))
+	assert.Equal(t, 0, getBufferedUserQuota(user.Id), "the buffer is flushed, not deducted twice")
+
+	var pkg HwCreditPackage
+	require.NoError(t, DB.Where("order_ref = ?", "order-batch").First(&pkg).Error)
+	assert.Zero(t, pkg.RetiredRemaining, "the package was already spent before it expired")
+}
+
+// getBufferedUserQuota returns the quota delta still waiting in the batch buffer.
+func getBufferedUserQuota(userID int) int {
+	batchUpdateLocks[BatchUpdateTypeUserQuota].Lock()
+	defer batchUpdateLocks[BatchUpdateTypeUserQuota].Unlock()
+	return batchUpdateStores[BatchUpdateTypeUserQuota][userID]
+}
+
 func TestHwGrantCreditPackageIsIdempotent(t *testing.T) {
 	hwCreditTestSetup(t)
 	now := int64(1_700_000_000)
