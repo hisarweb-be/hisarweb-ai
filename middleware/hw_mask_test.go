@@ -184,6 +184,23 @@ func TestHwMaskRecoversFilterPanic(t *testing.T) {
 	assert.Contains(t, body, `"error"`, "the stream ends with our own error event:\n%s", body)
 }
 
+// Values above the parse budget leave as text instead of being rewritten
+// structurally, but the safety net still scrubs them: an oversized model
+// answer must not become the one hole a supplier name slips through.
+func TestHwMaskAppliesNetToOversizedValues(t *testing.T) {
+	blob := strings.Repeat("a", hwMaxPendingPayload+64)
+	engine := hwMaskRoute(t, http.MethodPost, "/v1/responses", func(c *gin.Context) {
+		c.Header("Content-Type", "text/event-stream")
+		c.String(http.StatusOK, "data: {\"type\":\"response.output_text.delta\",\"delta\":\""+blob+"openrouter tail")
+	})
+	recorder := hwMaskDo(t, engine, http.MethodPost, "/v1/responses", "", nil)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	body := recorder.Body.String()
+	assert.NotContains(t, body, "openrouter", "the oversized value passes the safety net:\n%s", body[:64])
+	assert.Contains(t, body, blob, "the oversized answer itself still reaches the customer")
+	assert.Contains(t, body, "provider tail", "the supplier name became the placeholder")
+}
+
 // The "x-or-" token is a header-name pattern. A header that carries it is
 // dropped, while body text with the same letters is left alone.
 func TestHwMaskAppliesHeaderPatternToHeaderNamesOnly(t *testing.T) {

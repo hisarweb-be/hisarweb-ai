@@ -554,7 +554,10 @@ func (w *hwMaskWriter) sanitizeStream(data []byte) []byte {
 		end, complete := hwJSONValueEnd(w.pending)
 		if !complete {
 			if len(w.pending) > hwMaxPendingPayload {
-				out.Write(w.pending)
+				// The value exceeds the parse budget, so it goes out as text
+				// instead of being rewritten structurally — but never raw:
+				// the safety net still scrubs it.
+				out.WriteString(hwSafetyNet(w.ctx, w.pending))
 				w.pending = nil
 			}
 			break
