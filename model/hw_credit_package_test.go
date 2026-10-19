@@ -265,6 +265,33 @@ func TestHwGrantCreditPackageIsIdempotent(t *testing.T) {
 	assert.Equal(t, 150, getUserQuotaFromDB(t, user.Id))
 }
 
+func TestHwGrantCreditPackageRejectsOrderRefConflict(t *testing.T) {
+	hwCreditTestSetup(t)
+	now := int64(1_700_000_000)
+	first := createHwTestUser(t, 0)
+	second := createHwTestUser(t, 0)
+
+	granted, err := GrantCreditPackage(nil, first.Id, 100, HwSourcePurchase, "order-shared", now)
+	require.NoError(t, err)
+	require.True(t, granted)
+
+	granted, err = GrantCreditPackage(nil, second.Id, 100, HwSourcePurchase, "order-shared", now)
+	require.ErrorIs(t, err, ErrHwOrderRefConflict, "another user under the same reference")
+	assert.False(t, granted)
+	assert.Equal(t, 0, getUserQuotaFromDB(t, second.Id))
+	assert.Equal(t, 100, getUserQuotaFromDB(t, first.Id))
+
+	granted, err = GrantCreditPackage(nil, first.Id, 150, HwSourcePurchase, "order-shared", now)
+	require.ErrorIs(t, err, ErrHwOrderRefConflict, "another amount under the same reference")
+	assert.False(t, granted)
+	assert.Equal(t, 100, getUserQuotaFromDB(t, first.Id))
+
+	granted, err = GrantCreditPackage(nil, first.Id, 100, HwSourcePurchase, "order-shared", now)
+	require.NoError(t, err, "the identical issuance stays an idempotent repeat")
+	assert.False(t, granted)
+	assert.Equal(t, 100, getUserQuotaFromDB(t, first.Id))
+}
+
 func TestHwPackageRemaining(t *testing.T) {
 	packages := func() []HwCreditPackage {
 		return []HwCreditPackage{

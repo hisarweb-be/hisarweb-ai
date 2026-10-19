@@ -38,6 +38,10 @@ var (
 	// ErrHwInvalidCreditGrant rejects a grant that would break the ledger
 	// invariants: unknown source, non-positive quota, empty order reference.
 	ErrHwInvalidCreditGrant = errors.New("invalid credit package grant")
+
+	// ErrHwOrderRefConflict rejects a second, different issuance under an order
+	// reference that already belongs to another user or another amount.
+	ErrHwOrderRefConflict = errors.New("order reference already granted with another user or amount")
 )
 
 // HwCreditPackage is one issued credit package. The remaining quota per package
@@ -143,6 +147,16 @@ func grantCreditPackageTx(tx *gorm.DB, userID int, quota int, source string, ord
 		return false, result.Error
 	}
 	if result.RowsAffected == 0 {
+		// The conflict target exists already. Only an identical issuance is a quiet
+		// repeat; another user or another amount under the same reference is a
+		// caller error, not a second grant.
+		var existing HwCreditPackage
+		if err := tx.Where("source = ? AND order_ref = ?", source, orderRef).First(&existing).Error; err != nil {
+			return false, err
+		}
+		if existing.UserId != userID || existing.GrantedQuota != quota {
+			return false, ErrHwOrderRefConflict
+		}
 		return false, nil
 	}
 	if err := increaseUserQuotaInTx(tx, userID, quota); err != nil {
