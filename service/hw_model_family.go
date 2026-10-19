@@ -27,8 +27,11 @@ func HwModelFamily(customerModel string) string {
 	if idx := strings.IndexByte(name, '@'); idx >= 0 {
 		name = strings.TrimSpace(name[:idx])
 	}
-	if idx := strings.LastIndexAny(name, "/:"); idx >= 0 {
+	if idx := strings.LastIndexByte(name, '/'); idx >= 0 {
 		name = strings.TrimSpace(name[idx+1:])
+	}
+	if idx := strings.IndexByte(name, ':'); idx >= 0 {
+		name = strings.TrimSpace(name[:idx])
 	}
 	if name == "" {
 		return ""
