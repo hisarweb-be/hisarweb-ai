@@ -109,7 +109,8 @@ func TestHwGrantAffiliateReward(t *testing.T) {
 		hwCreditTestSetup(t)
 		inviter := createHwTestUser(t, 0)
 		buyer := createHwTestInvitee(t, 0, inviter.Id)
-		granted, err := HwGrantFreeTrialCredit(buyer.Id, 100, now)
+		hwMarkVerified(t, buyer.Id)
+		granted, _, err := HwGrantFreeTrialCredit(buyer.Id, 100, now)
 		require.NoError(t, err)
 		require.True(t, granted)
 
@@ -180,9 +181,10 @@ func TestHwGrantFreeTrialCredit(t *testing.T) {
 	now := int64(1_700_000_000)
 	user := createHwTestUser(t, 0)
 
-	granted, err := HwGrantFreeTrialCredit(user.Id, 100, now)
+	hwMarkVerified(t, user.Id)
+	granted, reason, err := HwGrantFreeTrialCredit(user.Id, 100, now)
 	require.NoError(t, err)
-	require.True(t, granted)
+	require.True(t, granted, "reason: %s", reason)
 	assert.Equal(t, 100, getUserQuotaFromDB(t, user.Id))
 
 	pkg := hwTestPackageByOrderRef(t, "free:"+strconv.Itoa(user.Id))
@@ -194,9 +196,10 @@ func TestHwGrantFreeTrialCredit(t *testing.T) {
 	require.NoError(t, DB.Model(&User{}).Where("id = ?", user.Id).Select(commonGroupCol).Find(&group).Error)
 	assert.Equal(t, hwGroupFree, group)
 
-	granted, err = HwGrantFreeTrialCredit(user.Id, 100, now)
+	granted, reason, err = HwGrantFreeTrialCredit(user.Id, 100, now)
 	require.NoError(t, err)
 	assert.False(t, granted)
+	assert.Equal(t, HwFreeTrialAlreadyGranted, reason)
 	assert.Equal(t, 100, getUserQuotaFromDB(t, user.Id))
 
 	// The first paid purchase upgrades the free group to paid.
@@ -206,15 +209,101 @@ func TestHwGrantFreeTrialCredit(t *testing.T) {
 	assert.Equal(t, hwGroupPaid, group)
 }
 
+func TestHwGrantFreeTrialCreditGuards(t *testing.T) {
+	now := int64(1_700_000_000)
+
+	t.Run("refuses an account without a device or phone signal", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		user := createHwTestUser(t, 0)
+		require.NoError(t, UpsertHwUserSignals(user.Id, HwUserSignals{Ip: "203.0.113.9"}))
+
+		granted, reason, err := HwGrantFreeTrialCredit(user.Id, 100, now)
+		require.NoError(t, err)
+		assert.False(t, granted)
+		assert.Equal(t, HwFreeTrialUnverified, reason)
+		assert.Equal(t, 0, getUserQuotaFromDB(t, user.Id))
+
+		var count int64
+		require.NoError(t, DB.Model(&HwCreditPackage{}).Where("user_id = ?", user.Id).Count(&count).Error)
+		assert.Zero(t, count)
+	})
+
+	t.Run("refuses a device another account already used for the free credit", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		first := createHwTestUser(t, 0)
+		second := createHwTestUser(t, 0)
+		require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{DeviceToken: "device-one"}))
+		require.NoError(t, UpsertHwUserSignals(second.Id, HwUserSignals{DeviceToken: "device-one"}))
+
+		granted, reason, err := HwGrantFreeTrialCredit(first.Id, 100, now)
+		require.NoError(t, err)
+		require.True(t, granted, "reason: %s", reason)
+
+		granted, reason, err = HwGrantFreeTrialCredit(second.Id, 100, now)
+		require.NoError(t, err)
+		assert.False(t, granted)
+		assert.Equal(t, HwFreeTrialSharedSignal+"device", reason)
+		assert.Equal(t, 0, getUserQuotaFromDB(t, second.Id))
+	})
+
+	t.Run("refuses a card another account already used for the free credit", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		first := createHwTestUser(t, 0)
+		second := createHwTestUser(t, 0)
+		hwMarkVerified(t, first.Id)
+		hwMarkVerified(t, second.Id)
+		require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{CardFingerprint: "fp-free"}))
+		require.NoError(t, UpsertHwUserSignals(second.Id, HwUserSignals{CardFingerprint: "fp-free"}))
+
+		granted, _, err := HwGrantFreeTrialCredit(first.Id, 100, now)
+		require.NoError(t, err)
+		require.True(t, granted)
+
+		granted, reason, err := HwGrantFreeTrialCredit(second.Id, 100, now)
+		require.NoError(t, err)
+		assert.False(t, granted)
+		assert.Equal(t, HwFreeTrialSharedSignal+"card", reason)
+	})
+
+	t.Run("refuses an amount above the hard cap", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		user := createHwTestUser(t, 0)
+		hwMarkVerified(t, user.Id)
+		aboveCap := HwMaxFreeTrialQuota() + 1
+
+		granted, reason, err := HwGrantFreeTrialCredit(user.Id, aboveCap, now)
+		require.NoError(t, err)
+		assert.False(t, granted)
+		assert.Equal(t, HwFreeTrialQuotaTooHigh, reason)
+		assert.Equal(t, 0, getUserQuotaFromDB(t, user.Id))
+
+		var count int64
+		require.NoError(t, DB.Model(&HwCreditPackage{}).Where("user_id = ?", user.Id).Count(&count).Error)
+		assert.Zero(t, count)
+	})
+
+	t.Run("the cap itself is allowed", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		user := createHwTestUser(t, 0)
+		hwMarkVerified(t, user.Id)
+
+		granted, reason, err := HwGrantFreeTrialCredit(user.Id, HwMaxFreeTrialQuota(), now)
+		require.NoError(t, err)
+		assert.True(t, granted, "reason: %s", reason)
+		assert.Equal(t, HwMaxFreeTrialQuota(), getUserQuotaFromDB(t, user.Id))
+	})
+}
+
 func TestHwFreeTrialCreditLeavesOperatorAccountsAlone(t *testing.T) {
 	hwCreditTestSetup(t)
 	now := int64(1_700_000_000)
 	admin := createHwTestUser(t, 0)
 	require.NoError(t, DB.Model(&User{}).Where("id = ?", admin.Id).Update("role", common.RoleAdminUser).Error)
 
-	granted, err := HwGrantFreeTrialCredit(admin.Id, 100, now)
+	hwMarkVerified(t, admin.Id)
+	granted, reason, err := HwGrantFreeTrialCredit(admin.Id, 100, now)
 	require.NoError(t, err)
-	require.True(t, granted)
+	require.True(t, granted, "reason: %s", reason)
 
 	var group string
 	require.NoError(t, DB.Model(&User{}).Where("id = ?", admin.Id).Select(commonGroupCol).Find(&group).Error)
