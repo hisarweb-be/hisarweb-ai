@@ -36,9 +36,13 @@ const (
 	hwMaxUpstreamIDs  = 5
 )
 
-// HwRouteState is the per-request supplier route. It lives in the gin context
-// and is only touched by the request goroutine: selection, retry, logging and
-// masking all run there, so it needs no lock and must never be shared.
+// HwRouteState is the per-request supplier route. It lives in the gin context.
+// Selection, retry and logging run on the request goroutine; the response mask
+// additionally appends facts (stream markers, upstream ids, mask alerts) from
+// the stream writer goroutines of relay/helper's stream scanner. Those writers
+// run under the scanner's writeMutex and join the request goroutine through
+// its wg.Wait before the log is written, so access stays race-free without
+// this state carrying a lock of its own.
 type HwRouteState struct {
 	active     bool
 	group      string
