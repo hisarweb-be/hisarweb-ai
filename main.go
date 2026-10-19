@@ -378,6 +378,7 @@ func InitResources() error {
 
 	// Retire expired credit packages every hour on the master node.
 	model.StartHwCreditExpiryJob()
+	model.StartHwOrderExpiryJob()
 
 	return nil
 }
