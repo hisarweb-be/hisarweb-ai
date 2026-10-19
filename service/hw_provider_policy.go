@@ -453,27 +453,40 @@ func hwIsOutageError(apiErr *types.NewAPIError) bool {
 	return false
 }
 
-// HwStreamCutShort detects a supplier stream that ended before its protocol
-// terminal event. With chunks already sent the customer gets a clean error
-// event and no retry; without chunks the normal supplier order continues.
-func HwStreamCutShort(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIError {
+// hwSupplierStreamCut classifies a supplier stream that ended without its
+// protocol terminal event. visible reports that the customer already received
+// output, which decides between an error event and a retry.
+func hwSupplierStreamCut(c *gin.Context, info *relaycommon.RelayInfo) (visible, cut bool) {
 	state := HwRoute(c)
 	if state == nil || info == nil || !info.IsStream || info.StreamStatus == nil {
-		return nil
+		return false, false
 	}
 	outcome := info.StreamStatus.OutcomeSnapshot()
 	if !outcome.ExpectsTerminal || outcome.Response != relaycommon.ResponseOutcomeUnknown {
-		return nil
+		return false, false
 	}
 	switch outcome.EndReason {
 	case relaycommon.StreamEndReasonEOF,
 		relaycommon.StreamEndReasonScannerErr,
 		relaycommon.StreamEndReasonTimeout:
 	default:
+		return false, false
+	}
+	return info.ReceivedResponseCount > 0 || state.streamWrites > 0, true
+}
+
+// HwStreamCutShort detects a supplier stream that ended before its protocol
+// terminal event. With chunks already sent the customer gets a clean error
+// event and no retry; without chunks the normal supplier order continues.
+func HwStreamCutShort(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIError {
+	visible, cut := hwSupplierStreamCut(c, info)
+	if !cut {
 		return nil
 	}
-	if info.ReceivedResponseCount > 0 || state.streamWrites > 0 {
-		state.streamCut = true
+	if visible {
+		if state := HwRoute(c); state != nil {
+			state.streamCut = true
+		}
 		return types.NewErrorWithStatusCode(
 			errors.New("supplier stream ended before completion"),
 			HwErrorCodeStreamInterrupted,
@@ -486,6 +499,16 @@ func HwStreamCutShort(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPI
 		HwErrorCodeStreamInterrupted,
 		http.StatusBadGateway,
 	)
+}
+
+// HwStreamCutBeforeOutput reports whether this attempt is a supplier stream that
+// ended before its terminal event while the customer had not seen any output
+// yet. The route retries such an attempt, so it must not be settled: settling it
+// charges the prompt estimate of an answer nobody saw and turns the settlement
+// of the retry into a no-op, which leaves the completion tokens unbilled.
+func HwStreamCutBeforeOutput(c *gin.Context, info *relaycommon.RelayInfo) bool {
+	visible, cut := hwSupplierStreamCut(c, info)
+	return cut && !visible
 }
 
 // HwNoteStreamWrite records that a stream chunk reached the customer. It is

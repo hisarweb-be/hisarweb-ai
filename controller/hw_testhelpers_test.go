@@ -36,6 +36,7 @@ const (
 	hwFakeStatus429
 	hwFakeCutStream
 	hwFakeCutEarly
+	hwFakeEmptyStream
 )
 
 // hwFakeSupplier is one upstream supplier double. It answers both the OpenAI and
@@ -182,6 +183,12 @@ func (s *hwFakeSupplier) serve(t *testing.T, r *http.Request, w http.ResponseWri
 	w.Header().Set("X-Provider-Slug", leak)
 
 	switch mode {
+	case hwFakeEmptyStream:
+		// A supplier accepts the request, announces an event stream and closes it
+		// without a single event, the way a crashing upstream behaves.
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		return
 	case hwFakeTimeout:
 		// Longer than the configured relay timeout, so the client aborts first.
 		select {

@@ -339,21 +339,76 @@ func TestHwStreamCutMidStreamYieldsOwnErrorEvent(t *testing.T) {
 }
 
 // T2b: the supplier dies before the first chunk, so the ordinary supplier order
-// still applies and the paying customer gets a complete answer.
+// still applies and the paying customer gets a complete answer. The failed
+// attempt is never settled: the customer is billed once, for the tokens of the
+// answer that actually arrived, and used_quota carries the same amount.
 func TestHwStreamCutBeforeFirstChunkFallsBack(t *testing.T) {
-	env := hwNewEnv(t, "paid", 1_000_000)
-	lumia := env.fake("lumia")
-	openrouter := env.fake("openrouter")
-	lumia.setMode(hwFakeCutEarly)
-	env.addChannel("lumia-primary", "paid", "lumia", 0, lumia)
-	env.addChannel("emergency", "paid", "openrouter", 1, openrouter)
+	t.Run("openai connection cut before the answer", func(t *testing.T) {
+		env := hwNewEnv(t, "paid", 1_000_000)
+		lumia := env.fake("lumia")
+		openrouter := env.fake("openrouter")
+		lumia.setMode(hwFakeCutEarly)
+		env.addChannel("lumia-primary", "paid", "lumia", 0, lumia)
+		env.addChannel("emergency", "paid", "openrouter", 1, openrouter)
 
-	recorder := env.post("/v1/chat/completions", hwChatRequest(hwTestModel, true))
+		recorder := env.post("/v1/chat/completions", hwChatRequest(hwTestModel, true))
 
-	require.Equal(t, 200, recorder.Code, recorder.Body.String())
-	assert.Equal(t, 1, openrouter.callCount(), "without customer-visible output the emergency supplier may answer")
-	assert.Contains(t, recorder.Body.String(), `"content":"Hel"`, "the emergency supplier's stream must reach the customer")
-	assert.Contains(t, recorder.Body.String(), "data: [DONE]")
+		require.Equal(t, 200, recorder.Code, recorder.Body.String())
+		assert.Equal(t, 1, openrouter.callCount(), "without customer-visible output the emergency supplier may answer")
+		assert.Contains(t, recorder.Body.String(), `"content":"Hel"`, "the emergency supplier's stream must reach the customer")
+		assert.Contains(t, recorder.Body.String(), "data: [DONE]")
+	})
+
+	// A native Claude answer that carries status 200 and closes the event stream
+	// without a single event is the case that used to be settled before the
+	// cut-short check: the prompt estimate was charged, the fallback's settlement
+	// became a no-op, and the completion tokens were free.
+	t.Run("anthropic native stream without events", func(t *testing.T) {
+		env := hwNewEnv(t, "paid", 1_000_000)
+		lumia := env.fake("lumia")
+		openrouter := env.fake("openrouter")
+		lumia.setMode(hwFakeEmptyStream)
+		env.addChannel("lumia-primary", "paid", "lumia", 0, lumia)
+		env.addChannel("emergency", "paid", "openrouter", 1, openrouter)
+
+		before := env.userQuota(t)
+		recorder := env.post("/v1/messages", hwClaudeRequest(hwTestModel, true))
+		after := env.userQuota(t)
+
+		require.Equal(t, 200, recorder.Code, recorder.Body.String())
+		assert.Equal(t, 1, openrouter.callCount(), "without customer-visible output the emergency supplier may answer")
+		assert.Contains(t, recorder.Body.String(), "Hel", "the emergency supplier's stream must reach the customer")
+		assert.Equal(t, 1, env.consumeLogCount(t), "one request leaves exactly one consume log")
+		charged := before - after
+		assert.Positive(t, charged, "the answer that arrived must be billed")
+		assert.Equal(t, charged, env.consumeQuotaSum(t), "the balance moves exactly as much as the consume log records")
+		assert.Equal(t, charged, env.userUsedQuota(t), "used_quota counts the same charge once")
+
+		// The same request against a healthy supplier must cost the same: the
+		// failed attempt may neither add nor remove a charge.
+		control := hwNewEnv(t, "paid", 1_000_000)
+		control.addChannel("lumia-primary", "paid", "lumia", 0, control.fake("lumia"))
+		controlBefore := control.userQuota(t)
+		controlRecorder := control.post("/v1/messages", hwClaudeRequest(hwTestModel, true))
+		require.Equal(t, 200, controlRecorder.Code, controlRecorder.Body.String())
+		assert.Equal(t, charged, controlBefore-control.userQuota(t),
+			"a fallback request costs the same as a healthy one")
+	})
+}
+
+// consumeLogCount is the number of consume logs this user has.
+func (e *hwEnv) consumeLogCount(t *testing.T) int {
+	t.Helper()
+	var count int64
+	require.NoError(t, e.db.Model(&model.Log{}).Where("type = ? and user_id = ?", model.LogTypeConsume, e.user.Id).Count(&count).Error)
+	return int(count)
+}
+
+func (e *hwEnv) userUsedQuota(t *testing.T) int {
+	t.Helper()
+	var stored model.User
+	require.NoError(t, e.db.Select("used_quota").First(&stored, e.user.Id).Error)
+	return stored.UsedQuota
 }
 
 func (e *hwEnv) userQuota(t *testing.T) int {
