@@ -253,7 +253,8 @@ func TestHwFunctionCallingPassesThrough(t *testing.T) {
 		assert.Contains(t, recorder.Body.String(), "get_weather")
 		assert.Contains(t, recorder.Body.String(), `{\"city\":\"Ankara\"}`)
 		assert.Contains(t, recorder.Body.String(), `"finish_reason":"tool_calls"`)
-		assert.Contains(t, recorder.Body.String(), "data: [DONE]")
+		assert.Equal(t, 1, strings.Count(recorder.Body.String(), "data: [DONE]"),
+			"a stream that completes normally ends with exactly one done marker")
 	})
 
 	t.Run("anthropic non-stream", func(t *testing.T) {
@@ -314,8 +315,18 @@ func TestHwStreamCutMidStreamYieldsOwnErrorEvent(t *testing.T) {
 			body := recorder.Body.String()
 			assert.Equal(t, 200, recorder.Code, body)
 			assert.Contains(t, body, testCase.wantEvent, "the customer must get our own error event")
+			errorIndex := strings.Index(body, testCase.wantEvent)
+			require.GreaterOrEqual(t, errorIndex, 0)
 			if testCase.wantDone {
-				assert.Contains(t, body, "data: [DONE]")
+				assert.NotContains(t, body[:errorIndex], "data: [DONE]",
+					"an SDK stops at the first done marker, so none may precede the error")
+				assert.Equal(t, 1, strings.Count(body, "data: [DONE]"),
+					"exactly one done marker closes the stream, after the error")
+			} else {
+				assert.NotContains(t, body[errorIndex:], "event: message_stop",
+					"the error event must close an Anthropic stream")
+				assert.Equal(t, errorIndex, strings.LastIndex(body, "event: "),
+					"the error event is the last event of the stream")
 			}
 			assert.Equal(t, 0, openrouter.callCount(), "a stream that already started must not be spliced onto another supplier")
 

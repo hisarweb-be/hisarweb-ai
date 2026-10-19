@@ -88,8 +88,12 @@ type hwMaskWriter struct {
 	lengthKnown bool
 	buffer      bytes.Buffer
 	pending     []byte
-	ownModel    string
-	requestID   string
+	// terminal holds the end-of-stream marker of the previous write. It is only
+	// released when no error event follows it, so a client never sees the stream
+	// close as complete right before the error that says it was cut short.
+	terminal  []byte
+	ownModel  string
+	requestID string
 }
 
 // HwMask installs the customer-facing response mask. It belongs on every route a
@@ -202,13 +206,31 @@ func (w *hwMaskWriter) Write(data []byte) (int, error) {
 	}
 	if w.stream {
 		service.HwNoteStreamWrite(w.ctx)
+		isError := false
 		if !hwLooksLikeSSE(data) {
 			// The relay engine reports a terminal failure with a JSON envelope
 			// while the client is already reading SSE; hand the client a proper
 			// error event instead of a stray JSON document.
 			data = w.streamErrorEvent(data)
+			isError = true
+		} else if hwStreamCarriesError(data) {
+			isError = true
 		}
 		out := w.sanitizeStream(data)
+		if isError {
+			// The error event replaces the end-of-stream marker that was written
+			// just before it: [DONE] followed by an error would tell an SDK the
+			// answer is complete.
+			w.terminal = nil
+		} else if len(out) > 0 {
+			if len(w.terminal) > 0 {
+				merged := make([]byte, 0, len(w.terminal)+len(out))
+				merged = append(merged, w.terminal...)
+				out = append(merged, out...)
+				w.terminal = nil
+			}
+			out, w.terminal = hwSplitStreamTerminal(out, w.anthropic)
+		}
 		if len(out) == 0 {
 			return len(data), nil
 		}
@@ -376,6 +398,10 @@ func (w *hwMaskWriter) finish() {
 		if len(w.pending) > 0 {
 			_, _ = w.ResponseWriter.Write([]byte(hwSafetyNet(w.ctx, w.pending)))
 			w.pending = nil
+		}
+		if len(w.terminal) > 0 {
+			_, _ = w.ResponseWriter.Write(w.terminal)
+			w.terminal = nil
 		}
 		w.ResponseWriter.Flush()
 		return
@@ -682,6 +708,57 @@ func hwSafetyNet(ctx *gin.Context, data []byte) string {
 	}
 	service.HwNoteMaskAlert(ctx)
 	return common.HwReplaceProviderWords(text)
+}
+
+// hwSplitStreamTerminal separates the end-of-stream marker of one SSE write from
+// the data before it. The caller holds the marker so it can drop it when an
+// error event follows; a marker split across two writes is held as its leading
+// part and completed on the next write.
+func hwSplitStreamTerminal(data []byte, anthropic bool) (body, terminal []byte) {
+	if len(data) == 0 {
+		return data, nil
+	}
+	if anthropic {
+		// Anthropic closes a message with message_stop; an error event must be
+		// the last event instead.
+		if index := bytes.LastIndex(data, []byte("event: message_stop")); index >= 0 {
+			return data[:index], data[index:]
+		}
+		return data, nil
+	}
+	marker := []byte("data: [DONE]")
+	if index := bytes.LastIndex(data, marker); index >= 0 && len(bytes.TrimSpace(data[index+len(marker):])) == 0 {
+		return data[:index], data[index:]
+	}
+	for length := len(marker) - 1; length > 0; length-- {
+		if bytes.HasSuffix(data, marker[:length]) {
+			index := len(data) - length
+			return data[:index], data[index:]
+		}
+	}
+	return data, nil
+}
+
+// hwStreamCarriesError reports whether an SSE write holds a protocol error
+// event, so the end-of-stream marker before it is not sent as a clean finish.
+func hwStreamCarriesError(data []byte) bool {
+	if bytes.Contains(data, []byte("event: error")) {
+		return true
+	}
+	for line := range bytes.SplitSeq(data, []byte{10}) {
+		payload, found := bytes.CutPrefix(bytes.TrimSpace(line), []byte("data:"))
+		if !found {
+			continue
+		}
+		var object map[string]any
+		if err := common.Unmarshal(payload, &object); err != nil {
+			continue
+		}
+		if _, isError := object["error"]; isError {
+			return true
+		}
+	}
+	return false
 }
 
 // hwLooksLikeSSE reports whether a stream write already uses SSE syntax.
