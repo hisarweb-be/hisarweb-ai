@@ -42,6 +42,11 @@ var (
 	// ErrHwOrderRefConflict rejects a second, different issuance under an order
 	// reference that already belongs to another user or another amount.
 	ErrHwOrderRefConflict = errors.New("order reference already granted with another user or amount")
+
+	// ErrHwQuotaDeductionRefused reports a deduction that would take the balance
+	// below zero. It cannot happen while the user row is locked; the condition is
+	// the portable safety net for a path that forgot to lock.
+	ErrHwQuotaDeductionRefused = errors.New("quota deduction refused: balance below the deducted amount")
 )
 
 // HwCreditPackage is one issued credit package. The remaining quota per package
@@ -371,7 +376,7 @@ func retireExpiredPackagesForUser(userID int, now int64) (int, error) {
 		if decrease == 0 {
 			return nil
 		}
-		return tx.Model(&User{}).Where("id = ?", userID).Update("quota", user.Quota-decrease).Error
+		return hwDecreaseUserQuota(tx, userID, decrease)
 	})
 	if err != nil {
 		return 0, err
@@ -382,6 +387,28 @@ func retireExpiredPackagesForUser(userID int, now int64) (int, error) {
 		}
 	}
 	return retired, nil
+}
+
+// hwDecreaseUserQuota subtracts a quota delta from a balance and never goes
+// below zero. It writes `quota - ?` and not an absolute value, so a balance
+// change between the read and the write is not overwritten. The caller holds the
+// user row with lockForUpdate, so `quota >= ?` holds on MySQL and PostgreSQL;
+// SQLite has no row locks, and there the condition is the safety net: an
+// impossible state becomes an error instead of a negative balance.
+func hwDecreaseUserQuota(tx *gorm.DB, userID int, quota int) error {
+	if quota <= 0 {
+		return nil
+	}
+	result := tx.Model(&User{}).
+		Where("id = ? AND quota >= ?", userID, quota).
+		Update("quota", gorm.Expr("quota - ?", quota))
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrHwQuotaDeductionRefused
+	}
+	return nil
 }
 
 // hwFlushPendingQuotaUpdates writes buffered quota deltas to the database before

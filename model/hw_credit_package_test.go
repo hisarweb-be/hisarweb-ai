@@ -292,6 +292,18 @@ func TestHwGrantCreditPackageRejectsOrderRefConflict(t *testing.T) {
 	assert.Equal(t, 100, getUserQuotaFromDB(t, first.Id))
 }
 
+func TestHwDecreaseUserQuotaSubtractsAndNeverGoesBelowZero(t *testing.T) {
+	hwCreditTestSetup(t)
+	user := createHwTestUser(t, 10)
+
+	require.NoError(t, hwDecreaseUserQuota(DB, user.Id, 10))
+	assert.Equal(t, 0, getUserQuotaFromDB(t, user.Id))
+
+	err := hwDecreaseUserQuota(DB, user.Id, 1)
+	require.ErrorIs(t, err, ErrHwQuotaDeductionRefused)
+	assert.Equal(t, 0, getUserQuotaFromDB(t, user.Id), "an overdrawn deduction is refused, not written")
+}
+
 func TestHwPackageRemaining(t *testing.T) {
 	packages := func() []HwCreditPackage {
 		return []HwCreditPackage{
