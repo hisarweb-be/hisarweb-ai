@@ -79,8 +79,8 @@ func TestHwGrantAffiliateReward(t *testing.T) {
 		require.NoError(t, err)
 		hwMarkVerified(t, buyer.Id)
 		hwMarkVerified(t, inviter.Id)
-		require.NoError(t, UpsertHwUserSignals(buyer.Id, HwUserSignals{IpHash: "iphash-shared"}))
-		require.NoError(t, UpsertHwUserSignals(inviter.Id, HwUserSignals{IpHash: "iphash-shared"}))
+		require.NoError(t, UpsertHwUserSignals(buyer.Id, HwUserSignals{Ip: "iphash-shared"}))
+		require.NoError(t, UpsertHwUserSignals(inviter.Id, HwUserSignals{Ip: "iphash-shared"}))
 
 		granted, reason, err := HwGrantAffiliateReward(buyer.Id, 1000, "ord-3", now)
 		require.NoError(t, err)
@@ -147,7 +147,7 @@ func TestHwGrantAffiliateReward(t *testing.T) {
 		assert.Equal(t, 0, getUserQuotaFromDB(t, inviter.Id))
 
 		// One device record is not enough when only an IP address was seen.
-		require.NoError(t, UpsertHwUserSignals(inviter.Id, HwUserSignals{IpHash: "iphash-inviter"}))
+		require.NoError(t, UpsertHwUserSignals(inviter.Id, HwUserSignals{Ip: "iphash-inviter"}))
 		granted, reason, err = HwGrantAffiliateReward(buyer.Id, 1000, "ord-7", now)
 		require.NoError(t, err)
 		assert.False(t, granted)

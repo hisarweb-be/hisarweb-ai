@@ -53,13 +53,22 @@ func (HwUserSignal) TableName() string {
 	return "hw_user_signals"
 }
 
-// HwUserSignals is a patch of abuse signals. Empty fields are ignored; they never
-// erase history. Values that identify a person are hashed by UpsertHwUserSignals
-// and are not stored as given.
+// HwUserSignals is a patch of abuse signals, with one clearly named field per
+// kind. Every field carries the RAW value: the device token as the browser sent
+// it, the client IP address as a string, the phone number as the customer typed
+// it, and only the fingerprint of a card as the payment provider derived it
+// (never the card number itself). UpsertHwUserSignals hashes them all; nothing
+// here is stored as given, and empty fields are ignored instead of erasing
+// history.
+//
+// A value that happens to look like one of our own 64-character hex hashes is
+// still treated as a raw value and hashed again. Recognising our own hashes
+// would only be possible by keeping something to compare against, which is
+// exactly the data this table must not hold.
 type HwUserSignals struct {
 	DeviceToken     string `json:"device_token"`
-	IpHash          string `json:"ip_hash"`
-	PhoneHash       string `json:"phone_hash"`
+	Ip              string `json:"ip"`
+	Phone           string `json:"phone"`
 	CardFingerprint string `json:"card_fingerprint"`
 }
 
@@ -89,9 +98,9 @@ func HwHashSignalValue(value string) (string, error) {
 	return hex.EncodeToString(mac.Sum(nil)), nil
 }
 
-// UpsertHwUserSignals stores the non-empty signals of a patch as history rows.
-// It hashes every value first, so a raw address, number or fingerprint never
-// reaches the table.
+// UpsertHwUserSignals hashes the non-empty raw values of a patch and stores them
+// as history rows. A raw IP address, phone number or card fingerprint never
+// reaches the table or a log line.
 func UpsertHwUserSignals(userID int, patch HwUserSignals) error {
 	if userID <= 0 {
 		return ErrHwInvalidUserSignal
@@ -103,8 +112,8 @@ func UpsertHwUserSignals(userID int, patch HwUserSignals) error {
 		value string
 	}{
 		{HwSignalKindDevice, patch.DeviceToken},
-		{HwSignalKindIp, patch.IpHash},
-		{HwSignalKindPhone, patch.PhoneHash},
+		{HwSignalKindIp, patch.Ip},
+		{HwSignalKindPhone, patch.Phone},
 		{HwSignalKindCard, patch.CardFingerprint},
 	} {
 		if strings.TrimSpace(signal.value) == "" {

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -41,8 +42,8 @@ func TestUpsertHwUserSignalsKeepsHistory(t *testing.T) {
 	hwCreditTestSetup(t)
 	user := createHwTestUser(t, 0)
 
-	require.NoError(t, UpsertHwUserSignals(user.Id, HwUserSignals{DeviceToken: "dev-1", IpHash: "ip-1"}))
-	require.NoError(t, UpsertHwUserSignals(user.Id, HwUserSignals{IpHash: "ip-2"}))
+	require.NoError(t, UpsertHwUserSignals(user.Id, HwUserSignals{DeviceToken: "dev-1", Ip: "ip-1"}))
+	require.NoError(t, UpsertHwUserSignals(user.Id, HwUserSignals{Ip: "ip-2"}))
 
 	var signals []HwUserSignal
 	require.NoError(t, DB.Where("user_id = ?", user.Id).Find(&signals).Error)
@@ -65,12 +66,12 @@ func TestHwSharedSignal(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, shared, "users without signals never match")
 
-	require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{PhoneHash: "phone-x"}))
+	require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{Phone: "phone-x"}))
 	shared, err = HwSharedSignal(first.Id, second.Id)
 	require.NoError(t, err)
 	assert.False(t, shared)
 
-	require.NoError(t, UpsertHwUserSignals(second.Id, HwUserSignals{PhoneHash: "phone-x"}))
+	require.NoError(t, UpsertHwUserSignals(second.Id, HwUserSignals{Phone: "phone-x"}))
 	shared, err = HwSharedSignal(first.Id, second.Id)
 	require.NoError(t, err)
 	assert.True(t, shared)
@@ -83,13 +84,13 @@ func TestHwSharedSignalUsesTheWholeHistory(t *testing.T) {
 
 	// The first user changes address; the old one stays in history and still
 	// matches the second user.
-	require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{IpHash: "ip-old"}))
-	require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{IpHash: "ip-new"}))
+	require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{Ip: "ip-old"}))
+	require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{Ip: "ip-new"}))
 	shared, err := HwSharedSignal(first.Id, second.Id)
 	require.NoError(t, err)
 	require.False(t, shared, "a changed address alone does not make a match")
 
-	require.NoError(t, UpsertHwUserSignals(second.Id, HwUserSignals{IpHash: "ip-old"}))
+	require.NoError(t, UpsertHwUserSignals(second.Id, HwUserSignals{Ip: "ip-old"}))
 	shared, err = HwSharedSignal(first.Id, second.Id)
 	require.NoError(t, err)
 	assert.True(t, shared, "an address the first user no longer uses still connects the accounts")
@@ -99,12 +100,41 @@ func TestHwSharedSignalUsesTheWholeHistory(t *testing.T) {
 	assert.Equal(t, []string{HwSignalKindIp}, kinds)
 }
 
+func TestUpsertHwUserSignalsNeverStoresRawValues(t *testing.T) {
+	hwCreditTestSetup(t)
+	user := createHwTestUser(t, 0)
+	// A raw device token that happens to have the shape of one of our hashes is
+	// still hashed, not accepted as a hash and not rejected.
+	looksLikeOurHash := strings.Repeat("ab", 32)
+
+	require.NoError(t, UpsertHwUserSignals(user.Id, HwUserSignals{
+		Ip:              "203.0.113.7",
+		Phone:           "905551234567",
+		CardFingerprint: "fingerprint-from-provider",
+		DeviceToken:     looksLikeOurHash,
+	}))
+
+	var signals []HwUserSignal
+	require.NoError(t, DB.Where("user_id = ?", user.Id).Find(&signals).Error)
+	require.Len(t, signals, 4)
+	raw := map[string]bool{
+		"203.0.113.7":               true,
+		"905551234567":              true,
+		"fingerprint-from-provider": true,
+		looksLikeOurHash:            true,
+	}
+	for _, signal := range signals {
+		assert.Len(t, signal.Hash, 64)
+		assert.False(t, raw[signal.Hash], "the raw %s value must not be stored", signal.Kind)
+	}
+}
+
 func TestUpsertHwUserSignalsWithoutSaltStoresNothing(t *testing.T) {
 	hwCreditTestSetup(t)
 	user := createHwTestUser(t, 0)
 	t.Setenv(hwSignalSaltEnv, "")
 
-	err := UpsertHwUserSignals(user.Id, HwUserSignals{IpHash: "10.0.0.1"})
+	err := UpsertHwUserSignals(user.Id, HwUserSignals{Ip: "10.0.0.1"})
 	require.ErrorIs(t, err, ErrHwSignalSaltMissing)
 
 	var count int64
