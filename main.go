@@ -375,5 +375,8 @@ func InitResources() error {
 
 	service.StartAuthArtifactCleanup()
 
+	// Retire expired credit packages every hour on the master node.
+	model.StartHwCreditExpiryJob()
+
 	return nil
 }
