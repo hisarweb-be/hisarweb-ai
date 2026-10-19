@@ -209,6 +209,54 @@ func TestHwGrantFreeTrialCredit(t *testing.T) {
 	assert.Equal(t, hwGroupPaid, group)
 }
 
+func TestHwRevokeAffiliateReward(t *testing.T) {
+	now := int64(1_700_000_000)
+
+	t.Run("takes back what is left after partial spending", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		inviter := createHwTestUser(t, 0)
+		_, err := GrantCreditPackage(nil, inviter.Id, 50, HwSourceAffiliate, "aff:ord-1", now)
+		require.NoError(t, err)
+		require.NoError(t, DecreaseUserQuota(inviter.Id, 20, true))
+		require.Equal(t, 30, getUserQuotaFromDB(t, inviter.Id))
+
+		require.NoError(t, HwRevokeAffiliateReward("ord-1", now))
+		assert.Equal(t, 0, getUserQuotaFromDB(t, inviter.Id), "only the unspent 30 is taken back")
+
+		var pkg HwCreditPackage
+		require.NoError(t, DB.Where("order_ref = ?", "aff:ord-1").First(&pkg).Error)
+		assert.Equal(t, now, pkg.RetiredAt)
+		assert.Equal(t, 30, pkg.RetiredRemaining)
+
+		require.NoError(t, HwRevokeAffiliateReward("ord-1", now))
+		assert.Equal(t, 0, getUserQuotaFromDB(t, inviter.Id), "a second revocation changes nothing")
+
+		require.NoError(t, HwRevokeAffiliateReward("ord-unknown", now), "an unknown reference is not an error")
+	})
+
+	t.Run("leaves quota that belongs to another package alone", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		inviter := createHwTestUser(t, 0)
+		// The affiliate package expires first, so a later package is filled with
+		// the whole balance and this package holds nothing.
+		_, err := GrantCreditPackage(nil, inviter.Id, 50, HwSourceAffiliate, "aff:ord-2", now)
+		require.NoError(t, err)
+		_, err = GrantCreditPackage(nil, inviter.Id, 100, HwSourcePurchase, "ord-2", now+1)
+		require.NoError(t, err)
+		require.Equal(t, 150, getUserQuotaFromDB(t, inviter.Id))
+		require.NoError(t, DecreaseUserQuota(inviter.Id, 50, true))
+		require.Equal(t, 100, getUserQuotaFromDB(t, inviter.Id))
+
+		require.NoError(t, HwRevokeAffiliateReward("ord-2", now))
+		assert.Equal(t, 100, getUserQuotaFromDB(t, inviter.Id), "the package held nothing, so nothing is taken back")
+
+		var pkg HwCreditPackage
+		require.NoError(t, DB.Where("order_ref = ?", "aff:ord-2").First(&pkg).Error)
+		assert.Equal(t, now, pkg.RetiredAt)
+		assert.Zero(t, pkg.RetiredRemaining)
+	})
+}
+
 func TestHwGrantFreeTrialCreditGuards(t *testing.T) {
 	now := int64(1_700_000_000)
 

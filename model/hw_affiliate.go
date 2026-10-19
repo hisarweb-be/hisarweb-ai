@@ -115,3 +115,75 @@ func HwGrantAffiliateReward(buyerID int, purchaseListQuota int, orderRef string,
 	}
 	return true, "", nil
 }
+
+// HwRevokeAffiliateReward takes back the affiliate package of one purchase
+// ("aff:<orderRef>"), for example when that purchase is refunded or reversed.
+//
+// Only the part the package still holds, derived from the inviter's balance the
+// same way the expiry job derives it, is subtracted from users.quota (never
+// below zero); the package is retired with that remainder so it cannot be
+// revoked twice. A reference without an affiliate package is not an error, and a
+// second call changes nothing.
+func HwRevokeAffiliateReward(orderRef string, now int64) error {
+	if orderRef == "" || now <= 0 {
+		return ErrHwInvalidCreditGrant
+	}
+	var pkg HwCreditPackage
+	err := DB.Where("source = ? AND order_ref = ?", HwSourceAffiliate, "aff:"+orderRef).First(&pkg).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if pkg.RetiredAt != 0 {
+		return nil
+	}
+	decrease := 0
+	revoked := false
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		var user User
+		if err := lockForUpdate(tx).Select("id", "quota").Where("id = ?", pkg.UserId).First(&user).Error; err != nil {
+			return err
+		}
+		var active []HwCreditPackage
+		if err := tx.Where("user_id = ? AND retired_at = 0", pkg.UserId).Find(&active).Error; err != nil {
+			return err
+		}
+		remaining := 0
+		for _, view := range HwPackageRemaining(pkg.UserId, user.Quota, active) {
+			if view.Id == pkg.Id {
+				remaining = view.RemainingQuota
+				break
+			}
+		}
+		result := tx.Model(&HwCreditPackage{}).
+			Where("id = ? AND retired_at = 0", pkg.Id).
+			UpdateColumns(map[string]any{"retired_at": now, "retired_remaining": remaining})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			// Another call revoked it between the read and this transaction.
+			return nil
+		}
+		decrease = min(remaining, max(user.Quota, 0))
+		if decrease == 0 {
+			return nil
+		}
+		if err := hwDecreaseUserQuota(tx, pkg.UserId, decrease); err != nil {
+			return err
+		}
+		revoked = true
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if revoked {
+		if err := cacheDecrUserQuota(pkg.UserId, int64(decrease)); err != nil {
+			common.SysError(common.LogText("failed to decrease user quota cache after affiliate revocation: %s", err.Error()))
+		}
+	}
+	return nil
+}
