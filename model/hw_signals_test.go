@@ -100,6 +100,27 @@ func TestHwSharedSignalUsesTheWholeHistory(t *testing.T) {
 	assert.Equal(t, []string{HwSignalKindIp}, kinds)
 }
 
+func TestUpsertHwUserSignalsAcceptsTheSameValueTwice(t *testing.T) {
+	hwCreditTestSetup(t)
+	user := createHwTestUser(t, 0)
+
+	require.NoError(t, UpsertHwUserSignals(user.Id, HwUserSignals{DeviceToken: "dev-1"}))
+	// A second writer for the same value must not fail on the unique index.
+	require.NoError(t, UpsertHwUserSignals(user.Id, HwUserSignals{DeviceToken: "dev-1"}))
+
+	var signals []HwUserSignal
+	require.NoError(t, DB.Where("user_id = ?", user.Id).Find(&signals).Error)
+	require.Len(t, signals, 1, "one value keeps one row")
+
+	// The row keeps its first sighting and moves its last sighting.
+	firstSeen := signals[0].FirstSeen
+	require.NoError(t, DB.Model(&HwUserSignal{}).Where("id = ?", signals[0].Id).Update("last_seen", int64(1)).Error)
+	require.NoError(t, UpsertHwUserSignals(user.Id, HwUserSignals{DeviceToken: "dev-1"}))
+	require.NoError(t, DB.Where("id = ?", signals[0].Id).First(&signals[0]).Error)
+	assert.Greater(t, signals[0].LastSeen, int64(1), "last_seen moves on a repeated value")
+	assert.Equal(t, firstSeen, signals[0].FirstSeen, "first_seen is not touched")
+}
+
 func TestHwNormalizeTrPhone(t *testing.T) {
 	cases := []struct{ given, want string }{
 		{"0555 123 45 67", "+905551234567"},

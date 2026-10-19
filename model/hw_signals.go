@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+
+	"gorm.io/gorm/clause"
 )
 
 // hwSignalSaltEnv names the server-side secret used to hash phone numbers, IP
@@ -182,7 +184,14 @@ func UpsertHwUserSignals(userID int, patch HwUserSignals) error {
 	if len(rows) == 0 {
 		return nil
 	}
-	return DB.Create(&rows).Error
+	// A second writer for a value the user already produced hits the unique
+	// (user_id, kind, hash) index. Let the database resolve it: the first row
+	// keeps its first_seen and only its last_seen moves. Selecting the row first
+	// and inserting afterwards would still lose the race between two writers.
+	return DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "user_id"}, {Name: "kind"}, {Name: "hash"}},
+		DoUpdates: clause.AssignmentColumns([]string{"last_seen"}),
+	}).Create(&rows).Error
 }
 
 // hwUserHasVerifiedSignal reports whether the user produced at least one device
