@@ -133,7 +133,6 @@ func HwMask() gin.HandlerFunc {
 			}
 			writer.finish()
 			c.Writer = original
-			service.HwRecordProviderAudit(c)
 		}()
 		c.Next()
 	}

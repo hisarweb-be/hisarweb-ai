@@ -512,32 +512,25 @@ func hwDecodeLogOther(t *testing.T, item map[string]any) map[string]any {
 	return decoded
 }
 
-// hwProviderAudit returns the newest relay.provider audit row as an
-// administrator reads it and as the customer reads it.
-func hwProviderAudit(t *testing.T, env *hwEnv) (*model.AuditLog, *model.AuditLog) {
+// hwAssertNoProviderAuditRow verifies the supplier facts stopped costing a
+// separate audit row per relayed request: neither the admin nor the customer
+// audit view may list the old relay.provider action any more.
+func hwAssertNoProviderAuditRow(t *testing.T, env *hwEnv) {
 	t.Helper()
-	adminRows, _, err := model.GetAuditLogs(model.AuditLogFilter{UserId: env.user.Id, Category: model.AuditCategoryOperation}, 0, 10, common.RoleAdminUser)
-	require.NoError(t, err)
-	var admin *model.AuditLog
-	for _, row := range adminRows {
-		if row.Action == "relay.provider" {
-			admin = row
-			break
+	for _, tc := range []struct {
+		role int
+		self bool
+	}{
+		{role: common.RoleAdminUser},
+		{role: common.RoleCommonUser, self: true},
+	} {
+		rows, _, err := model.GetAuditLogs(model.AuditLogFilter{UserId: env.user.Id, SelfView: tc.self}, 0, 10, tc.role)
+		require.NoError(t, err)
+		for _, row := range rows {
+			assert.NotEqual(t, "relay.provider", row.Action,
+				"a relayed request must not add its own audit row any more")
 		}
 	}
-	require.NotNil(t, admin, "the admin audit view must contain the relay.provider event")
-
-	selfRows, _, err := model.GetAuditLogs(model.AuditLogFilter{SelfView: true, UserId: env.user.Id}, 0, 10, common.RoleCommonUser)
-	require.NoError(t, err)
-	var self *model.AuditLog
-	for _, row := range selfRows {
-		if row.Action == "relay.provider" {
-			self = row
-			break
-		}
-	}
-	require.NotNil(t, self, "the customer audit view must still contain the event")
-	return admin, self
 }
 
 // T5: the supplier facts land in the admin log and the audit log, and the
@@ -568,17 +561,10 @@ func TestHwProviderFactsAreAdminOnly(t *testing.T) {
 		assert.EqualValues(t, attempts, adminInfo["provider_attempts"])
 		assert.Equal(t, true, adminInfo["provider_fallback"])
 
-		adminAudit, selfAudit := hwProviderAudit(t, env)
-		require.NotNil(t, adminAudit.Other.Provider, "the admin audit view must carry the supplier block")
-		assert.Equal(t, provider, adminAudit.Other.Provider.Provider)
-		assert.Equal(t, attempts, adminAudit.Other.Provider.Attempts)
-		assert.True(t, adminAudit.Other.Provider.Fallback)
-		assert.NotZero(t, adminAudit.Other.Provider.ChannelID)
-
-		assert.Nil(t, selfAudit.Other.Provider, "the customer audit view must not carry the supplier block")
-		encoded, err := common.Marshal(selfAudit)
-		require.NoError(t, err)
-		hwAssertNoSupplierWords(t, "/api/audit/self", string(encoded))
+		// The supplier facts live in the admin block of the usage log itself;
+		// the per-request relay.provider audit row is gone, so a relayed
+		// request no longer doubles its database footprint.
+		hwAssertNoProviderAuditRow(t, env)
 
 		self := hwCallHandler(t, env, GetSelf, http.MethodGet, "/api/user/self", common.RoleCommonUser)
 		require.Equal(t, http.StatusOK, self.Code, self.Body.String())

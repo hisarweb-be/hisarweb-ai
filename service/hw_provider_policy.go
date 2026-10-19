@@ -574,49 +574,7 @@ func HwAppendRelayLogAdminInfo(c *gin.Context, other *model.LogOther) {
 	}
 }
 
-// HwRecordProviderAudit writes the supplier facts of one relayed request to the
-// audit trail. The provider block is stripped from the customer view; only
-// administrators and the root user read it.
-func HwRecordProviderAudit(c *gin.Context) {
-	state := HwRoute(c)
-	if state == nil || state.provider == "" || state.channelID == 0 {
-		return
-	}
-	actorRole := c.GetInt("role")
-	switch actorRole {
-	case common.RoleCommonUser, common.RoleAdminUser, common.RoleRootUser:
-	default:
-		// Token authentication does not set the role; those callers are customers.
-		actorRole = common.RoleCommonUser
-	}
-	status := 0
-	if c.Writer != nil {
-		status = c.Writer.Status()
-	}
-	model.RecordAuditLog(c, model.AuditLog{
-		UserId:    c.GetInt("id"),
-		Username:  c.GetString("username"),
-		ActorRole: actorRole,
-		Category:  model.AuditCategoryOperation,
-		Action:    "relay.provider",
-		Content:   "Relay provider selection",
-		Status:    status,
-		Success:   status > 0 && status < http.StatusBadRequest,
-		Other: model.AuditOther{
-			Provider: &model.AuditProviderInfo{
-				Provider:    state.provider,
-				ChannelID:   state.channelID,
-				Attempts:    state.attempts,
-				Fallback:    state.fallback,
-				UpstreamIDs: state.upstreamIDs,
-				StreamCut:   state.streamCut,
-				MaskAlerts:  state.maskAlerts,
-			},
-		},
-	})
-}
-
-// HwTerminalError replaces an exhausted supplier route's last upstream error
+// HwTerminalError replaces an exhausted supplier route's last upstream error// HwTerminalError replaces an exhausted supplier route's last upstream error
 // with the fork's own service_busy error, so an outage never surfaces upstream
 // wording or a supplier-flavoured status. Client-side failures (4xx) keep their
 // own class; masking replaces their text instead.
