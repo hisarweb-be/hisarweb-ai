@@ -1,7 +1,9 @@
 package model
 
 import (
+	"fmt"
 	"strconv"
+	"sync/atomic"
 	"testing"
 
 	"github.com/shopspring/decimal"
@@ -9,6 +11,21 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+var hwTestPhoneSeq atomic.Int64
+
+// hwUniqueTestPhone returns a distinct valid Turkish mobile number, so a test can
+// give every user its own phone signal.
+func hwUniqueTestPhone() string {
+	return "0555" + fmt.Sprintf("%07d", hwTestPhoneSeq.Add(1)%10_000_000)
+}
+
+// hwMarkPhoneVerified gives a user a unique phone signal, which the
+// first-purchase claim and the free trial credit require.
+func hwMarkPhoneVerified(t *testing.T, userID int) {
+	t.Helper()
+	require.NoError(t, UpsertHwUserSignals(userID, HwUserSignals{Phone: hwUniqueTestPhone()}))
+}
 
 func TestHwComputePurchase(t *testing.T) {
 	cases := []struct {
@@ -67,6 +84,7 @@ func TestHwClaimFirstPurchaseDiscount(t *testing.T) {
 	t.Run("claims once and answers the same order the same way", func(t *testing.T) {
 		hwCreditTestSetup(t)
 		user := createHwTestUser(t, 0)
+		hwMarkPhoneVerified(t, user.Id)
 
 		eligible, reason, err := HwClaimFirstPurchaseDiscount(nil, user.Id, "ord-1", now)
 		require.NoError(t, err)
@@ -91,6 +109,7 @@ func TestHwClaimFirstPurchaseDiscount(t *testing.T) {
 	t.Run("runs inside the caller's transaction", func(t *testing.T) {
 		hwCreditTestSetup(t)
 		user := createHwTestUser(t, 0)
+		hwMarkPhoneVerified(t, user.Id)
 
 		var eligible bool
 		require.NoError(t, DB.Transaction(func(tx *gorm.DB) error {
@@ -106,6 +125,7 @@ func TestHwClaimFirstPurchaseDiscount(t *testing.T) {
 	t.Run("releasing gives the discount back for another order", func(t *testing.T) {
 		hwCreditTestSetup(t)
 		user := createHwTestUser(t, 0)
+		hwMarkPhoneVerified(t, user.Id)
 		_, _, err := HwClaimFirstPurchaseDiscount(nil, user.Id, "ord-1", now)
 		require.NoError(t, err)
 
@@ -151,6 +171,8 @@ func TestHwClaimFirstPurchaseDiscount(t *testing.T) {
 		hwCreditTestSetup(t)
 		first := createHwTestUser(t, 0)
 		second := createHwTestUser(t, 0)
+		hwMarkPhoneVerified(t, first.Id)
+		hwMarkPhoneVerified(t, second.Id)
 		require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{CardFingerprint: "fp-card-1"}))
 		require.NoError(t, UpsertHwUserSignals(second.Id, HwUserSignals{CardFingerprint: "fp-card-1"}))
 
@@ -164,10 +186,29 @@ func TestHwClaimFirstPurchaseDiscount(t *testing.T) {
 		assert.Equal(t, HwFirstPurchaseSharedCard, reason)
 	})
 
+	t.Run("refuses an account without a phone number", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		user := createHwTestUser(t, 0)
+		// A card signal alone may not unlock the discount: without a phone hash
+		// the cross-user check on phone numbers would be skipped entirely.
+		require.NoError(t, UpsertHwUserSignals(user.Id, HwUserSignals{CardFingerprint: "fp-no-phone"}))
+
+		eligible, reason, err := HwClaimFirstPurchaseDiscount(nil, user.Id, "ord-1", now)
+		require.NoError(t, err)
+		assert.False(t, eligible)
+		assert.Equal(t, HwFirstPurchaseUnverified, reason)
+
+		var count int64
+		require.NoError(t, DB.Model(&HwFirstPurchaseClaim{}).Where("user_id = ?", user.Id).Count(&count).Error)
+		assert.Zero(t, count, "an unverified claim is not recorded")
+	})
+
 	t.Run("two users without shared signals both claim", func(t *testing.T) {
 		hwCreditTestSetup(t)
 		first := createHwTestUser(t, 0)
 		second := createHwTestUser(t, 0)
+		hwMarkPhoneVerified(t, first.Id)
+		hwMarkPhoneVerified(t, second.Id)
 
 		eligible, _, err := HwClaimFirstPurchaseDiscount(nil, first.Id, "ord-a", now)
 		require.NoError(t, err)
@@ -175,6 +216,62 @@ func TestHwClaimFirstPurchaseDiscount(t *testing.T) {
 		eligible, reason, err := HwClaimFirstPurchaseDiscount(nil, second.Id, "ord-b", now)
 		require.NoError(t, err)
 		assert.True(t, eligible, "reason: %s", reason)
+	})
+}
+
+func TestHwRecordFirstPurchaseCard(t *testing.T) {
+	now := int64(1_700_000_000)
+
+	t.Run("writes the paid card on the claim, hashed", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		user := createHwTestUser(t, 0)
+		hwMarkPhoneVerified(t, user.Id)
+		eligible, reason, err := HwClaimFirstPurchaseDiscount(nil, user.Id, "ord-1", now)
+		require.NoError(t, err)
+		require.True(t, eligible, "reason: %s", reason)
+
+		require.NoError(t, HwRecordFirstPurchaseCard(nil, user.Id, "ord-1", "fp-paid-with-this-card"))
+
+		var claim HwFirstPurchaseClaim
+		require.NoError(t, DB.Where("user_id = ?", user.Id).First(&claim).Error)
+		assert.Len(t, claim.CardFingerprint, 64)
+		assert.NotContains(t, claim.CardFingerprint, "fp-paid-with-this-card", "the raw fingerprint is never stored")
+
+		// Recording the same card twice is a quiet repeat.
+		require.NoError(t, HwRecordFirstPurchaseCard(nil, user.Id, "ord-1", "fp-paid-with-this-card"))
+	})
+
+	t.Run("the recorded card refuses another account's claim", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		first := createHwTestUser(t, 0)
+		second := createHwTestUser(t, 0)
+		hwMarkPhoneVerified(t, first.Id)
+		hwMarkPhoneVerified(t, second.Id)
+
+		eligible, _, err := HwClaimFirstPurchaseDiscount(nil, first.Id, "ord-1", now)
+		require.NoError(t, err)
+		require.True(t, eligible)
+		// The second account only shows the card in its signals when it pays with
+		// it; the claim of the first account must carry the fingerprint by then.
+		require.NoError(t, HwRecordFirstPurchaseCard(nil, first.Id, "ord-1", "fp-shared-later"))
+		require.NoError(t, UpsertHwUserSignals(second.Id, HwUserSignals{CardFingerprint: "fp-shared-later"}))
+
+		eligible, reason, err := HwClaimFirstPurchaseDiscount(nil, second.Id, "ord-2", now)
+		require.NoError(t, err)
+		assert.False(t, eligible)
+		assert.Equal(t, HwFirstPurchaseSharedCard, reason)
+	})
+
+	t.Run("rejects input without a claim to write", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		user := createHwTestUser(t, 0)
+		hwMarkPhoneVerified(t, user.Id)
+
+		err := HwRecordFirstPurchaseCard(nil, user.Id, "ord-unknown", "fp-card")
+		require.ErrorIs(t, err, gorm.ErrRecordNotFound, "a reference without a claim has nothing to write")
+
+		err = HwRecordFirstPurchaseCard(nil, user.Id, "ord-1", "  ")
+		require.ErrorIs(t, err, ErrHwInvalidFirstPurchaseClaim)
 	})
 }
 

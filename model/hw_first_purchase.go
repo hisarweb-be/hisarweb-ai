@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"strings"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -10,6 +11,7 @@ import (
 // Reasons HwClaimFirstPurchaseDiscount refuses a claim with.
 const (
 	HwFirstPurchaseAlreadyClaimed = "already_claimed"
+	HwFirstPurchaseUnverified     = "unverified"
 	HwFirstPurchaseSharedPhone    = "shared_phone"
 	HwFirstPurchaseSharedCard     = "shared_card"
 )
@@ -40,17 +42,21 @@ func (HwFirstPurchaseClaim) TableName() string {
 //
 // The claim is taken atomically on the unique user_id index, so concurrent
 // order creations for the same user produce one eligible order and one refusal.
-// It is refused when the user already claimed the discount for another order, or
-// when another user with the same non-empty card fingerprint or phone hash (from
-// hw_user_signals, the whole history) already claimed it. Repeating the call for
-// the same order reference returns the same answer.
+// It is refused when the user already claimed the discount for another order,
+// when the user has no phone hash at all (reason unverified: an account without
+// a phone number may not skip the cross-user check), or when another user with
+// the same non-empty card fingerprint or phone hash (from hw_user_signals, the
+// whole history) already claimed it. Repeating the call for the same order
+// reference returns the same answer.
 //
 // The check across users reads before it writes; two orders of two accounts that
-// share a card or phone and are created in the same instant can both pass. The
-// second payment is caught when the claim of the first one exists, so the window
-// is one in-flight order, not a repeatable hole. The claim stores only the most
-// recent phone hash and card fingerprint of the claiming user; a value the user
-// later replaced stays outside that record.
+// share a card or phone and are created in the same instant can both pass, and
+// nothing in this function catches the second payment afterwards. The claim row
+// carries a complete card fingerprint only after the payment is captured and
+// part C writes it there with HwRecordFirstPurchaseCard, so the same card is
+// refused from the next order on, not at that moment. The claim stores only the
+// most recent phone hash and card fingerprint of the claiming user; a value the
+// user later replaced stays outside that record.
 //
 // Passing a transaction makes the claim part of the caller's order transaction.
 func HwClaimFirstPurchaseDiscount(tx *gorm.DB, userID int, orderRef string, now int64) (bool, string, error) {
@@ -63,6 +69,13 @@ func HwClaimFirstPurchaseDiscount(tx *gorm.DB, userID int, orderRef string, now 
 	hashes, err := hwNewestSignalHashes(tx, userID, []string{HwSignalKindPhone, HwSignalKindCard})
 	if err != nil {
 		return false, "", err
+	}
+	// Without a phone hash the cross-user check on phone numbers would be
+	// skipped entirely, so an account that never verified a phone number is not
+	// allowed the discount at all. A card fingerprint may be absent: it only
+	// arrives with the payment.
+	if hashes[HwSignalKindPhone] == "" {
+		return false, HwFirstPurchaseUnverified, nil
 	}
 	checks := []struct {
 		kind   string
@@ -128,6 +141,36 @@ func HwReleaseFirstPurchaseClaim(tx *gorm.DB, userID int, orderRef string) error
 		tx = DB
 	}
 	return tx.Where("user_id = ? AND order_ref = ?", userID, orderRef).Delete(&HwFirstPurchaseClaim{}).Error
+}
+
+// HwRecordFirstPurchaseCard stores the fingerprint of the card that paid a
+// first-purchase order on that order's claim row. The claim is taken when the
+// order is created, while the card is still unknown; part C calls this when the
+// payment is captured, so the shared-card check of later orders sees the card
+// that was actually used. The fingerprint is hashed like every card signal; the
+// raw value never reaches the table. Only the claim of that user and order
+// reference is updated, and only once the claim exists.
+func HwRecordFirstPurchaseCard(tx *gorm.DB, userID int, orderRef, cardFingerprint string) error {
+	if userID <= 0 || orderRef == "" || strings.TrimSpace(cardFingerprint) == "" {
+		return ErrHwInvalidFirstPurchaseClaim
+	}
+	if tx == nil {
+		tx = DB
+	}
+	hash, err := hwHashRawSignal(HwSignalKindCard, cardFingerprint)
+	if err != nil {
+		return err
+	}
+	result := tx.Model(&HwFirstPurchaseClaim{}).
+		Where("user_id = ? AND order_ref = ?", userID, orderRef).
+		Update("card_fingerprint", hash)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 // hwNewestSignalHashes returns the most recent hash per requested kind for one
