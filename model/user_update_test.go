@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -144,6 +145,44 @@ func TestUsageAccountingSupportsSignedDirectAndBatchDeltas(t *testing.T) {
 	assert.Equal(t, 3, got.RequestCount)
 	require.NoError(t, DB.Select("used_quota").First(&gotChannel, channel.Id).Error)
 	assert.Equal(t, int64(1150), gotChannel.UsedQuota)
+}
+
+func TestBatchUpdateWritesTheUserBufferWithOneLogLine(t *testing.T) {
+	setupUserUpdateTestState(t)
+	resetBatchUpdateTestState(t)
+
+	users := make([]User, 0, 3)
+	for i := range 3 {
+		suffix := strconv.Itoa(i) + "-" + common.GetRandomString(4)
+		user := User{
+			Username:    "batch-log-user-" + suffix,
+			Password:    "unused-password-hash",
+			Role:        common.RoleCommonUser,
+			Status:      common.UserStatusEnabled,
+			Group:       "default",
+			AuthVersion: 1,
+			AffCode:     "batchlog" + suffix,
+		}
+		require.NoError(t, DB.Create(&user).Error)
+		users = append(users, user)
+	}
+
+	common.BatchUpdateEnabled = true
+	for _, user := range users {
+		UpdateUserUsedQuota(user.Id, 25)
+	}
+
+	capture := hwCaptureServerLog(t)
+	batchUpdate()
+
+	logs := capture.All()
+	assert.Contains(t, logs, "batch update writes the buffered counters of 3 users")
+	assert.Equal(t, 1, strings.Count(logs, "writes the buffered counters"), "the line is written once before the loop, not once per user")
+	for _, user := range users {
+		var got User
+		require.NoError(t, DB.Select("used_quota").First(&got, user.Id).Error)
+		assert.Equal(t, 25, got.UsedQuota)
+	}
 }
 
 func TestRevokeUserAccessTokenOnlyClearsLegacyToken(t *testing.T) {

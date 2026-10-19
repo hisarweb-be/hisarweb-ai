@@ -118,8 +118,21 @@ func batchUpdate() {
 	for key := range requestCountStore {
 		userIDs[key] = struct{}{}
 	}
+	// One line before the loop instead of one line per user: a busy gateway
+	// flushes thousands of users per interval, and the per-user lines said
+	// nothing the count cannot say.
+	if len(userIDs) > 0 {
+		common.SysLog(common.LogText("batch update writes the buffered counters of %d users", len(userIDs)))
+	}
+	failed := 0
 	for key := range userIDs {
-		updateUserQuotaUsedQuotaAndRequestCount(key, userQuotaStore[key], usedQuotaStore[key], requestCountStore[key])
+		if err := updateUserQuotaUsedQuotaAndRequestCount(key, userQuotaStore[key], usedQuotaStore[key], requestCountStore[key]); err != nil {
+			failed++
+		}
+	}
+	if failed > 0 {
+		// Count only, never the error text: a driver error can quote row data.
+		common.SysError(common.LogText("batch update failed for %d users; their buffered counters are not retried", failed))
 	}
 	common.SysLog(common.LogText("batch update finished"))
 }
