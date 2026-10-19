@@ -105,8 +105,12 @@ func HwSignalSalt() (string, error) {
 
 // HwHashSignalValue returns the keyed hash stored for a raw IP address, phone
 // number or card fingerprint. Callers must not store the raw value instead.
+// Surrounding whitespace is dropped, but the case of the value is kept: only
+// hwHashRawSignal decides per kind whether a value is case-insensitive, so a
+// device token or a card fingerprint keeps the exact spelling the outside world
+// gave it.
 func HwHashSignalValue(value string) (string, error) {
-	value = strings.ToLower(strings.TrimSpace(value))
+	value = strings.TrimSpace(value)
 	if value == "" {
 		return "", nil
 	}
@@ -151,8 +155,14 @@ func hwNormalizeTrPhone(raw string) (string, error) {
 }
 
 // hwHashRawSignal hashes one raw signal value of a kind, normalising it first
-// where a single external form exists.
+// where a single external form exists. Only an IP address is lowercased: its
+// notation is case-insensitive by convention. A device token and a card
+// fingerprint are opaque case-sensitive values, and a phone number is reduced
+// to digits by hwNormalizeTrPhone, which no case rule may disturb.
 func hwHashRawSignal(kind, value string) (string, error) {
+	if kind == HwSignalKindIp {
+		value = strings.ToLower(strings.TrimSpace(value))
+	}
 	if kind == HwSignalKindPhone {
 		phone, err := hwNormalizeTrPhone(value)
 		if err != nil {

@@ -189,6 +189,47 @@ func TestUpsertHwUserSignalsNormalisesThePhone(t *testing.T) {
 	assert.Equal(t, int64(1), count, "an unrecognisable number stores nothing")
 }
 
+func TestHwSignalCaseHandling(t *testing.T) {
+	hwCreditTestSetup(t)
+	ipFirst := createHwTestUser(t, 0)
+	ipSecond := createHwTestUser(t, 0)
+
+	// IP address notation is case-insensitive by convention: the same address in
+	// another spelling must keep matching.
+	require.NoError(t, UpsertHwUserSignals(ipFirst.Id, HwUserSignals{Ip: "2001:DB8::1"}))
+	require.NoError(t, UpsertHwUserSignals(ipSecond.Id, HwUserSignals{Ip: "2001:db8::1"}))
+	shared, err := HwSharedSignal(ipFirst.Id, ipSecond.Id)
+	require.NoError(t, err)
+	assert.True(t, shared, "the same address in another case still matches")
+
+	// A device token is an opaque browser value: two tokens that differ only in
+	// case are two devices, not one shared device.
+	deviceFirst := createHwTestUser(t, 0)
+	deviceSecond := createHwTestUser(t, 0)
+	require.NoError(t, UpsertHwUserSignals(deviceFirst.Id, HwUserSignals{DeviceToken: "Device-Token-ABC"}))
+	require.NoError(t, UpsertHwUserSignals(deviceSecond.Id, HwUserSignals{DeviceToken: "device-token-abc"}))
+	shared, err = HwSharedSignal(deviceFirst.Id, deviceSecond.Id)
+	require.NoError(t, err)
+	assert.False(t, shared, "a device token keeps its case")
+
+	// A card fingerprint keeps the case the payment provider spelled it with.
+	require.NoError(t, UpsertHwUserSignals(deviceFirst.Id, HwUserSignals{CardFingerprint: "FP-Provider-X9"}))
+	require.NoError(t, UpsertHwUserSignals(deviceSecond.Id, HwUserSignals{CardFingerprint: "fp-provider-x9"}))
+	shared, err = HwSharedSignal(deviceFirst.Id, deviceSecond.Id)
+	require.NoError(t, err)
+	assert.False(t, shared, "a card fingerprint keeps its case")
+
+	// The E.164 phone form is digits only, so case handling cannot disturb it:
+	// two spellings of one number keep hashing the same.
+	phoneFirst := createHwTestUser(t, 0)
+	phoneSecond := createHwTestUser(t, 0)
+	require.NoError(t, UpsertHwUserSignals(phoneFirst.Id, HwUserSignals{Phone: "+90 555 123 45 67"}))
+	require.NoError(t, UpsertHwUserSignals(phoneSecond.Id, HwUserSignals{Phone: "905551234567"}))
+	shared, err = HwSharedSignal(phoneFirst.Id, phoneSecond.Id)
+	require.NoError(t, err)
+	assert.True(t, shared, "phone normalisation is untouched by the case rules")
+}
+
 func TestUpsertHwUserSignalsNeverStoresRawValues(t *testing.T) {
 	hwCreditTestSetup(t)
 	user := createHwTestUser(t, 0)
