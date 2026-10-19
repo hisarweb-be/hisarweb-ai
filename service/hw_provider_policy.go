@@ -41,6 +41,7 @@ const (
 type HwRouteState struct {
 	active     bool
 	group      string
+	userGroup  string
 	model      string
 	family     string
 	lumia      []*model.Channel
@@ -77,14 +78,17 @@ func HwChannelProvider(channel *model.Channel) string {
 }
 
 // HwChannelAllowedForGroup enforces the hard rule that the emergency supplier
-// is only reachable for the paying group. It is checked while building the route
-// and again whenever a channel is picked, so a wrongly tagged channel in a free
-// group can never be used even if the route was built from stale data.
-func HwChannelAllowedForGroup(channel *model.Channel, group string) bool {
+// is only reachable for the paying group. Both the group the token uses and the
+// group of the account must be paying: a free account whose token stands on the
+// paid group must not reach the emergency supplier either. It is checked while
+// building the route and again whenever a channel is picked, so a wrongly
+// tagged channel in a free group can never be used even if the route was built
+// from stale data.
+func HwChannelAllowedForGroup(channel *model.Channel, usingGroup, userGroup string) bool {
 	if HwChannelProvider(channel) != HwProviderOpenRouter {
 		return true
 	}
-	return group == HwPaidGroup
+	return usingGroup == HwPaidGroup && userGroup == HwPaidGroup
 }
 
 // hwChannelServesFamily reports whether channel serves customerModel inside the
@@ -144,8 +148,9 @@ func hwStartRoute(c *gin.Context, group, modelName string, filters []dto.Channel
 	if group == "" {
 		group = common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
 	}
+	userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
 	if group == "" {
-		group = common.GetContextKeyString(c, constant.ContextKeyUserGroup)
+		group = userGroup
 	}
 
 	candidates := model.HwChannelsForGroupModel(group, modelName)
@@ -163,18 +168,19 @@ func hwStartRoute(c *gin.Context, group, modelName string, filters []dto.Channel
 	}
 
 	state := &HwRouteState{
-		active: true,
-		group:  group,
-		model:  modelName,
-		family: HwModelFamily(modelName),
-		tried:  make(map[int]bool, len(candidates)),
+		active:    true,
+		group:     group,
+		userGroup: userGroup,
+		model:     modelName,
+		family:    HwModelFamily(modelName),
+		tried:     make(map[int]bool, len(candidates)),
 	}
 	for _, channel := range candidates {
 		provider := HwChannelProvider(channel)
 		if provider == HwProviderInternal {
 			continue
 		}
-		if !HwChannelAllowedForGroup(channel, group) {
+		if !HwChannelAllowedForGroup(channel, group, userGroup) {
 			// Wrongly tagged emergency channel in a non-paying group: filtered
 			// out here and again at pick time.
 			continue
@@ -207,7 +213,7 @@ func (s *HwRouteState) claim(channel *model.Channel) bool {
 	if provider != HwProviderLumia && provider != HwProviderOpenRouter {
 		return false
 	}
-	if !HwChannelAllowedForGroup(channel, s.group) {
+	if !HwChannelAllowedForGroup(channel, s.group, s.userGroup) {
 		return false
 	}
 	if !hwChannelServesFamily(channel, s.model, s.family) {
@@ -250,7 +256,7 @@ func (s *HwRouteState) hasNext() bool {
 
 func (s *HwRouteState) peekLumia() *model.Channel {
 	for _, channel := range s.lumia {
-		if !s.tried[channel.Id] && HwChannelAllowedForGroup(channel, s.group) {
+		if !s.tried[channel.Id] && HwChannelAllowedForGroup(channel, s.group, s.userGroup) {
 			return channel
 		}
 	}
@@ -259,7 +265,7 @@ func (s *HwRouteState) peekLumia() *model.Channel {
 
 func (s *HwRouteState) peekOpenRouter() *model.Channel {
 	for _, channel := range s.openRouter {
-		if !s.tried[channel.Id] && HwChannelAllowedForGroup(channel, s.group) {
+		if !s.tried[channel.Id] && HwChannelAllowedForGroup(channel, s.group, s.userGroup) {
 			return channel
 		}
 	}

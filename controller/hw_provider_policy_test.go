@@ -73,6 +73,29 @@ func TestHwFreeAndUnknownGroupsNeverReachEmergencySupplier(t *testing.T) {
 	}
 }
 
+// T3b: the paid rule looks at the account group as well. A free account whose
+// token stands on the paid group through a usable-group grant must not reach
+// the emergency supplier either.
+func TestHwFreeAccountWithPaidTokenNeverReachesEmergencySupplier(t *testing.T) {
+	env := hwNewEnv(t, "free", 1_000_000)
+	hwGrantTokenGroup(t, "free", "paid")
+	env.token.Group = "paid"
+	require.NoError(t, env.db.Save(env.token).Error)
+
+	lumia := env.fake("lumia")
+	openrouter := env.fake("openrouter")
+	lumia.setMode(hwFakeTimeout)
+	env.addChannel("lumia-primary", "paid", "lumia", 0, lumia)
+	env.addChannel("emergency", "paid", "openrouter", 1, openrouter)
+
+	recorder := env.post("/v1/chat/completions", hwChatRequest(hwTestModel, false))
+
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code, recorder.Body.String())
+	assert.Contains(t, recorder.Body.String(), "service_busy")
+	assert.Equal(t, 0, openrouter.callCount(), "a free account must never reach the emergency supplier through a paid token")
+	assert.Equal(t, 2, lumia.callCount(), "the primary supplier keeps its own outage retry")
+}
+
 // T9: the mask never depends on request headers. A customer that sends an
 // Upgrade header, or a Connection header that says upgrade, on a plain
 // /v1/chat/completions request still gets the filtered answer instead of the

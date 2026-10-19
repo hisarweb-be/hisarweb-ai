@@ -527,6 +527,24 @@ func hwClaudeRequest(modelName string, stream bool) map[string]any {
 	}
 }
 
+// hwGrantTokenGroup lets an account of userGroup use tokenGroup, the way an
+// administrator grants the paid group to a free account through the special
+// usable-group setting. The settings are restored when the test ends.
+func hwGrantTokenGroup(t *testing.T, userGroup, tokenGroup string) {
+	t.Helper()
+	groupSetting := ratio_setting.GetGroupRatioSetting()
+	previousSpecial := groupSetting.GroupSpecialUsableGroup.ReadAll()
+	previousRatios := groupSetting.GroupRatio.ReadAll()
+	t.Cleanup(func() {
+		groupSetting.GroupSpecialUsableGroup.Clear()
+		groupSetting.GroupSpecialUsableGroup.AddAll(previousSpecial)
+		groupSetting.GroupRatio.Clear()
+		groupSetting.GroupRatio.AddAll(previousRatios)
+	})
+	groupSetting.GroupSpecialUsableGroup.Set(userGroup, map[string]string{tokenGroup: "Granted group"})
+	groupSetting.GroupRatio.Set(tokenGroup, 1)
+}
+
 func hwResetGroupRatios(t *testing.T) {
 	t.Helper()
 	previous := ratio_setting.GroupRatio2JSONString()
