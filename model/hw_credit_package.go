@@ -1,3 +1,20 @@
+// HisarWeb AI credit ledger: known limits, recorded so a later change does not
+// have to rediscover them.
+//
+//   - L1, pre-consume around the hourly boundary: a request that starts just
+//     before the expiry run is priced against the balance it read, and the run
+//     can retire the package it is spending from before settlement. users.quota
+//     stays authoritative (settlement writes a delta), so nothing is charged
+//     twice, but the very last part of an expiring package can be used once more
+//     than its derived remainder.
+//   - L3, upstream cache pattern: the user cache is a copy of users.quota that is
+//     adjusted with deltas after a commit, like every upstream credit path. Two
+//     nodes syncing the same user at the same moment can briefly serve a value
+//     one delta behind; the next rehydration is authoritative.
+//   - L8, MySQL: the connection must not enable clientFoundRows. Several checks
+//     here read "no rows affected" as a signal (a re-used order reference, a
+//     refused deduction, an already retired package), and that flag makes a
+//     matched-but-unchanged UPDATE report a row, which would hide those cases.
 package model
 
 import (
