@@ -84,6 +84,7 @@ type hwMaskWriter struct {
 	transform   bool
 	stream      bool
 	anthropic   bool
+	apiRoute    bool
 	hijacked    bool
 	flushed     bool
 	lengthKnown bool
@@ -119,6 +120,7 @@ func HwMask() gin.HandlerFunc {
 			ownModel:       c.GetString("original_model"),
 			requestID:      c.GetString(common.RequestIdKey),
 			anthropic:      hwAnthropicPath(c),
+			apiRoute:       hwOwnAPIRoute(c),
 		}
 		c.Writer = writer
 		defer func() {
@@ -156,6 +158,14 @@ func hwAnthropicPath(c *gin.Context) bool {
 		return false
 	}
 	return strings.Contains(c.Request.URL.Path, "/messages")
+}
+
+// hwOwnAPIRoute reports whether this request serves our own /api surface
+// rather than a relay route. Relay answers pass through the supplier and must
+// never hand out Set-Cookie or Location from that side.
+func hwOwnAPIRoute(c *gin.Context) bool {
+	return c != nil && c.Request != nil && c.Request.URL != nil &&
+		strings.HasPrefix(c.Request.URL.Path, "/api/")
 }
 
 func (w *hwMaskWriter) Header() http.Header {
@@ -367,7 +377,7 @@ func (w *hwMaskWriter) commit() {
 		delete(target, key)
 	}
 	for key, values := range w.live {
-		if !hwResponseHeaderAllowed(key, w.base) {
+		if !hwResponseHeaderAllowed(key, w.base, w.apiRoute) {
 			continue
 		}
 		clean := make([]string, 0, len(values))
@@ -704,14 +714,19 @@ func hwDropJSONKey(key string) bool {
 }
 
 // hwResponseHeaderAllowed keeps headers our own middleware set and a small
-// allowlist; everything that smells like a supplier or proxy is dropped.
-func hwResponseHeaderAllowed(name string, base map[string]bool) bool {
+// allowlist; everything that smells like a supplier or proxy is dropped. Own
+// /api routes may additionally start a session or redirect: Set-Cookie and
+// Location come from our handlers there, never from a supplier answer.
+func hwResponseHeaderAllowed(name string, base map[string]bool, apiRoute bool) bool {
 	lower := strings.ToLower(strings.TrimSpace(name))
 	if lower == "" {
 		return false
 	}
 	if common.HwHasProviderTrace(lower) || strings.HasPrefix(lower, "cf-") || lower == "server" || lower == "via" {
 		return false
+	}
+	if apiRoute && (lower == "set-cookie" || lower == "location") {
+		return true
 	}
 	if base[lower] {
 		return true

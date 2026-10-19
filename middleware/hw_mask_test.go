@@ -132,6 +132,28 @@ func TestHwMaskKeepsOwnErrorText(t *testing.T) {
 	assert.NotContains(t, body, "lumia", "no supplier name in the replacement:\n%s", body)
 }
 
+// Own /api routes may start a session and redirect; relay routes may not,
+// because there a Set-Cookie or Location would come from the supplier side.
+func TestHwMaskAllowsSessionHeadersOnApiRoutesOnly(t *testing.T) {
+	setHeaders := func(c *gin.Context) {
+		c.SetCookie("session", "opaque", 3600, "/", "", false, true)
+		c.Header("Location", "/api/user/setup")
+		c.String(http.StatusOK, "ok")
+	}
+
+	engine := hwMaskRoute(t, http.MethodPost, "/api/user/login", setHeaders)
+	recorder := hwMaskDo(t, engine, http.MethodPost, "/api/user/login", "", nil)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	assert.NotEmpty(t, recorder.Result().Header.Values("Set-Cookie"), "our own session cookie survives on /api:\n%s", recorder.Result().Header)
+	assert.Equal(t, "/api/user/setup", recorder.Header().Get("Location"), "our own redirect target survives on /api:\n%s", recorder.Result().Header)
+
+	engine = hwMaskRoute(t, http.MethodPost, "/v1/chat/completions", setHeaders)
+	recorder = hwMaskDo(t, engine, http.MethodPost, "/v1/chat/completions", "", nil)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	assert.Empty(t, recorder.Result().Header.Values("Set-Cookie"), "a relay route never hands out cookies:\n%s", recorder.Result().Header)
+	assert.Empty(t, recorder.Header().Get("Location"), "a relay route never redirects:\n%s", recorder.Result().Header)
+}
+
 // The "x-or-" token is a header-name pattern. A header that carries it is
 // dropped, while body text with the same letters is left alone.
 func TestHwMaskAppliesHeaderPatternToHeaderNamesOnly(t *testing.T) {
