@@ -10,14 +10,16 @@ import (
 
 func TestHwHashSignalValueNeedsAServerSecret(t *testing.T) {
 	previousSecret := common.CryptoSecret
-	common.CryptoSecret = ""
+	common.CryptoSecret = "server-crypto-secret"
 	t.Cleanup(func() {
 		common.CryptoSecret = previousSecret
 	})
 
 	t.Setenv(hwSignalSaltEnv, "")
 	_, err := HwHashSignalValue("10.0.0.1")
-	require.ErrorIs(t, err, ErrHwSignalSaltMissing, "there is no default salt")
+	require.ErrorIs(t, err, ErrHwSignalSaltMissing, "there is no fallback to the server crypto secret")
+	_, err = HwSignalSalt()
+	require.ErrorIs(t, err, ErrHwSignalSaltMissing)
 
 	t.Setenv(hwSignalSaltEnv, "test-only-signal-salt")
 	hash, err := HwHashSignalValue("10.0.0.1")

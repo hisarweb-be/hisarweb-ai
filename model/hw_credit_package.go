@@ -347,6 +347,9 @@ var hwCreditExpiryOnce sync.Once
 // multiple masters would be safe as well.
 func StartHwCreditExpiryJob() {
 	hwCreditExpiryOnce.Do(func() {
+		if _, err := HwSignalSalt(); err != nil {
+			common.SysError(common.LogText("HW_SIGNAL_SALT is missing: abuse signals are not stored, so the free trial credit and the affiliate reward refuse to run; set HW_SIGNAL_SALT and restart"))
+		}
 		if !common.IsMasterNode {
 			return
 		}

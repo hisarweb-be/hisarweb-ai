@@ -18,8 +18,12 @@ import (
 // no default salt in code: without a secret nothing can be hashed.
 const hwSignalSaltEnv = "HW_SIGNAL_SALT"
 
-// ErrHwSignalSaltMissing is returned when neither HW_SIGNAL_SALT nor the server
-// crypto secret is available. Callers must treat it as "do not store the signal".
+// ErrHwSignalSaltMissing is returned when HW_SIGNAL_SALT is not configured.
+// There is no fallback: the hash of a phone number, IP address or card
+// fingerprint must be keyed with a secret that is dedicated to this purpose,
+// because the server crypto secret can be rotated for other reasons and would
+// silently change every stored hash. Callers must treat the error as "do not
+// store the signal".
 var ErrHwSignalSaltMissing = errors.New("HW_SIGNAL_SALT is not configured")
 
 // ErrHwInvalidUserSignal rejects a signal write for an unknown user.
@@ -50,14 +54,11 @@ type HwUserSignals struct {
 	CardFingerprint string `json:"card_fingerprint"`
 }
 
-// HwSignalSalt resolves the key used by HwHashSignalValue. HW_SIGNAL_SALT wins;
-// otherwise the server crypto secret (derived from SESSION_SECRET/CRYPTO_SECRET)
-// is used, so hashes stay comparable across restarts and nodes.
+// HwSignalSalt resolves the key used by HwHashSignalValue. HW_SIGNAL_SALT is
+// the only source; without it hashing is refused with ErrHwSignalSaltMissing
+// instead of falling back to the server crypto secret.
 func HwSignalSalt() (string, error) {
 	if salt := strings.TrimSpace(os.Getenv(hwSignalSaltEnv)); salt != "" {
-		return salt, nil
-	}
-	if salt := strings.TrimSpace(common.CryptoSecret); salt != "" {
 		return salt, nil
 	}
 	return "", ErrHwSignalSaltMissing
