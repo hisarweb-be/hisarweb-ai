@@ -233,22 +233,37 @@ func getBufferedUserQuota(userID int) int {
 	return batchUpdateStores[BatchUpdateTypeUserQuota][userID]
 }
 
-// hwCaptureErrorLog redirects the server error log into a buffer for the length
-// of one assertion block. The model package logs through common.SysError, which
-// writes to gin.DefaultErrorWriter behind a lock the swap respects.
-func hwCaptureErrorLog(t *testing.T) *bytes.Buffer {
+// hwServerLogCapture holds what the server log writers received while swapped.
+type hwServerLogCapture struct {
+	Out bytes.Buffer
+	Err bytes.Buffer
+}
+
+// All returns everything both log writers received.
+func (c *hwServerLogCapture) All() string {
+	return c.Out.String() + c.Err.String()
+}
+
+// hwCaptureServerLog redirects both server log writers into buffers for the
+// length of one test. common.SysLog writes to gin.DefaultWriter and
+// common.SysError to gin.DefaultErrorWriter, both behind a lock the swap
+// respects.
+func hwCaptureServerLog(t *testing.T) *hwServerLogCapture {
 	t.Helper()
-	buf := &bytes.Buffer{}
+	capture := &hwServerLogCapture{}
 	common.LogWriterMu.Lock()
-	previous := gin.DefaultErrorWriter
-	gin.DefaultErrorWriter = buf
+	previousOut := gin.DefaultWriter
+	previousErr := gin.DefaultErrorWriter
+	gin.DefaultWriter = &capture.Out
+	gin.DefaultErrorWriter = &capture.Err
 	common.LogWriterMu.Unlock()
 	t.Cleanup(func() {
 		common.LogWriterMu.Lock()
-		gin.DefaultErrorWriter = previous
+		gin.DefaultWriter = previousOut
+		gin.DefaultErrorWriter = previousErr
 		common.LogWriterMu.Unlock()
 	})
-	return buf
+	return capture
 }
 
 func TestHwRetireExpiredPackagesLogsCountAndClassWithoutErrorText(t *testing.T) {
@@ -274,7 +289,7 @@ func TestHwRetireExpiredPackagesLogsCountAndClassWithoutErrorText(t *testing.T) 
 			"BEGIN SELECT RAISE(ABORT, 'hw-test-blocked-deduction'); END", blocked.Id)).Error)
 	t.Cleanup(func() { DB.Exec("DROP TRIGGER IF EXISTS hw_test_block_quota") })
 
-	logBuf := hwCaptureErrorLog(t)
+	logBuf := hwCaptureServerLog(t)
 	retired, err := RetireExpiredPackages(now)
 	require.Error(t, err, "the first error is still returned to the caller")
 	assert.Contains(t, err.Error(), "hw-test-blocked-deduction", "the caller still gets the error text")
@@ -282,15 +297,15 @@ func TestHwRetireExpiredPackagesLogsCountAndClassWithoutErrorText(t *testing.T) 
 	assert.Equal(t, 60, getUserQuotaFromDB(t, later.Id), "the later user's balance is lowered")
 	assert.Equal(t, 90, getUserQuotaFromDB(t, blocked.Id), "the blocked user's balance is untouched")
 
-	logs := logBuf.String()
+	logs := logBuf.Err.String()
 	assert.Contains(t, logs, "credit package expiry failed for 1 users")
 	assert.Contains(t, logs, "first class internal")
 	assert.NotContains(t, logs, "hw-test-blocked-deduction", "the error text never reaches the log")
 
 	// The periodic job wraps the same run and used to print the error text.
-	logBuf.Reset()
+	logBuf.Err.Reset()
 	runHwCreditExpiryOnceSafely()
-	assert.NotContains(t, logBuf.String(), "hw-test-blocked-deduction", "the job log also stays without the error text")
+	assert.NotContains(t, logBuf.Err.String(), "hw-test-blocked-deduction", "the job log also stays without the error text")
 }
 
 func TestHwGrantCreditPackageIsIdempotent(t *testing.T) {
