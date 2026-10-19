@@ -209,6 +209,40 @@ func TestHwGrantFreeTrialCredit(t *testing.T) {
 	assert.Equal(t, hwGroupPaid, group)
 }
 
+func TestHwGrantFreeTrialCreditAnotherDayAnotherAmount(t *testing.T) {
+	hwCreditTestSetup(t)
+	firstDay := int64(1_700_000_000)
+	nextDay := firstDay + 24*3600
+	user := createHwTestUser(t, 0)
+	hwMarkPhoneVerified(t, user.Id)
+
+	granted, _, err := HwGrantFreeTrialCredit(user.Id, 100, firstDay)
+	require.NoError(t, err)
+	require.True(t, granted)
+
+	// A repeated call on another day converts the TRY amount against another
+	// rate; it must be a quiet repeat, not a conflict on the order reference,
+	// and the granted package keeps its original amount.
+	granted, reason, err := HwGrantFreeTrialCredit(user.Id, 120, nextDay)
+	require.NoError(t, err, "another daily rate is not an order reference conflict")
+	assert.False(t, granted)
+	assert.Equal(t, HwFreeTrialAlreadyGranted, reason)
+	assert.Equal(t, 100, getUserQuotaFromDB(t, user.Id))
+
+	// The group move still runs for the repeat: a first call that failed after
+	// its commit must not leave the user in the default group.
+	require.NoError(t, DB.Model(&User{}).Where("id = ?", user.Id).Update(commonGroupCol, hwGroupDefault).Error)
+	granted, reason, err = HwGrantFreeTrialCredit(user.Id, 120, nextDay)
+	require.NoError(t, err)
+	assert.False(t, granted)
+	assert.Equal(t, HwFreeTrialAlreadyGranted, reason)
+
+	var group string
+	require.NoError(t, DB.Model(&User{}).Where("id = ?", user.Id).Select(commonGroupCol).Find(&group).Error)
+	assert.Equal(t, hwGroupFree, group, "a repeat in the default group still moves to the free group")
+	assert.Equal(t, 100, getUserQuotaFromDB(t, user.Id))
+}
+
 func TestHwRevokeAffiliateReward(t *testing.T) {
 	now := int64(1_700_000_000)
 

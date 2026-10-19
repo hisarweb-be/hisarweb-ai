@@ -35,7 +35,9 @@ func HwMaxFreeTrialQuota() int {
 // device, phone number or card fingerprint already received the free credit
 // (reason shared_<kind>), or when the amount is above the cap (reason
 // quota_too_high). Only the first call has an effect; the package expires after
-// hwFreeCreditValiditySeconds.
+// hwFreeCreditValiditySeconds. A repeated call on another day converts the TRY
+// amount against another rate and therefore arrives with another quota; it is
+// answered as already_granted without touching the existing package.
 //
 // A regular user in the upstream default group is moved to the free group. Paid,
 // administrator and operator-assigned groups are never changed here.
@@ -60,9 +62,21 @@ func HwGrantFreeTrialCredit(userID int, freeQuota int, now int64) (granted bool,
 	if sharedKind != "" {
 		return false, HwFreeTrialSharedSignal + sharedKind, nil
 	}
-	granted, err = GrantCreditPackage(nil, userID, freeQuota, HwSourceFree, "free:"+strconv.Itoa(userID), now)
-	if err != nil {
+	// The TRY amount is converted against the daily rate, so a repeated call on
+	// another day arrives with another quota. The free package that already
+	// exists is the truth, not the amount of today: look for it first, or the
+	// idempotence check of the ledger would report a conflict on the reference.
+	var freePackages int64
+	if err := DB.Model(&HwCreditPackage{}).
+		Where("user_id = ? AND source = ?", userID, HwSourceFree).
+		Count(&freePackages).Error; err != nil {
 		return false, "", err
+	}
+	if freePackages == 0 {
+		granted, err = GrantCreditPackage(nil, userID, freeQuota, HwSourceFree, "free:"+strconv.Itoa(userID), now)
+		if err != nil {
+			return false, "", err
+		}
 	}
 	// Run the group move even when the package already existed: a previous call
 	// that failed after its commit must not leave the user in the default group.
