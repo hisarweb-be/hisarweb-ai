@@ -575,7 +575,61 @@ func (w *hwMaskWriter) sanitizeStream(data []byte) []byte {
 // masking itself; it is nil in production.
 var hwFilterPanicHook func()
 
+// hwPayloadNeedles are the byte strings whose presence means one SSE chunk may
+// need rewriting: supplier traces, the droppable supplier keys, the fields the
+// mask rewrites (identity, model, error) and the escape sequence that could
+// hide a trace. Chunks without any of them are pure model output.
+var hwPayloadNeedles = []string{
+	"lumia", "openrouter", "litellm",
+	`"model"`, `"id"`, `"error"`, `"object"`, `"type"`, `"message`, `"response`,
+	"native_finish_reason", "is_byok", "cost_details", "system_fingerprint",
+	"provider", "generation_id", `"x_`, `"x-`, "gen-", `\u`,
+}
+
+// hwPayloadNeedsParsing reports whether a chunk is worth parsing at all. The
+// check is a case-insensitive byte scan without allocation, so the common
+// chunk — plain model output — never pays for JSON decoding.
+func hwPayloadNeedsParsing(payload []byte) bool {
+	for _, needle := range hwPayloadNeedles {
+		if hwContainsFold(payload, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+// hwContainsFold reports whether data contains needle, ignoring ASCII case
+// only, without building a lowered copy.
+func hwContainsFold(data []byte, needle string) bool {
+	needleLen := len(needle)
+	if needleLen == 0 || len(data) < needleLen {
+		return false
+	}
+	first := needle[0] | 0x20
+	for index := 0; index+needleLen <= len(data); index++ {
+		if data[index]|0x20 != first {
+			continue
+		}
+		matched := true
+		for offset := 0; offset < needleLen; offset++ {
+			if data[index+offset]|0x20 != needle[offset]|0x20 {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
+}
+
 func (w *hwMaskWriter) sanitizePayload(payload []byte) []byte {
+	if !hwPayloadNeedsParsing(payload) {
+		// Nothing the mask would rewrite is present; pass the chunk through
+		// byte for byte, spacing and key order included.
+		return payload
+	}
 	var object map[string]any
 	if err := common.Unmarshal(payload, &object); err != nil || object == nil {
 		return []byte(hwSafetyNet(w.ctx, payload))

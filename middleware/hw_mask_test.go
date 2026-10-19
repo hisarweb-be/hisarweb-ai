@@ -201,6 +201,28 @@ func TestHwMaskAppliesNetToOversizedValues(t *testing.T) {
 	assert.Contains(t, body, "provider tail", "the supplier name became the placeholder")
 }
 
+// A chunk that carries nothing the mask rewrites skips JSON parsing and goes
+// out byte for byte: spacing and key order survive. A chunk that names a
+// supplier is still parsed and rewritten.
+func TestHwMaskSkipsParsingForCleanChunks(t *testing.T) {
+	verbatim := "data: {  \"zeta\" : 1 , \"alpha\" : [ 2 ] }\n\n"
+	engine := hwMaskRoute(t, http.MethodPost, "/v1/chat/completions", func(c *gin.Context) {
+		c.Header("Content-Type", "text/event-stream")
+		c.String(http.StatusOK, verbatim)
+	})
+	recorder := hwMaskDo(t, engine, http.MethodPost, "/v1/chat/completions", "", nil)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	assert.Equal(t, verbatim, recorder.Body.String(), "a clean chunk passes through unparsed")
+
+	engine = hwMaskRoute(t, http.MethodPost, "/v1/chat/completions", func(c *gin.Context) {
+		c.Header("Content-Type", "text/event-stream")
+		c.String(http.StatusOK, "data: {\"model\":\"openrouter/x\",\"alpha\":1}\n\n")
+	})
+	recorder = hwMaskDo(t, engine, http.MethodPost, "/v1/chat/completions", "", nil)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	assert.NotContains(t, recorder.Body.String(), "openrouter", "a chunk naming the supplier is still rewritten")
+}
+
 // The "x-or-" token is a header-name pattern. A header that carries it is
 // dropped, while body text with the same letters is left alone.
 func TestHwMaskAppliesHeaderPatternToHeaderNamesOnly(t *testing.T) {
