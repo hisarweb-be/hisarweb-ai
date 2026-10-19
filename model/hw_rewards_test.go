@@ -10,7 +10,7 @@ import (
 )
 
 // hwMarkVerified gives a user a unique device signal, which counts as verified
-// for the affiliate reward and the free trial credit.
+// for the affiliate reward.
 func hwMarkVerified(t *testing.T, userID int) {
 	t.Helper()
 	require.NoError(t, UpsertHwUserSignals(userID, HwUserSignals{DeviceToken: "device-" + common.GetRandomString(8)}))
@@ -109,7 +109,7 @@ func TestHwGrantAffiliateReward(t *testing.T) {
 		hwCreditTestSetup(t)
 		inviter := createHwTestUser(t, 0)
 		buyer := createHwTestInvitee(t, 0, inviter.Id)
-		hwMarkVerified(t, buyer.Id)
+		hwMarkPhoneVerified(t, buyer.Id)
 		granted, _, err := HwGrantFreeTrialCredit(buyer.Id, 100, now)
 		require.NoError(t, err)
 		require.True(t, granted)
@@ -181,7 +181,7 @@ func TestHwGrantFreeTrialCredit(t *testing.T) {
 	now := int64(1_700_000_000)
 	user := createHwTestUser(t, 0)
 
-	hwMarkVerified(t, user.Id)
+	hwMarkPhoneVerified(t, user.Id)
 	granted, reason, err := HwGrantFreeTrialCredit(user.Id, 100, now)
 	require.NoError(t, err)
 	require.True(t, granted, "reason: %s", reason)
@@ -276,10 +276,30 @@ func TestHwGrantFreeTrialCreditGuards(t *testing.T) {
 		assert.Zero(t, count)
 	})
 
+	t.Run("refuses an account with only a device token", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		user := createHwTestUser(t, 0)
+		// A device token comes from the browser and is renewable per account, so
+		// it may not verify a person on its own.
+		require.NoError(t, UpsertHwUserSignals(user.Id, HwUserSignals{DeviceToken: "device-browser-token"}))
+
+		granted, reason, err := HwGrantFreeTrialCredit(user.Id, 100, now)
+		require.NoError(t, err)
+		assert.False(t, granted)
+		assert.Equal(t, HwFreeTrialUnverified, reason)
+		assert.Equal(t, 0, getUserQuotaFromDB(t, user.Id))
+
+		var count int64
+		require.NoError(t, DB.Model(&HwCreditPackage{}).Where("user_id = ?", user.Id).Count(&count).Error)
+		assert.Zero(t, count, "no free package is issued on a device token alone")
+	})
+
 	t.Run("refuses a device another account already used for the free credit", func(t *testing.T) {
 		hwCreditTestSetup(t)
 		first := createHwTestUser(t, 0)
 		second := createHwTestUser(t, 0)
+		hwMarkPhoneVerified(t, first.Id)
+		hwMarkPhoneVerified(t, second.Id)
 		require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{DeviceToken: "device-one"}))
 		require.NoError(t, UpsertHwUserSignals(second.Id, HwUserSignals{DeviceToken: "device-one"}))
 
@@ -298,8 +318,8 @@ func TestHwGrantFreeTrialCreditGuards(t *testing.T) {
 		hwCreditTestSetup(t)
 		first := createHwTestUser(t, 0)
 		second := createHwTestUser(t, 0)
-		hwMarkVerified(t, first.Id)
-		hwMarkVerified(t, second.Id)
+		hwMarkPhoneVerified(t, first.Id)
+		hwMarkPhoneVerified(t, second.Id)
 		require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{CardFingerprint: "fp-free"}))
 		require.NoError(t, UpsertHwUserSignals(second.Id, HwUserSignals{CardFingerprint: "fp-free"}))
 
@@ -316,7 +336,7 @@ func TestHwGrantFreeTrialCreditGuards(t *testing.T) {
 	t.Run("refuses an amount above the hard cap", func(t *testing.T) {
 		hwCreditTestSetup(t)
 		user := createHwTestUser(t, 0)
-		hwMarkVerified(t, user.Id)
+		hwMarkPhoneVerified(t, user.Id)
 		aboveCap := HwMaxFreeTrialQuota() + 1
 
 		granted, reason, err := HwGrantFreeTrialCredit(user.Id, aboveCap, now)
@@ -333,7 +353,7 @@ func TestHwGrantFreeTrialCreditGuards(t *testing.T) {
 	t.Run("the cap itself is allowed", func(t *testing.T) {
 		hwCreditTestSetup(t)
 		user := createHwTestUser(t, 0)
-		hwMarkVerified(t, user.Id)
+		hwMarkPhoneVerified(t, user.Id)
 
 		granted, reason, err := HwGrantFreeTrialCredit(user.Id, HwMaxFreeTrialQuota(), now)
 		require.NoError(t, err)
@@ -348,7 +368,7 @@ func TestHwFreeTrialCreditLeavesOperatorAccountsAlone(t *testing.T) {
 	admin := createHwTestUser(t, 0)
 	require.NoError(t, DB.Model(&User{}).Where("id = ?", admin.Id).Update("role", common.RoleAdminUser).Error)
 
-	hwMarkVerified(t, admin.Id)
+	hwMarkPhoneVerified(t, admin.Id)
 	granted, reason, err := HwGrantFreeTrialCredit(admin.Id, 100, now)
 	require.NoError(t, err)
 	require.True(t, granted, "reason: %s", reason)

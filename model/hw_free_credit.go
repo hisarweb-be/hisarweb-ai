@@ -29,11 +29,13 @@ func HwMaxFreeTrialQuota() int {
 // amount comes from the caller, because converting the TRY amount needs the
 // daily exchange rate; it may not exceed HwMaxFreeTrialQuota.
 //
-// The credit is refused when the user never produced a device or phone signal
-// (reason unverified), when another account that shares a device, phone number
-// or card fingerprint already received the free credit (reason shared_<kind>),
-// or when the amount is above the cap (reason quota_too_high). Only the first
-// call has an effect; the package expires after hwFreeCreditValiditySeconds.
+// The credit is refused when the user has no phone hash (reason unverified): a
+// device token is supplied by the browser and renewable per account, so it does
+// not verify a person. It is further refused when another account that shares a
+// device, phone number or card fingerprint already received the free credit
+// (reason shared_<kind>), or when the amount is above the cap (reason
+// quota_too_high). Only the first call has an effect; the package expires after
+// hwFreeCreditValiditySeconds.
 //
 // A regular user in the upstream default group is moved to the free group. Paid,
 // administrator and operator-assigned groups are never changed here.
@@ -44,11 +46,11 @@ func HwGrantFreeTrialCredit(userID int, freeQuota int, now int64) (granted bool,
 	if freeQuota > HwMaxFreeTrialQuota() {
 		return false, HwFreeTrialQuotaTooHigh, nil
 	}
-	verified, err := hwUserHasVerifiedSignal(userID)
+	phoneHashes, err := hwNewestSignalHashes(DB, userID, []string{HwSignalKindPhone})
 	if err != nil {
 		return false, "", err
 	}
-	if !verified {
+	if phoneHashes[HwSignalKindPhone] == "" {
 		return false, HwFreeTrialUnverified, nil
 	}
 	sharedKind, err := hwFreeTrialSharedSignalKind(userID)
