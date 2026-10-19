@@ -65,6 +65,7 @@ var hwContentKeys = map[string]bool{
 	"arguments":         true,
 	"input":             true,
 	"output_text":       true,
+	"delta":             true,
 }
 
 type hwMaskWriter struct {
@@ -334,7 +335,7 @@ func hwFilterHandshake(block []byte) []byte {
 		}
 		out.Write(name)
 		out.WriteString(":")
-		out.WriteString(common.HwReplaceProviderWords(string(value)))
+		out.WriteString(common.HwReplaceProviderTextWords(string(value)))
 		out.WriteString("\r\n")
 	}
 	out.WriteString("\r\n")
@@ -539,27 +540,10 @@ func (w *hwMaskWriter) streamErrorEvent(data []byte) []byte {
 }
 
 // sanitizeObject applies the structural rules to one JSON object: identity and
-// model names become ours, supplier-specific keys disappear, error text becomes
-// our own wording.
+// model names become ours, supplier-specific keys disappear at any depth, error
+// text becomes our own wording. Identities are recorded first so the admin log
+// keeps the true upstream id even when the tree scan rewrites its text.
 func (w *hwMaskWriter) sanitizeObject(object map[string]any, status int) {
-	for key, value := range object {
-		if hwDropJSONKey(key) {
-			delete(object, key)
-			continue
-		}
-		text, ok := value.(string)
-		if !ok || hwContentKeys[strings.ToLower(key)] {
-			continue
-		}
-		if common.HwHasProviderTrace(text) {
-			object[key] = hwSafetyNet(w.ctx, []byte(text))
-		}
-	}
-	if customerModel := w.customerModel(); customerModel != "" {
-		if _, ok := object["model"].(string); ok {
-			object["model"] = customerModel
-		}
-	}
 	if id, ok := object["id"].(string); ok && hwIsIdentityObject(object) {
 		w.recordUpstreamID(id)
 		object["id"] = w.ownID(hwIdentityPrefix(object))
@@ -569,28 +553,48 @@ func (w *hwMaskWriter) sanitizeObject(object map[string]any, status int) {
 			w.sanitizeNestedIdentity(inner)
 		}
 	}
+	w.sanitizeTree(object)
+	if customerModel := w.customerModel(); customerModel != "" {
+		if _, ok := object["model"].(string); ok {
+			object["model"] = customerModel
+		}
+	}
 	if errObject, ok := object["error"].(map[string]any); ok {
 		w.sanitizeErrorObject(errObject, status)
 	}
 }
 
-// sanitizeNestedIdentity rewrites the identity of a nested message/response
-// object (Anthropic message_start, Responses API events) without touching ids
-// that belong to content blocks or tool calls.
-func (w *hwMaskWriter) sanitizeNestedIdentity(inner map[string]any) {
-	for key, value := range inner {
-		if hwDropJSONKey(key) {
-			delete(inner, key)
-			continue
+// sanitizeTree walks every nested object and array of a decoded payload:
+// supplier-specific keys disappear at any depth and provider traces in string
+// values are replaced, except in fields that hold model-authored text.
+func (w *hwMaskWriter) sanitizeTree(node any) {
+	switch typed := node.(type) {
+	case map[string]any:
+		for key, value := range typed {
+			if hwDropJSONKey(key) {
+				delete(typed, key)
+				continue
+			}
+			if text, ok := value.(string); ok {
+				if !hwContentKeys[strings.ToLower(key)] && common.HwHasProviderTextTrace(text) {
+					typed[key] = hwSafetyNet(w.ctx, []byte(text))
+				}
+				continue
+			}
+			w.sanitizeTree(value)
 		}
-		text, ok := value.(string)
-		if !ok || hwContentKeys[strings.ToLower(key)] {
-			continue
-		}
-		if common.HwHasProviderTrace(text) {
-			inner[key] = hwSafetyNet(w.ctx, []byte(text))
+	case []any:
+		for _, item := range typed {
+			w.sanitizeTree(item)
 		}
 	}
+}
+
+// sanitizeNestedIdentity rewrites the identity of a nested message/response
+// object (Anthropic message_start, Responses API events) without touching ids
+// that belong to content blocks or tool calls. Key dropping and value scanning
+// already ran over the whole tree.
+func (w *hwMaskWriter) sanitizeNestedIdentity(inner map[string]any) {
 	if customerModel := w.customerModel(); customerModel != "" {
 		if _, ok := inner["model"].(string); ok {
 			inner["model"] = customerModel
@@ -620,8 +624,8 @@ func (w *hwMaskWriter) sanitizeErrorObject(errObject map[string]any, status int)
 		errObject["message"] = hwSafetyNet(w.ctx, []byte(message))
 	}
 	for _, key := range []string{"type", "code"} {
-		if text, ok := errObject[key].(string); ok && common.HwHasProviderTrace(text) {
-			errObject[key] = common.HwReplaceProviderWords(text)
+		if text, ok := errObject[key].(string); ok && common.HwHasProviderTextTrace(text) {
+			errObject[key] = common.HwReplaceProviderTextWords(text)
 		}
 	}
 }
@@ -674,7 +678,7 @@ func hwDropJSONKey(key string) bool {
 	lower := strings.ToLower(strings.TrimSpace(key))
 	switch lower {
 	case "provider", "system_fingerprint", "native_finish_reason", "upstream_id", "upstream_model",
-		"provider_name", "provider_slug", "generation_id":
+		"provider_name", "provider_slug", "generation_id", "is_byok", "cost_details":
 		return true
 	}
 	return strings.HasPrefix(lower, "openrouter") || strings.HasPrefix(lower, "x_") || strings.HasPrefix(lower, "x-")
@@ -700,14 +704,16 @@ func hwResponseHeaderAllowed(name string, base map[string]bool) bool {
 }
 
 // hwSafetyNet is the last-resort scan of text that is about to reach the
-// customer. A hit is reported to the admin log without its content.
+// customer. It covers body text and header values, so it uses the text token
+// set: the "x-or-" pattern stays reserved for header names. A hit is reported
+// to the admin log without its content.
 func hwSafetyNet(ctx *gin.Context, data []byte) string {
 	text := string(data)
-	if !hwProviderNetEnabled.Load() || !common.HwHasProviderTrace(text) {
+	if !hwProviderNetEnabled.Load() || !common.HwHasProviderTextTrace(text) {
 		return text
 	}
 	service.HwNoteMaskAlert(ctx)
-	return common.HwReplaceProviderWords(text)
+	return common.HwReplaceProviderTextWords(text)
 }
 
 // hwSplitStreamTerminal separates the end-of-stream marker of one SSE write from

@@ -10,11 +10,11 @@ import (
 // column; the untouched text moves to the admin-only part of the same row, so
 // operators keep the detail the customer must not read.
 func HwPublicErrorText(other *model.LogOther, text string) string {
-	if text == "" || !common.HwHasProviderTrace(text) {
+	if text == "" || !common.HwHasProviderTextTrace(text) {
 		return text
 	}
 	if other != nil {
 		other.SetAdmin("upstream_error", text)
 	}
-	return common.HwReplaceProviderWords(text)
+	return common.HwReplaceProviderTextWords(text)
 }

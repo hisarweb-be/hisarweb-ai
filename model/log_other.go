@@ -281,10 +281,11 @@ func formatLogOtherJSON(value string, visibility logOtherVisibility) string {
 
 // hwScrubCustomerTrace is the last-resort scan of the customer projection: a
 // supplier name must never reach a customer, not even through a public
-// diagnostic field such as the model name the upstream declared.
+// diagnostic field such as the model name the upstream declared. It scans text,
+// so it uses the text token set without the header-name-only "x-or-" pattern.
 func hwScrubCustomerTrace(text string, visibility logOtherVisibility) string {
-	if visibility != logOtherVisibilityUser || !common.HwHasProviderTrace(text) {
+	if visibility != logOtherVisibilityUser || !common.HwHasProviderTextTrace(text) {
 		return text
 	}
-	return common.HwReplaceProviderWords(text)
+	return common.HwReplaceProviderTextWords(text)
 }
