@@ -27,6 +27,10 @@ var ErrHwSignalSaltMissing = errors.New("HW_SIGNAL_SALT is not configured")
 // ErrHwInvalidUserSignal rejects a signal write for an unknown user.
 var ErrHwInvalidUserSignal = errors.New("invalid user signal")
 
+// ErrHwInvalidPhoneNumber rejects a phone number that is not a Turkish number
+// in one of the accepted spellings.
+var ErrHwInvalidPhoneNumber = errors.New("invalid phone number")
+
 // Signal kinds recorded in hw_user_signals. Every kind is hashed before it is
 // stored; the table never holds a raw address, number or fingerprint.
 const (
@@ -98,6 +102,50 @@ func HwHashSignalValue(value string) (string, error) {
 	return hex.EncodeToString(mac.Sum(nil)), nil
 }
 
+// hwNormalizeTrPhone reduces a Turkish phone number to E.164 (+90XXXXXXXXXX).
+// Accepted spellings are "+90 555 123 45 67", "905551234567", "0555 123 45 67"
+// and a bare "555 123 45 67"; spaces, dashes, dots, parentheses and a leading
+// plus are separators. Anything that does not leave exactly ten digits after the
+// country code or the leading zero is refused: two spellings of one number must
+// produce one hash, and an unrecognisable number must not be stored at all.
+func hwNormalizeTrPhone(raw string) (string, error) {
+	var digits strings.Builder
+	for _, r := range strings.TrimSpace(raw) {
+		switch {
+		case r >= '0' && r <= '9':
+			digits.WriteRune(r)
+		case r == ' ' || r == '-' || r == '.' || r == '(' || r == ')' || r == '+':
+			// Separator only, carries no value.
+		default:
+			return "", ErrHwInvalidPhoneNumber
+		}
+	}
+	number := digits.String()
+	switch {
+	case len(number) == 12 && strings.HasPrefix(number, "90"):
+		number = number[2:]
+	case len(number) == 11 && strings.HasPrefix(number, "0"):
+		number = number[1:]
+	}
+	if len(number) != 10 {
+		return "", ErrHwInvalidPhoneNumber
+	}
+	return "+90" + number, nil
+}
+
+// hwHashRawSignal hashes one raw signal value of a kind, normalising it first
+// where a single external form exists.
+func hwHashRawSignal(kind, value string) (string, error) {
+	if kind == HwSignalKindPhone {
+		phone, err := hwNormalizeTrPhone(value)
+		if err != nil {
+			return "", err
+		}
+		value = phone
+	}
+	return HwHashSignalValue(value)
+}
+
 // UpsertHwUserSignals hashes the non-empty raw values of a patch and stores them
 // as history rows. A raw IP address, phone number or card fingerprint never
 // reaches the table or a log line.
@@ -119,7 +167,7 @@ func UpsertHwUserSignals(userID int, patch HwUserSignals) error {
 		if strings.TrimSpace(signal.value) == "" {
 			continue
 		}
-		hash, err := HwHashSignalValue(signal.value)
+		hash, err := hwHashRawSignal(signal.kind, signal.value)
 		if err != nil {
 			return err
 		}

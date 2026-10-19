@@ -66,12 +66,12 @@ func TestHwSharedSignal(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, shared, "users without signals never match")
 
-	require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{Phone: "phone-x"}))
+	require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{Phone: "0555 111 22 33"}))
 	shared, err = HwSharedSignal(first.Id, second.Id)
 	require.NoError(t, err)
 	assert.False(t, shared)
 
-	require.NoError(t, UpsertHwUserSignals(second.Id, HwUserSignals{Phone: "phone-x"}))
+	require.NoError(t, UpsertHwUserSignals(second.Id, HwUserSignals{Phone: "0555 111 22 33"}))
 	shared, err = HwSharedSignal(first.Id, second.Id)
 	require.NoError(t, err)
 	assert.True(t, shared)
@@ -98,6 +98,50 @@ func TestHwSharedSignalUsesTheWholeHistory(t *testing.T) {
 	kinds, err := hwSharedSignalKinds(first.Id, second.Id)
 	require.NoError(t, err)
 	assert.Equal(t, []string{HwSignalKindIp}, kinds)
+}
+
+func TestHwNormalizeTrPhone(t *testing.T) {
+	cases := []struct{ given, want string }{
+		{"0555 123 45 67", "+905551234567"},
+		{"+90 555 123 45 67", "+905551234567"},
+		{"905551234567", "+905551234567"},
+		{"5551234567", "+905551234567"},
+		{"555 123 45 67", "+905551234567"},
+		{"(0555) 123-45-67", "+905551234567"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.given, func(t *testing.T) {
+			normalised, err := hwNormalizeTrPhone(tc.given)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, normalised)
+		})
+	}
+
+	for _, given := range []string{"", "12345", "+1 555 123 4567", "0555 123 45 6a", "00905551234567"} {
+		t.Run("rejects "+given, func(t *testing.T) {
+			_, err := hwNormalizeTrPhone(given)
+			require.ErrorIs(t, err, ErrHwInvalidPhoneNumber)
+		})
+	}
+}
+
+func TestUpsertHwUserSignalsNormalisesThePhone(t *testing.T) {
+	hwCreditTestSetup(t)
+	first := createHwTestUser(t, 0)
+	second := createHwTestUser(t, 0)
+
+	require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{Phone: "0555 123 45 67"}))
+	require.NoError(t, UpsertHwUserSignals(second.Id, HwUserSignals{Phone: "+90 555 123 45 67"}))
+	shared, err := HwSharedSignal(first.Id, second.Id)
+	require.NoError(t, err)
+	assert.True(t, shared, "two spellings of one number must hash the same")
+
+	err = UpsertHwUserSignals(second.Id, HwUserSignals{Phone: "12345"})
+	require.ErrorIs(t, err, ErrHwInvalidPhoneNumber)
+
+	var count int64
+	require.NoError(t, DB.Model(&HwUserSignal{}).Where("user_id = ?", second.Id).Count(&count).Error)
+	assert.Equal(t, int64(1), count, "an unrecognisable number stores nothing")
 }
 
 func TestUpsertHwUserSignalsNeverStoresRawValues(t *testing.T) {
