@@ -691,3 +691,40 @@ func TestHwCustomerNeverSeesTheSupplierName(t *testing.T) {
 			"without the scan the deliberately leaked word must reach the customer, otherwise the scan is untested")
 	})
 }
+
+// T10: a channel that maps the customer model onto a supplier alias must not
+// reveal that alias in the customer log projection; the admin projection keeps
+// it for diagnosis.
+func TestHwUpstreamAliasIsAdminOnly(t *testing.T) {
+	const alias = "claude-sonnet-5-5-alias-9"
+	env := hwNewEnv(t, "paid", 1_000_000)
+	lumia := env.fake("lumia")
+	channel := env.addChannel("lumia-primary", "paid", "lumia", 0, lumia)
+	mapping := `{"` + hwTestModel + `":"` + alias + `"}`
+	channel.ModelMapping = &mapping
+	require.NoError(t, env.db.Save(channel).Error)
+
+	recorder := env.post("/v1/chat/completions", hwChatRequest(hwTestModel, false))
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	assert.NotContains(t, recorder.Body.String(), alias, "the relayed answer must not name the supplier alias")
+
+	customerLogs := hwCallHandler(t, env, GetUserLogs, http.MethodGet, "/api/log/self", common.RoleCommonUser)
+	require.Equal(t, http.StatusOK, customerLogs.Code, customerLogs.Body.String())
+	customerItems := hwDecodeLogItems(t, customerLogs.Body.String())
+	require.Len(t, customerItems, 1, "the customer must see the usage log row itself")
+	assert.Equal(t, hwTestModel, customerItems[0]["model_name"], "the customer log keeps our own model name")
+	customerOther := hwDecodeLogOther(t, customerItems[0])
+	assert.NotContains(t, customerOther, "upstream_model_name", "the alias is not customer information")
+	assert.NotContains(t, customerOther, "response_model", "the upstream declaration is not customer information")
+	assert.NotContains(t, customerOther, "admin_info")
+	assert.NotContains(t, customerLogs.Body.String(), alias, "the customer log projection must not name the alias")
+
+	adminLogs := hwCallHandler(t, env, GetAllLogs, http.MethodGet, "/api/log", common.RoleAdminUser)
+	require.Equal(t, http.StatusOK, adminLogs.Code, adminLogs.Body.String())
+	adminItems := hwDecodeLogItems(t, adminLogs.Body.String())
+	require.Len(t, adminItems, 1)
+	adminOther := hwDecodeLogOther(t, adminItems[0])
+	adminInfo, ok := adminOther["admin_info"].(map[string]any)
+	require.True(t, ok, "the admin log must carry the admin block: %v", adminOther)
+	assert.Equal(t, alias, adminInfo["upstream_model_name"], "the admin log names the alias that actually served")
+}

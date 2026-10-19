@@ -7,6 +7,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestHwChannelProvider proves that the emergency supplier is recognised even
@@ -64,4 +65,19 @@ func TestHwEmergencyChannelBlockedForFreeGroup(t *testing.T) {
 		assert.False(t, HwChannelAllowedForGroup(channel, "paid", "free"))
 		assert.True(t, HwChannelAllowedForGroup(channel, "paid", "paid"))
 	}
+}
+
+// The task settlement log keeps the supplier-side alias out of the customer
+// projection; the admin block of the same row keeps it for diagnosis.
+func TestHwTaskBillingAliasIsAdminOnly(t *testing.T) {
+	task := &model.Task{}
+	task.Properties.OriginModelName = "own-model"
+	task.Properties.UpstreamModelName = "supplier-alias-9"
+
+	snapshot := taskBillingOther(task).Snapshot()
+	assert.NotContains(t, snapshot, "upstream_model_name", "the alias must not sit in the customer-visible part")
+	assert.Equal(t, true, snapshot["is_model_mapped"])
+	adminInfo, ok := snapshot["admin_info"].(map[string]any)
+	require.True(t, ok, "the admin block must carry the alias: %v", snapshot)
+	assert.Equal(t, "supplier-alias-9", adminInfo["upstream_model_name"])
 }
