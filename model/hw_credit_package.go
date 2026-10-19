@@ -477,7 +477,11 @@ var hwCreditExpiryOnce sync.Once
 func StartHwCreditExpiryJob() {
 	hwCreditExpiryOnce.Do(func() {
 		if _, err := HwSignalSalt(); err != nil {
-			common.SysError(common.LogText("HW_SIGNAL_SALT is missing: abuse signals are not stored, so the free trial credit and the affiliate reward refuse to run; set HW_SIGNAL_SALT and restart"))
+			if errors.Is(err, ErrHwSignalSaltTooShort) {
+				common.SysError(common.LogText("HW_SIGNAL_SALT is shorter than %d bytes: abuse signals are not stored, so the free trial credit and the affiliate reward refuse to run; set a longer HW_SIGNAL_SALT and restart", hwSignalSaltMinBytes))
+			} else {
+				common.SysError(common.LogText("HW_SIGNAL_SALT is missing: abuse signals are not stored, so the free trial credit and the affiliate reward refuse to run; set HW_SIGNAL_SALT and restart"))
+			}
 		}
 		if !common.IsMasterNode {
 			return

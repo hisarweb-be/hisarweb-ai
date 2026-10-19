@@ -9,6 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// hwTestSignalSalt is a clearly fake salt of the required minimum length.
+const hwTestSignalSalt = "test-only-signal-salt-0123456789abcdef"
+
 func TestHwHashSignalValueNeedsAServerSecret(t *testing.T) {
 	previousSecret := common.CryptoSecret
 	common.CryptoSecret = "server-crypto-secret"
@@ -22,7 +25,7 @@ func TestHwHashSignalValueNeedsAServerSecret(t *testing.T) {
 	_, err = HwSignalSalt()
 	require.ErrorIs(t, err, ErrHwSignalSaltMissing)
 
-	t.Setenv(hwSignalSaltEnv, "test-only-signal-salt")
+	t.Setenv(hwSignalSaltEnv, hwTestSignalSalt)
 	hash, err := HwHashSignalValue("10.0.0.1")
 	require.NoError(t, err)
 	assert.Len(t, hash, 64)
@@ -32,10 +35,31 @@ func TestHwHashSignalValueNeedsAServerSecret(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, hash, trimmed, "normalisation keeps matching signals comparable")
 
-	t.Setenv(hwSignalSaltEnv, "another-test-only-signal-salt")
+	t.Setenv(hwSignalSaltEnv, hwTestSignalSalt+"-other")
 	otherSalt, err := HwHashSignalValue("10.0.0.1")
 	require.NoError(t, err)
 	assert.NotEqual(t, hash, otherSalt)
+}
+
+func TestHwSignalSaltRefusesAShortSecret(t *testing.T) {
+	hwCreditTestSetup(t)
+	user := createHwTestUser(t, 0)
+	t.Setenv(hwSignalSaltEnv, strings.Repeat("s", hwSignalSaltMinBytes-1))
+
+	_, err := HwSignalSalt()
+	require.ErrorIs(t, err, ErrHwSignalSaltTooShort)
+	_, err = HwHashSignalValue("10.0.0.1")
+	require.ErrorIs(t, err, ErrHwSignalSaltTooShort, "every hash function inherits the minimum length")
+	err = UpsertHwUserSignals(user.Id, HwUserSignals{Ip: "10.0.0.1"})
+	require.ErrorIs(t, err, ErrHwSignalSaltTooShort)
+
+	var count int64
+	require.NoError(t, DB.Model(&HwUserSignal{}).Where("user_id = ?", user.Id).Count(&count).Error)
+	assert.Zero(t, count, "a short salt stores nothing")
+
+	t.Setenv(hwSignalSaltEnv, strings.Repeat("s", hwSignalSaltMinBytes))
+	_, err = HwSignalSalt()
+	require.NoError(t, err, "exactly the minimum length is accepted")
 }
 
 func TestUpsertHwUserSignalsKeepsHistory(t *testing.T) {

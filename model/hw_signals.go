@@ -18,6 +18,11 @@ import (
 // no default salt in code: without a secret nothing can be hashed.
 const hwSignalSaltEnv = "HW_SIGNAL_SALT"
 
+// hwSignalSaltMinBytes is the shortest HW_SIGNAL_SALT that may key the signal
+// hashes. A secret below it is refused instead of silently weakening every
+// keyed hash.
+const hwSignalSaltMinBytes = 32
+
 // ErrHwSignalSaltMissing is returned when HW_SIGNAL_SALT is not configured.
 // There is no fallback: the hash of a phone number, IP address or card
 // fingerprint must be keyed with a secret that is dedicated to this purpose,
@@ -25,6 +30,11 @@ const hwSignalSaltEnv = "HW_SIGNAL_SALT"
 // silently change every stored hash. Callers must treat the error as "do not
 // store the signal".
 var ErrHwSignalSaltMissing = errors.New("HW_SIGNAL_SALT is not configured")
+
+// ErrHwSignalSaltTooShort is returned when HW_SIGNAL_SALT holds fewer than
+// hwSignalSaltMinBytes bytes. A short salt would weaken every keyed hash, so it
+// is refused with the same "do not store the signal" meaning as a missing one.
+var ErrHwSignalSaltTooShort = errors.New("HW_SIGNAL_SALT is shorter than 32 bytes")
 
 // ErrHwInvalidUserSignal rejects a signal write for an unknown user.
 var ErrHwInvalidUserSignal = errors.New("invalid user signal")
@@ -80,12 +90,17 @@ type HwUserSignals struct {
 
 // HwSignalSalt resolves the key used by HwHashSignalValue. HW_SIGNAL_SALT is
 // the only source; without it hashing is refused with ErrHwSignalSaltMissing
-// instead of falling back to the server crypto secret.
+// instead of falling back to the server crypto secret, and a salt shorter than
+// hwSignalSaltMinBytes with ErrHwSignalSaltTooShort.
 func HwSignalSalt() (string, error) {
-	if salt := strings.TrimSpace(os.Getenv(hwSignalSaltEnv)); salt != "" {
-		return salt, nil
+	salt := strings.TrimSpace(os.Getenv(hwSignalSaltEnv))
+	if salt == "" {
+		return "", ErrHwSignalSaltMissing
 	}
-	return "", ErrHwSignalSaltMissing
+	if len(salt) < hwSignalSaltMinBytes {
+		return "", ErrHwSignalSaltTooShort
+	}
+	return salt, nil
 }
 
 // HwHashSignalValue returns the keyed hash stored for a raw IP address, phone
