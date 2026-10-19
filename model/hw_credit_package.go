@@ -93,10 +93,10 @@ func isValidHwCreditSource(source string) bool {
 // amount inside one transaction. It is idempotent on (source, orderRef): a
 // second call for the same issuance changes nothing and is not an error.
 //
-// When tx is nil the function owns the transaction and syncs the user quota
-// cache after commit (and the group cache for a purchase). A caller that passes
-// its own tx must commit it and then call syncCreditUserQuotaCache itself,
-// otherwise the cached balance stays behind until it is rehydrated.
+// When tx is nil the function owns the transaction and syncs the user caches
+// after commit (balance always, group for a purchase). A caller that passes its
+// own tx must commit it and then call HwSyncCachesAfterGrant, otherwise the
+// cached balance stays behind until it is rehydrated.
 func GrantCreditPackage(tx *gorm.DB, userID int, quota int, source string, orderRef string, now int64) (bool, error) {
 	if userID <= 0 || quota <= 0 || !isValidHwCreditSource(source) || orderRef == "" || now <= 0 {
 		return false, ErrHwInvalidCreditGrant
@@ -117,14 +117,28 @@ func GrantCreditPackage(tx *gorm.DB, userID int, quota int, source string, order
 		return false, err
 	}
 	if granted {
-		syncCreditUserQuotaCache(userID, quota, "credit package")
-		if source == HwSourcePurchase {
-			if err := RefreshUserGroupCache(userID); err != nil {
-				common.SysError(common.LogText("failed to refresh user group cache after paid purchase for user %d: %v", userID, err))
-			}
-		}
+		HwSyncCachesAfterGrant(userID, quota, source)
 	}
 	return granted, nil
+}
+
+// HwSyncCachesAfterGrant brings the user caches in line with a credit grant that
+// was just committed: the quota delta is added to the cached balance, and a
+// purchase also refreshes the cached group, because the grant promotes a free
+// user to paid.
+//
+// GrantCreditPackage calls this itself when it owns the transaction. A caller
+// that passes its own tx must commit it and then call this function, otherwise
+// the cached balance (and for a purchase the cached group) stays behind until
+// the cache is rehydrated.
+func HwSyncCachesAfterGrant(userID int, quota int, source string) {
+	syncCreditUserQuotaCache(userID, quota, "credit package")
+	if source != HwSourcePurchase {
+		return
+	}
+	if err := RefreshUserGroupCache(userID); err != nil {
+		common.SysError(common.LogText("failed to refresh user group cache after paid purchase for user %d: %v", userID, err))
+	}
 }
 
 func grantCreditPackageTx(tx *gorm.DB, userID int, quota int, source string, orderRef string, now int64) (bool, error) {
