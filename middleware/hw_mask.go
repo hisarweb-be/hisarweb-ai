@@ -545,12 +545,18 @@ func (w *hwMaskWriter) streamErrorEvent(data []byte) []byte {
 // keeps the true upstream id even when the tree scan rewrites its text.
 func (w *hwMaskWriter) sanitizeObject(object map[string]any, status int) {
 	if id, ok := object["id"].(string); ok && hwIsIdentityObject(object) {
-		w.recordUpstreamID(id)
-		object["id"] = w.ownID(hwIdentityPrefix(object))
+		prefix := hwIdentityPrefix(object)
+		// Ids of the stored responses API carry no supplier text when the
+		// upstream issues them plainly; rewriting those would break
+		// previous_response_id and retrieval, so only supplier ids go.
+		if prefix != "resp_hw-" || hwIsProviderIdentity(id) {
+			w.recordUpstreamID(id)
+			object["id"] = w.ownID(prefix)
+		}
 	}
 	for _, nestedKey := range []string{"message", "response"} {
 		if inner, ok := object[nestedKey].(map[string]any); ok {
-			w.sanitizeNestedIdentity(inner)
+			w.sanitizeNestedIdentity(inner, nestedKey == "response")
 		}
 	}
 	w.sanitizeTree(object)
@@ -593,17 +599,30 @@ func (w *hwMaskWriter) sanitizeTree(node any) {
 // sanitizeNestedIdentity rewrites the identity of a nested message/response
 // object (Anthropic message_start, Responses API events) without touching ids
 // that belong to content blocks or tool calls. Key dropping and value scanning
-// already ran over the whole tree.
-func (w *hwMaskWriter) sanitizeNestedIdentity(inner map[string]any) {
+// already ran over the whole tree. keepPlainIds leaves a responses-API id
+// untouched when it carries no supplier text, so it stays usable as
+// previous_response_id and for retrieval.
+func (w *hwMaskWriter) sanitizeNestedIdentity(inner map[string]any, keepPlainIds bool) {
 	if customerModel := w.customerModel(); customerModel != "" {
 		if _, ok := inner["model"].(string); ok {
 			inner["model"] = customerModel
 		}
 	}
-	if id, ok := inner["id"].(string); ok && hwIsIdentityObject(inner) {
-		w.recordUpstreamID(id)
-		inner["id"] = w.ownID("msg_hw-")
+	id, ok := inner["id"].(string)
+	if !ok || !hwIsIdentityObject(inner) {
+		return
 	}
+	if keepPlainIds && !hwIsProviderIdentity(id) {
+		return
+	}
+	w.recordUpstreamID(id)
+	inner["id"] = w.ownID("msg_hw-")
+}
+
+// hwIsProviderIdentity reports whether a response id itself names the supplier:
+// an emergency-supplier generation id ("gen-...") or any other supplier trace.
+func hwIsProviderIdentity(id string) bool {
+	return common.HwHasProviderTextTrace(id) || strings.HasPrefix(id, "gen-")
 }
 
 func (w *hwMaskWriter) sanitizeErrorObject(errObject map[string]any, status int) {

@@ -77,6 +77,35 @@ func TestHwMaskNeverRewritesModelOutput(t *testing.T) {
 	assert.Contains(t, body, "data: [DONE]", "the terminal marker stays:\n%s", body)
 }
 
+// A stored-responses id without supplier text must survive the mask verbatim,
+// so the customer can send it back as previous_response_id and retrieve the
+// stored response. A supplier generation id is still replaced.
+func TestHwMaskKeepsUsableResponseIds(t *testing.T) {
+	engine := hwMaskRoute(t, http.MethodPost, "/v1/responses", func(c *gin.Context) {
+		c.Header("Content-Type", "text/event-stream")
+		c.String(http.StatusOK,
+			"data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_8f3a2b91c6\",\"object\":\"response\",\"model\":\"m\"}}\n\n"+
+				"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_8f3a2b91c6\",\"object\":\"response\",\"model\":\"m\",\"output\":[]}}\n\n"+
+				"data: [DONE]\n\n")
+	})
+	recorder := hwMaskDo(t, engine, http.MethodPost, "/v1/responses", "", nil)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	body := recorder.Body.String()
+	assert.Contains(t, body, `"id":"resp_8f3a2b91c6"`, "a plain responses id stays usable as previous_response_id:\n%s", body)
+	assert.NotContains(t, body, "resp_hw-", "no unmotivated rewrite of a plain responses id:\n%s", body)
+
+	engine = hwMaskRoute(t, http.MethodPost, "/v1/responses", func(c *gin.Context) {
+		c.Header("Content-Type", "application/json")
+		c.String(http.StatusOK, `{"object":"response","id":"gen-9c2f71a0","status":"completed",`+
+			`"model":"m","output":[]}`)
+	})
+	recorder = hwMaskDo(t, engine, http.MethodPost, "/v1/responses", "", nil)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	body = recorder.Body.String()
+	assert.NotContains(t, body, "gen-9c2f71a0", "a supplier generation id never reaches the customer:\n%s", body)
+	assert.Contains(t, body, `"id":"resp_hw-`, "the supplier id is rewritten to our own prefix:\n%s", body)
+}
+
 // The "x-or-" token is a header-name pattern. A header that carries it is
 // dropped, while body text with the same letters is left alone.
 func TestHwMaskAppliesHeaderPatternToHeaderNamesOnly(t *testing.T) {
