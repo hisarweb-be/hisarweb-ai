@@ -3,9 +3,11 @@ package middleware
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -81,6 +83,7 @@ type hwMaskWriter struct {
 	status      int
 	headerSeen  bool
 	committed   bool
+	abandoned   bool
 	transform   bool
 	stream      bool
 	anthropic   bool
@@ -201,21 +204,28 @@ func (w *hwMaskWriter) Write(data []byte) (int, error) {
 	if len(data) == 0 {
 		return 0, nil
 	}
+	if w.abandoned {
+		// The answer already ended with our own error; drop what follows.
+		return len(data), nil
+	}
 	if !w.headerSeen {
 		w.WriteHeader(http.StatusOK)
 	}
 	if w.hijacked {
 		return w.ResponseWriter.Write(data)
 	}
-	if !w.transform || w.stream {
-		// A rewritten body gets its headers (and length) at finish; a stream and
-		// a pass-through body can go out immediately.
-		w.commit()
-	}
 	if !w.transform {
+		// A pass-through body leaves immediately; only its headers were ours.
+		w.commit()
 		return w.ResponseWriter.Write(data)
 	}
+	// Everything below runs the masking itself, so a panic there must not
+	// reach gin's recovery with a half-masked answer in play.
+	defer w.recoverFilterPanic()
 	if w.stream {
+		// A stream goes out event by event and commits its headers now; a
+		// rewritten body gets its headers (and length) at finish.
+		w.commit()
 		service.HwNoteStreamWrite(w.ctx)
 		isError := false
 		if !hwLooksLikeSSE(data) {
@@ -262,6 +272,7 @@ func (w *hwMaskWriter) Flush() {
 		w.WriteHeader(http.StatusOK)
 	}
 	if !w.committed {
+		defer w.recoverFilterPanic()
 		w.commit()
 	}
 	w.flushed = true
@@ -396,12 +407,78 @@ func (w *hwMaskWriter) commit() {
 	w.ResponseWriter.WriteHeader(w.status)
 }
 
+// recoverFilterPanic turns a panic raised inside the masking itself into a
+// neutral answer of ours. The route handler's own panics never pass through
+// here and keep flowing to gin's recovery middleware. A hijacked connection
+// can no longer receive a status line, so that case re-panics.
+func (w *hwMaskWriter) recoverFilterPanic() {
+	recovered := recover()
+	if recovered == nil {
+		return
+	}
+	path := ""
+	if w.ctx != nil && w.ctx.Request != nil && w.ctx.Request.URL != nil {
+		path = w.ctx.Request.URL.Path
+	}
+	common.SysError(fmt.Sprintf("provider mask panicked on %s: %v\n%s", path, recovered, debug.Stack()))
+	if w.hijacked {
+		panic(recovered)
+	}
+	if w.committed {
+		// The stream already started; end it with our own error event. Every
+		// later write is dropped so no half-masked fragment follows it.
+		w.abandoned = true
+		if w.stream {
+			event := w.streamErrorEventFor(
+				service.HwGenericErrorMessage(w.ctx, http.StatusInternalServerError), "internal_error")
+			_, _ = w.ResponseWriter.Write(event)
+			w.ResponseWriter.Flush()
+		}
+		return
+	}
+	w.resetToServerError()
+}
+
+// resetToServerError replaces an uncommitted answer with a neutral 500 JSON
+// body written straight to the underlying writer, so the panic cannot leak a
+// half-masked supplier answer.
+func (w *hwMaskWriter) resetToServerError() {
+	w.abandoned = true
+	w.buffer.Reset()
+	w.pending = nil
+	w.terminal = nil
+	w.stream = false
+	w.transform = false
+	w.committed = true
+	w.headerSeen = true
+	w.status = http.StatusInternalServerError
+	body, err := common.Marshal(map[string]any{
+		"error": map[string]any{
+			"message": service.HwGenericErrorMessage(w.ctx, http.StatusInternalServerError),
+			"type":    "server_error",
+			"code":    "internal_error",
+		},
+	})
+	if err != nil {
+		body = []byte(`{"error":{"message":"The request could not be processed right now.","type":"server_error","code":"internal_error"}}`)
+	}
+	target := w.ResponseWriter.Header()
+	for key := range target {
+		delete(target, key)
+	}
+	target.Set("Content-Type", "application/json")
+	target.Set("Content-Length", strconv.Itoa(len(body)))
+	w.ResponseWriter.WriteHeader(http.StatusInternalServerError)
+	_, _ = w.ResponseWriter.Write(body)
+}
+
 // finish flushes whatever the handler produced. Streams end with a final flush;
 // buffered bodies are sanitised as a whole so the length stays correct.
 func (w *hwMaskWriter) finish() {
-	if w.hijacked {
+	if w.hijacked || w.abandoned {
 		return
 	}
+	defer w.recoverFilterPanic()
 	if w.stream {
 		if !w.headerSeen {
 			w.WriteHeader(http.StatusOK)
@@ -492,6 +569,10 @@ func (w *hwMaskWriter) sanitizeStream(data []byte) []byte {
 }
 
 // sanitizePayload rewrites one complete JSON value from a stream.
+// hwFilterPanicHook lets tests of this package raise a panic inside the
+// masking itself; it is nil in production.
+var hwFilterPanicHook func()
+
 func (w *hwMaskWriter) sanitizePayload(payload []byte) []byte {
 	var object map[string]any
 	if err := common.Unmarshal(payload, &object); err != nil || object == nil {
@@ -520,6 +601,12 @@ func (w *hwMaskWriter) streamErrorEvent(data []byte) []byte {
 	if message == "" {
 		message = service.HwGenericErrorMessage(w.ctx, http.StatusBadGateway)
 	}
+	return w.streamErrorEventFor(message, code)
+}
+
+// streamErrorEventFor renders one message as the error event of the customer's
+// protocol. It also closes a stream the filter itself could not finish.
+func (w *hwMaskWriter) streamErrorEventFor(message, code string) []byte {
 	message = hwSafetyNet(w.ctx, []byte(message))
 	if w.anthropic {
 		event := map[string]any{
@@ -531,7 +618,7 @@ func (w *hwMaskWriter) streamErrorEvent(data []byte) []byte {
 		}
 		encoded, err := common.Marshal(event)
 		if err != nil {
-			return data
+			return []byte(message)
 		}
 		return []byte("event: error\ndata: " + string(encoded) + "\n\n")
 	}
@@ -544,7 +631,7 @@ func (w *hwMaskWriter) streamErrorEvent(data []byte) []byte {
 	}
 	encoded, err := common.Marshal(event)
 	if err != nil {
-		return data
+		return []byte(message)
 	}
 	return []byte("data: " + string(encoded) + "\n\ndata: [DONE]\n\n")
 }
@@ -554,6 +641,9 @@ func (w *hwMaskWriter) streamErrorEvent(data []byte) []byte {
 // text becomes our own wording. Identities are recorded first so the admin log
 // keeps the true upstream id even when the tree scan rewrites its text.
 func (w *hwMaskWriter) sanitizeObject(object map[string]any, status int) {
+	if hwFilterPanicHook != nil {
+		hwFilterPanicHook()
+	}
 	if id, ok := object["id"].(string); ok && hwIsIdentityObject(object) {
 		prefix := hwIdentityPrefix(object)
 		// Ids of the stored responses API carry no supplier text when the

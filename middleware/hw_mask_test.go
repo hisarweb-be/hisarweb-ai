@@ -154,6 +154,36 @@ func TestHwMaskAllowsSessionHeadersOnApiRoutesOnly(t *testing.T) {
 	assert.Empty(t, recorder.Header().Get("Location"), "a relay route never redirects:\n%s", recorder.Result().Header)
 }
 
+// A panic raised inside the masking itself must never leak a half-masked
+// supplier answer: the buffered case turns into a neutral 500 JSON body, the
+// streaming case into our own error event. The panic detail stays server-side.
+func TestHwMaskRecoversFilterPanic(t *testing.T) {
+	hwFilterPanicHook = func() { panic("boom inside the mask") }
+	defer func() { hwFilterPanicHook = nil }()
+
+	engine := hwMaskRoute(t, http.MethodPost, "/v1/chat/completions", func(c *gin.Context) {
+		c.Header("Content-Type", "application/json")
+		c.String(http.StatusOK, `{"id":"gen-1","object":"chat.completion","model":"m","choices":[]}`)
+	})
+	recorder := hwMaskDo(t, engine, http.MethodPost, "/v1/chat/completions", "", nil)
+	require.Equal(t, http.StatusInternalServerError, recorder.Code, recorder.Body.String())
+	body := recorder.Body.String()
+	assert.NotContains(t, body, "gen-1", "no half-masked supplier id leaks:\n%s", body)
+	assert.NotContains(t, body, "boom", "the panic detail stays server-side:\n%s", body)
+	assert.Contains(t, body, `"error"`, "the customer gets a proper JSON error:\n%s", body)
+
+	engine = hwMaskRoute(t, http.MethodPost, "/v1/chat/completions", func(c *gin.Context) {
+		c.Header("Content-Type", "text/event-stream")
+		c.String(http.StatusOK, "data: {\"id\":\"gen-2\",\"object\":\"chat.completion.chunk\",\"model\":\"m\",\"choices\":[]}\n\n")
+	})
+	recorder = hwMaskDo(t, engine, http.MethodPost, "/v1/chat/completions", "", nil)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	body = recorder.Body.String()
+	assert.NotContains(t, body, "gen-2", "no half-masked supplier id leaks mid-stream:\n%s", body)
+	assert.NotContains(t, body, "boom", "the panic detail stays server-side:\n%s", body)
+	assert.Contains(t, body, `"error"`, "the stream ends with our own error event:\n%s", body)
+}
+
 // The "x-or-" token is a header-name pattern. A header that carries it is
 // dropped, while body text with the same letters is left alone.
 func TestHwMaskAppliesHeaderPatternToHeaderNamesOnly(t *testing.T) {
