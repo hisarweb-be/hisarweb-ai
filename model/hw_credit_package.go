@@ -253,6 +253,10 @@ func ListUserCreditPackages(userID int) ([]HwPackageView, error) {
 // RetireExpiredPackages retires every expired active package and lowers the
 // owning balances by the quota those packages still hold. It returns the number
 // of retired packages. Running it twice changes nothing.
+//
+// Each user is handled on its own: a user that fails (for example a deleted
+// account) is logged with its id and error class only, the remaining users are
+// still processed, and the first error is returned at the end.
 func RetireExpiredPackages(now int64) (int, error) {
 	if now <= 0 {
 		return 0, ErrHwInvalidCreditGrant
@@ -266,14 +270,29 @@ func RetireExpiredPackages(now int64) (int, error) {
 	}
 	slices.Sort(userIDs)
 	total := 0
+	var firstErr error
 	for _, userID := range userIDs {
 		retired, err := retireExpiredPackagesForUser(userID, now)
 		if err != nil {
-			return total, err
+			if firstErr == nil {
+				firstErr = err
+			}
+			// Never the error text: a driver error can quote row data.
+			class := "internal"
+			switch {
+			case errors.Is(err, gorm.ErrRecordNotFound):
+				class = "record_not_found"
+			case errors.Is(err, ErrWalletQuotaLimitExceeded):
+				class = "wallet_quota_limit"
+			case errors.Is(err, ErrHwInvalidCreditGrant):
+				class = "invalid_grant"
+			}
+			common.SysError(common.LogText("credit package expiry failed for user %d (class %s); continuing with the next user", userID, class))
+			continue
 		}
 		total += retired
 	}
-	return total, nil
+	return total, firstErr
 }
 
 // RetireExpiredPackagesForUser is the lazy path for a single user: it runs the
@@ -291,7 +310,11 @@ func retireExpiredPackagesForUser(userID int, now int64) (int, error) {
 	decrease := 0
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		var user User
-		if err := lockForUpdate(tx).Select("id", "quota").Where("id = ?", userID).First(&user).Error; err != nil {
+		userGone := false
+		err := lockForUpdate(tx).Select("id", "quota").Where("id = ?", userID).First(&user).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			userGone = true
+		} else if err != nil {
 			return err
 		}
 		var pkgs []HwCreditPackage
@@ -299,10 +322,14 @@ func retireExpiredPackagesForUser(userID int, now int64) (int, error) {
 			return err
 		}
 		// Derive the fill over every active package, not only the expiring ones:
-		// the expiring package holds whatever is left after the later ones.
+		// the expiring package holds whatever is left after the later ones. A
+		// deleted account has no balance to fill from, so its packages retire
+		// with an empty remainder.
 		remaining := make(map[int]int, len(pkgs))
-		for _, view := range HwPackageRemaining(userID, user.Quota, pkgs) {
-			remaining[view.Id] = view.RemainingQuota
+		if !userGone {
+			for _, view := range HwPackageRemaining(userID, user.Quota, pkgs) {
+				remaining[view.Id] = view.RemainingQuota
+			}
 		}
 		expiringQuota := 0
 		for _, pkg := range pkgs {
@@ -318,7 +345,9 @@ func retireExpiredPackagesForUser(userID int, now int64) (int, error) {
 			}
 			retired++
 		}
-		if retired == 0 {
+		// A deleted account keeps its balance untouched: the packages are only
+		// marked retired, because there is no account left to spend them.
+		if retired == 0 || userGone {
 			return nil
 		}
 		// An overdrawn balance keeps its negative value: only positive balance can

@@ -166,6 +166,37 @@ func TestHwRetireExpiredPackages(t *testing.T) {
 	})
 }
 
+func TestHwRetireExpiredPackagesKeepsGoingAfterAFailedUser(t *testing.T) {
+	hwCreditTestSetup(t)
+	now := int64(1_700_000_000)
+	deleted := createHwTestUser(t, 50)
+	later := createHwTestUser(t, 60)
+	require.Greater(t, later.Id, deleted.Id, "the deleted account is processed first")
+
+	_, err := GrantCreditPackage(nil, deleted.Id, 40, HwSourcePurchase, "order-deleted", now)
+	require.NoError(t, err)
+	_, err = GrantCreditPackage(nil, later.Id, 40, HwSourcePurchase, "order-later", now)
+	require.NoError(t, err)
+	require.NoError(t, DB.Model(&HwCreditPackage{}).
+		Where("user_id IN ?", []int{deleted.Id, later.Id}).
+		Update("expires_at", now-1).Error)
+	require.NoError(t, DB.Delete(&User{}, deleted.Id).Error)
+
+	retired, err := RetireExpiredPackages(now)
+	require.NoError(t, err, "a deleted account is not an error of the whole run")
+	assert.Equal(t, 2, retired)
+	assert.Equal(t, 60, getUserQuotaFromDB(t, later.Id), "the next user is still retired")
+
+	var deletedPkg HwCreditPackage
+	require.NoError(t, DB.Where("order_ref = ?", "order-deleted").First(&deletedPkg).Error)
+	assert.Equal(t, now, deletedPkg.RetiredAt, "the package of the deleted account is retired")
+	assert.Zero(t, deletedPkg.RetiredRemaining, "nothing was deducted from a deleted account")
+
+	var deletedUser User
+	require.NoError(t, DB.Unscoped().Select("quota").First(&deletedUser, deleted.Id).Error)
+	assert.Equal(t, 90, deletedUser.Quota, "the deleted account's balance is not touched")
+}
+
 func TestHwGrantCreditPackageIsIdempotent(t *testing.T) {
 	hwCreditTestSetup(t)
 	now := int64(1_700_000_000)
