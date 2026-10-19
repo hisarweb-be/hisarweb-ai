@@ -189,6 +189,42 @@ func TestUpsertHwUserSignalsNormalisesThePhone(t *testing.T) {
 	assert.Equal(t, int64(1), count, "an unrecognisable number stores nothing")
 }
 
+func TestHwMigrationDropsTheLegacyUserSignalsTable(t *testing.T) {
+	hwCreditTestSetup(t)
+	require.NoError(t, DB.Migrator().DropTable(&HwUserSignal{}))
+	// The pre-ledger shape: one column per signal kind instead of kind/hash
+	// history rows, with a row of leftover data.
+	require.NoError(t, DB.Exec(`CREATE TABLE hw_user_signals (
+		id integer primary key autoincrement,
+		user_id integer not null,
+		device_token text,
+		ip_hash text,
+		phone_hash text
+	)`).Error)
+	require.NoError(t, DB.Exec("INSERT INTO hw_user_signals (user_id, device_token) VALUES (1, 'legacy-token')").Error)
+	require.True(t, DB.Migrator().HasColumn(&HwUserSignal{}, "device_token"), "the old shape is in place")
+
+	// The drop the migration performs before AutoMigrate, then the rebuild.
+	require.NoError(t, hwDropLegacyUserSignalsTable(DB))
+	require.NoError(t, DB.AutoMigrate(&HwUserSignal{}))
+
+	assert.False(t, DB.Migrator().HasColumn(&HwUserSignal{}, "device_token"), "the legacy column does not survive")
+	assert.True(t, DB.Migrator().HasColumn(&HwUserSignal{}, "kind"))
+	var count int64
+	require.NoError(t, DB.Model(&HwUserSignal{}).Count(&count).Error)
+	assert.Zero(t, count, "the leftover row is gone with the old shape")
+
+	user := createHwTestUser(t, 0)
+	require.NoError(t, UpsertHwUserSignals(user.Id, HwUserSignals{DeviceToken: "dev-rebuilt"}))
+	require.NoError(t, DB.Model(&HwUserSignal{}).Where("user_id = ?", user.Id).Count(&count).Error)
+	assert.Equal(t, int64(1), count, "the rebuilt table takes new history rows")
+
+	// A second run over the current shape changes nothing.
+	require.NoError(t, hwDropLegacyUserSignalsTable(DB))
+	require.NoError(t, DB.Model(&HwUserSignal{}).Where("user_id = ?", user.Id).Count(&count).Error)
+	assert.Equal(t, int64(1), count)
+}
+
 func TestHwSignalCaseHandling(t *testing.T) {
 	hwCreditTestSetup(t)
 	ipFirst := createHwTestUser(t, 0)

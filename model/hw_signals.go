@@ -10,6 +10,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -67,6 +68,22 @@ type HwUserSignal struct {
 
 func (HwUserSignal) TableName() string {
 	return "hw_user_signals"
+}
+
+// hwDropLegacyUserSignalsTable removes the pre-ledger shape of hw_user_signals,
+// which stored one column per signal kind (device_token, ...) instead of the
+// kind/hash history rows. AutoMigrate only adds columns, so without this drop a
+// database that still has the old shape would keep it forever. Dropping is safe:
+// the table was introduced in this pull request and holds no production data
+// yet, and migrateDB rebuilds it in the current shape right afterwards.
+func hwDropLegacyUserSignalsTable(db *gorm.DB) error {
+	if !db.Migrator().HasTable(&HwUserSignal{}) {
+		return nil
+	}
+	if !db.Migrator().HasColumn(&HwUserSignal{}, "device_token") {
+		return nil
+	}
+	return db.Migrator().DropTable(&HwUserSignal{})
 }
 
 // HwUserSignals is a patch of abuse signals, with one clearly named field per
