@@ -9,8 +9,6 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
-
-	"gorm.io/gorm"
 )
 
 // hwSignalSaltEnv names the server-side secret used to hash phone numbers, IP
@@ -29,24 +27,35 @@ var ErrHwSignalSaltMissing = errors.New("HW_SIGNAL_SALT is not configured")
 // ErrHwInvalidUserSignal rejects a signal write for an unknown user.
 var ErrHwInvalidUserSignal = errors.New("invalid user signal")
 
-// HwUserSignal holds the abuse signals of a user. Values that identify a person
-// (IP address, phone number, card) are stored only as keyed hashes.
+// Signal kinds recorded in hw_user_signals. Every kind is hashed before it is
+// stored; the table never holds a raw address, number or fingerprint.
+const (
+	HwSignalKindDevice = "device"
+	HwSignalKindIp     = "ip"
+	HwSignalKindPhone  = "phone"
+	HwSignalKindCard   = "card"
+)
+
+// HwUserSignal is one historical abuse signal of a user. A user has many rows:
+// changing an IP address or a device does not replace the earlier value, because
+// a later account that turns up with the old value must still match. The
+// (user_id, kind, hash) triple is unique, so the same value only moves LastSeen.
 type HwUserSignal struct {
-	Id              int    `json:"id" gorm:"primaryKey"`
-	UserId          int    `json:"user_id" gorm:"not null;uniqueIndex"`
-	DeviceToken     string `json:"device_token" gorm:"type:varchar(128);index"`
-	IpHash          string `json:"ip_hash" gorm:"type:varchar(64);index"`
-	PhoneHash       string `json:"phone_hash" gorm:"type:varchar(64);index"`
-	CardFingerprint string `json:"card_fingerprint" gorm:"type:varchar(128);index"`
-	CreatedAt       int64  `json:"created_at"`
-	UpdatedAt       int64  `json:"updated_at"`
+	Id        int    `json:"id" gorm:"primaryKey"`
+	UserId    int    `json:"user_id" gorm:"not null;uniqueIndex:idx_hw_user_signals_identity,priority:1;index:idx_hw_user_signals_kind_hash,priority:1"`
+	Kind      string `json:"kind" gorm:"type:varchar(16);not null;uniqueIndex:idx_hw_user_signals_identity,priority:2;index:idx_hw_user_signals_kind_hash,priority:2"`
+	Hash      string `json:"hash" gorm:"type:varchar(64);not null;uniqueIndex:idx_hw_user_signals_identity,priority:3;index:idx_hw_user_signals_kind_hash,priority:3"`
+	FirstSeen int64  `json:"first_seen" gorm:"not null;default:0"`
+	LastSeen  int64  `json:"last_seen" gorm:"not null;default:0"`
 }
 
 func (HwUserSignal) TableName() string {
 	return "hw_user_signals"
 }
 
-// HwUserSignals is a patch of abuse signals. Empty fields keep the stored value.
+// HwUserSignals is a patch of abuse signals. Empty fields are ignored; they never
+// erase history. Values that identify a person are hashed by UpsertHwUserSignals
+// and are not stored as given.
 type HwUserSignals struct {
 	DeviceToken     string `json:"device_token"`
 	IpHash          string `json:"ip_hash"`
@@ -80,92 +89,92 @@ func HwHashSignalValue(value string) (string, error) {
 	return hex.EncodeToString(mac.Sum(nil)), nil
 }
 
-// UpsertHwUserSignals stores the non-empty signals of a patch and leaves the
-// other columns untouched.
+// UpsertHwUserSignals stores the non-empty signals of a patch as history rows.
+// It hashes every value first, so a raw address, number or fingerprint never
+// reaches the table.
 func UpsertHwUserSignals(userID int, patch HwUserSignals) error {
 	if userID <= 0 {
 		return ErrHwInvalidUserSignal
 	}
-	updates := map[string]any{}
-	if patch.DeviceToken != "" {
-		updates["device_token"] = patch.DeviceToken
+	now := common.GetTimestamp()
+	rows := make([]HwUserSignal, 0, 4)
+	for _, signal := range []struct {
+		kind  string
+		value string
+	}{
+		{HwSignalKindDevice, patch.DeviceToken},
+		{HwSignalKindIp, patch.IpHash},
+		{HwSignalKindPhone, patch.PhoneHash},
+		{HwSignalKindCard, patch.CardFingerprint},
+	} {
+		if strings.TrimSpace(signal.value) == "" {
+			continue
+		}
+		hash, err := HwHashSignalValue(signal.value)
+		if err != nil {
+			return err
+		}
+		rows = append(rows, HwUserSignal{
+			UserId:    userID,
+			Kind:      signal.kind,
+			Hash:      hash,
+			FirstSeen: now,
+			LastSeen:  now,
+		})
 	}
-	if patch.IpHash != "" {
-		updates["ip_hash"] = patch.IpHash
-	}
-	if patch.PhoneHash != "" {
-		updates["phone_hash"] = patch.PhoneHash
-	}
-	if patch.CardFingerprint != "" {
-		updates["card_fingerprint"] = patch.CardFingerprint
-	}
-	if len(updates) == 0 {
+	if len(rows) == 0 {
 		return nil
 	}
-	now := common.GetTimestamp()
-	updates["updated_at"] = now
-
-	var existing HwUserSignal
-	err := DB.Where("user_id = ?", userID).First(&existing).Error
-	switch {
-	case err == nil:
-		return DB.Model(&HwUserSignal{}).Where("user_id = ?", userID).Updates(updates).Error
-	case errors.Is(err, gorm.ErrRecordNotFound):
-		return DB.Create(&HwUserSignal{
-			UserId:          userID,
-			DeviceToken:     patch.DeviceToken,
-			IpHash:          patch.IpHash,
-			PhoneHash:       patch.PhoneHash,
-			CardFingerprint: patch.CardFingerprint,
-			CreatedAt:       now,
-			UpdatedAt:       now,
-		}).Error
-	default:
-		return err
-	}
+	return DB.Create(&rows).Error
 }
 
-// hwSharedSignalKinds lists the signals two users have in common. Only non-empty
-// values count, so users without a recorded signal never match.
+// hwUserHasVerifiedSignal reports whether the user produced at least one device
+// or phone signal. Those two kinds need a step a throwaway account cannot fake
+// cheaply; an IP address or card fingerprint alone proves nothing about the
+// person behind the account.
+func hwUserHasVerifiedSignal(userID int) (bool, error) {
+	var count int64
+	err := DB.Model(&HwUserSignal{}).
+		Where("user_id = ? AND kind IN ? AND hash <> ?", userID, []string{HwSignalKindDevice, HwSignalKindPhone}, "").
+		Count(&count).Error
+	return count > 0, err
+}
+
+// hwSharedSignalKinds lists the signal kinds two users have in common, over the
+// full history of both. Only non-empty hashes count, so users without a recorded
+// signal never match.
 func hwSharedSignalKinds(a, b int) ([]string, error) {
 	if a <= 0 || b <= 0 || a == b {
 		return nil, nil
 	}
 	var signals []HwUserSignal
-	if err := DB.Where("user_id IN ?", []int{a, b}).Find(&signals).Error; err != nil {
+	if err := DB.Where("user_id IN ? AND hash <> ?", []int{a, b}, "").Find(&signals).Error; err != nil {
 		return nil, err
 	}
-	byUser := make(map[int]HwUserSignal, len(signals))
+	hashes := make(map[int]map[string]map[string]struct{}, 2)
 	for _, signal := range signals {
-		byUser[signal.UserId] = signal
-	}
-	signalA, okA := byUser[a]
-	signalB, okB := byUser[b]
-	if !okA || !okB {
-		return nil, nil
+		if hashes[signal.UserId] == nil {
+			hashes[signal.UserId] = make(map[string]map[string]struct{}, 4)
+		}
+		if hashes[signal.UserId][signal.Kind] == nil {
+			hashes[signal.UserId][signal.Kind] = make(map[string]struct{})
+		}
+		hashes[signal.UserId][signal.Kind][signal.Hash] = struct{}{}
 	}
 	kinds := make([]string, 0, 4)
-	if hwSignalValueShared(signalA.DeviceToken, signalB.DeviceToken) {
-		kinds = append(kinds, "device")
-	}
-	if hwSignalValueShared(signalA.IpHash, signalB.IpHash) {
-		kinds = append(kinds, "ip")
-	}
-	if hwSignalValueShared(signalA.PhoneHash, signalB.PhoneHash) {
-		kinds = append(kinds, "phone")
-	}
-	if hwSignalValueShared(signalA.CardFingerprint, signalB.CardFingerprint) {
-		kinds = append(kinds, "card")
+	for _, kind := range []string{HwSignalKindDevice, HwSignalKindIp, HwSignalKindPhone, HwSignalKindCard} {
+		for hash := range hashes[a][kind] {
+			if _, ok := hashes[b][kind][hash]; ok {
+				kinds = append(kinds, kind)
+				break
+			}
+		}
 	}
 	return kinds, nil
 }
 
-func hwSignalValueShared(a, b string) bool {
-	return a != "" && a == b
-}
-
-// HwSharedSignal reports whether two users share a device, IP hash, phone hash
-// or card fingerprint.
+// HwSharedSignal reports whether two users share a device, IP address, phone
+// number or card fingerprint, now or at any point in the past.
 func HwSharedSignal(a, b int) (bool, error) {
 	kinds, err := hwSharedSignalKinds(a, b)
 	if err != nil {

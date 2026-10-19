@@ -14,22 +14,25 @@ const HwAffiliatePercent = 5
 
 // Affiliate reward rejection reasons returned by HwGrantAffiliateReward.
 const (
-	HwAffiliateNoInviter       = "no_inviter"
-	HwAffiliateNotPaidPurchase = "not_a_paid_purchase"
-	HwAffiliateSelfInvite      = "self_invite"
-	HwAffiliateBuyerInactive   = "buyer_not_active"
-	HwAffiliateInviterInactive = "inviter_not_active"
-	HwAffiliateSharedSignal    = "shared_"
-	HwAffiliateRewardTooSmall  = "reward_too_small"
-	HwAffiliateAlreadyGranted  = "already_granted"
-	HwAffiliateValueMismatch   = "purchase_value_mismatch"
-	HwAffiliateInvalidInput    = "invalid_input"
+	HwAffiliateNoInviter         = "no_inviter"
+	HwAffiliateNotPaidPurchase   = "not_a_paid_purchase"
+	HwAffiliateSelfInvite        = "self_invite"
+	HwAffiliateBuyerInactive     = "buyer_not_active"
+	HwAffiliateInviterInactive   = "inviter_not_active"
+	HwAffiliateSharedSignal      = "shared_"
+	HwAffiliateUnverifiedSignals = "unverified_signals"
+	HwAffiliateRewardTooSmall    = "reward_too_small"
+	HwAffiliateAlreadyGranted    = "already_granted"
+	HwAffiliateValueMismatch     = "purchase_value_mismatch"
+	HwAffiliateInvalidInput      = "invalid_input"
 )
 
 // HwGrantAffiliateReward gives the inviter of a buyer HwAffiliatePercent of the
 // list value of a completed paid purchase as a new credit package. It only
 // rewards paid purchases: orderRef must reference a purchase-sourced package of
-// the buyer. The grant is idempotent on the purchase reference.
+// the buyer. Both the buyer and the inviter need a verified device or phone
+// signal, and no signal kind may be shared between them. The grant is idempotent
+// on the purchase reference.
 //
 // granted is false with a reason when nothing was (or should be) granted; err
 // is reserved for storage failures and invalid input.
@@ -74,6 +77,23 @@ func HwGrantAffiliateReward(buyerID int, purchaseListQuota int, orderRef string,
 	}
 	if inviter.Status != common.UserStatusEnabled {
 		return false, HwAffiliateInviterInactive, nil
+	}
+	// Both sides need at least one device or phone signal. Without it the shared
+	// signal check would compare two empty records and the reward could be farmed
+	// with accounts that never verified anything.
+	buyerVerified, err := hwUserHasVerifiedSignal(buyerID)
+	if err != nil {
+		return false, "", err
+	}
+	if !buyerVerified {
+		return false, HwAffiliateUnverifiedSignals, nil
+	}
+	inviterVerified, err := hwUserHasVerifiedSignal(inviter.Id)
+	if err != nil {
+		return false, "", err
+	}
+	if !inviterVerified {
+		return false, HwAffiliateUnverifiedSignals, nil
 	}
 	kinds, err := hwSharedSignalKinds(buyerID, inviter.Id)
 	if err != nil {

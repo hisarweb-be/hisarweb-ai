@@ -13,6 +13,7 @@ import (
 // database is created once in TestMain, so the credit tables are migrated here.
 func hwCreditTestSetup(t *testing.T) {
 	t.Helper()
+	t.Setenv(hwSignalSaltEnv, "test-only-signal-salt")
 	require.NoError(t, DB.AutoMigrate(&HwCreditPackage{}, &HwUserSignal{}))
 	require.NoError(t, DB.Exec("DELETE FROM hw_credit_packages").Error)
 	require.NoError(t, DB.Exec("DELETE FROM hw_user_signals").Error)

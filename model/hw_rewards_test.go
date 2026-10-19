@@ -9,6 +9,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// hwMarkVerified gives a user a unique device signal, which counts as verified
+// for the affiliate reward and the free trial credit.
+func hwMarkVerified(t *testing.T, userID int) {
+	t.Helper()
+	require.NoError(t, UpsertHwUserSignals(userID, HwUserSignals{DeviceToken: "device-" + common.GetRandomString(8)}))
+}
+
 func createHwTestInvitee(t *testing.T, quota int, inviterID int) User {
 	t.Helper()
 	user := createHwTestUser(t, quota)
@@ -24,6 +31,8 @@ func TestHwGrantAffiliateReward(t *testing.T) {
 		hwCreditTestSetup(t)
 		inviter := createHwTestUser(t, 0)
 		buyer := createHwTestInvitee(t, 0, inviter.Id)
+		hwMarkVerified(t, buyer.Id)
+		hwMarkVerified(t, inviter.Id)
 		_, err := GrantCreditPackage(nil, buyer.Id, 1000, HwSourcePurchase, "ord-1", now)
 		require.NoError(t, err)
 
@@ -68,6 +77,8 @@ func TestHwGrantAffiliateReward(t *testing.T) {
 		buyer := createHwTestInvitee(t, 0, inviter.Id)
 		_, err := GrantCreditPackage(nil, buyer.Id, 1000, HwSourcePurchase, "ord-3", now)
 		require.NoError(t, err)
+		hwMarkVerified(t, buyer.Id)
+		hwMarkVerified(t, inviter.Id)
 		require.NoError(t, UpsertHwUserSignals(buyer.Id, HwUserSignals{IpHash: "iphash-shared"}))
 		require.NoError(t, UpsertHwUserSignals(inviter.Id, HwUserSignals{IpHash: "iphash-shared"}))
 
@@ -83,6 +94,8 @@ func TestHwGrantAffiliateReward(t *testing.T) {
 		buyer := createHwTestInvitee(t, 0, inviter.Id)
 		_, err := GrantCreditPackage(nil, buyer.Id, 1000, HwSourcePurchase, "ord-4", now)
 		require.NoError(t, err)
+		hwMarkVerified(t, buyer.Id)
+		hwMarkVerified(t, inviter.Id)
 		require.NoError(t, UpsertHwUserSignals(buyer.Id, HwUserSignals{CardFingerprint: "card-shared"}))
 		require.NoError(t, UpsertHwUserSignals(inviter.Id, HwUserSignals{CardFingerprint: "card-shared"}))
 
@@ -117,6 +130,34 @@ func TestHwGrantAffiliateReward(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, granted)
 		assert.Equal(t, HwAffiliateNoInviter, reason)
+	})
+
+	t.Run("needs a verified signal on both sides", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		inviter := createHwTestUser(t, 0)
+		buyer := createHwTestInvitee(t, 0, inviter.Id)
+		hwMarkVerified(t, buyer.Id)
+		_, err := GrantCreditPackage(nil, buyer.Id, 1000, HwSourcePurchase, "ord-7", now)
+		require.NoError(t, err)
+
+		granted, reason, err := HwGrantAffiliateReward(buyer.Id, 1000, "ord-7", now)
+		require.NoError(t, err)
+		assert.False(t, granted)
+		assert.Equal(t, HwAffiliateUnverifiedSignals, reason)
+		assert.Equal(t, 0, getUserQuotaFromDB(t, inviter.Id))
+
+		// One device record is not enough when only an IP address was seen.
+		require.NoError(t, UpsertHwUserSignals(inviter.Id, HwUserSignals{IpHash: "iphash-inviter"}))
+		granted, reason, err = HwGrantAffiliateReward(buyer.Id, 1000, "ord-7", now)
+		require.NoError(t, err)
+		assert.False(t, granted)
+		assert.Equal(t, HwAffiliateUnverifiedSignals, reason)
+
+		hwMarkVerified(t, inviter.Id)
+		granted, reason, err = HwGrantAffiliateReward(buyer.Id, 1000, "ord-7", now)
+		require.NoError(t, err)
+		assert.True(t, granted, "reason: %s", reason)
+		assert.Equal(t, 50, getUserQuotaFromDB(t, inviter.Id))
 	})
 
 	t.Run("a disabled inviter earns nothing", func(t *testing.T) {
