@@ -367,6 +367,33 @@ func TestHwGrantFreeTrialCreditGuards(t *testing.T) {
 		assert.Equal(t, HwFreeTrialSharedSignal+"card", reason)
 	})
 
+	t.Run("the phone claim row refuses a second account even without shared history", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		first := createHwTestUser(t, 0)
+		second := createHwTestUser(t, 0)
+		require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{Phone: "0555 111 22 33"}))
+		require.NoError(t, UpsertHwUserSignals(second.Id, HwUserSignals{Phone: "+90 555 111 22 33"}))
+
+		granted, _, err := HwGrantFreeTrialCredit(first.Id, 100, now)
+		require.NoError(t, err)
+		require.True(t, granted)
+
+		// The history check reads signals before either account wrote its claim;
+		// only the unique claim row closes that window. Drop the first account's
+		// signal history so the history check alone would find nothing shared.
+		require.NoError(t, DB.Where("user_id = ?", first.Id).Delete(&HwUserSignal{}).Error)
+
+		granted, reason, err := HwGrantFreeTrialCredit(second.Id, 100, now)
+		require.NoError(t, err)
+		assert.False(t, granted)
+		assert.Equal(t, HwFreeTrialSharedSignal+"phone", reason)
+		assert.Equal(t, 0, getUserQuotaFromDB(t, second.Id))
+
+		var claims int64
+		require.NoError(t, DB.Model(&HwFreeCreditClaim{}).Where("phone_hash <> ''").Count(&claims).Error)
+		assert.Equal(t, int64(1), claims, "one phone hash keeps one claim row")
+	})
+
 	t.Run("refuses an amount above the hard cap", func(t *testing.T) {
 		hwCreditTestSetup(t)
 		user := createHwTestUser(t, 0)

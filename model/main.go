@@ -379,6 +379,7 @@ func migrateDB() error {
 		&HwCreditPackage{},
 		&HwUserSignal{},
 		&HwFirstPurchaseClaim{},
+		&HwFreeCreditClaim{},
 	)
 	if err != nil {
 		return err

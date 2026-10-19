@@ -14,14 +14,16 @@ import (
 func hwCreditTestSetup(t *testing.T) {
 	t.Helper()
 	t.Setenv(hwSignalSaltEnv, "test-only-signal-salt")
-	require.NoError(t, DB.AutoMigrate(&HwCreditPackage{}, &HwUserSignal{}, &HwFirstPurchaseClaim{}))
+	require.NoError(t, DB.AutoMigrate(&HwCreditPackage{}, &HwUserSignal{}, &HwFirstPurchaseClaim{}, &HwFreeCreditClaim{}))
 	require.NoError(t, DB.Exec("DELETE FROM hw_credit_packages").Error)
 	require.NoError(t, DB.Exec("DELETE FROM hw_user_signals").Error)
 	require.NoError(t, DB.Exec("DELETE FROM hw_first_purchase_claims").Error)
+	require.NoError(t, DB.Exec("DELETE FROM hw_free_credit_claims").Error)
 	t.Cleanup(func() {
 		DB.Exec("DELETE FROM hw_credit_packages")
 		DB.Exec("DELETE FROM hw_user_signals")
 		DB.Exec("DELETE FROM hw_first_purchase_claims")
+		DB.Exec("DELETE FROM hw_free_credit_claims")
 	})
 }
 
