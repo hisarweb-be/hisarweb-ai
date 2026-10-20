@@ -64,7 +64,7 @@ func SetRelayRouter(router *gin.Engine) {
 	playgroundRouter := router.Group("/pg")
 	playgroundRouter.Use(middleware.RouteTag("relay"))
 	playgroundRouter.Use(middleware.SystemPerformanceCheck())
-	playgroundRouter.Use(middleware.HwMask(), middleware.UserAuth(), middleware.Distribute())
+	playgroundRouter.Use(middleware.HwMask(), middleware.UserAuth(), middleware.HwBureauReserveGate(), middleware.Distribute())
 	{
 		playgroundRouter.POST("/chat/completions", controller.Playground)
 	}
@@ -76,6 +76,10 @@ func SetRelayRouter(router *gin.Engine) {
 	// handshake response headers are filtered.
 	relayV1Router.Use(middleware.HwMask())
 	relayV1Router.Use(middleware.TokenAuth())
+	// The bureau reserve gate covers every customer route below, including the
+	// WebSocket handshake; it refuses new requests only and never touches a
+	// stream that is already running.
+	relayV1Router.Use(middleware.HwBureauReserveGate())
 	{
 		// Responses WebSocket route. Channel selection happens after the first
 		// response.create event; each event runs the ordinary request limiter.
@@ -210,6 +214,7 @@ func SetRelayRouter(router *gin.Engine) {
 	relayGeminiRouter.Use(middleware.HwMask())
 	relayGeminiRouter.Use(middleware.TokenAuth())
 	relayGeminiRouter.Use(middleware.ModelRequestRateLimit())
+	relayGeminiRouter.Use(middleware.HwBureauReserveGate())
 	relayGeminiRouter.Use(middleware.Distribute())
 	{
 		// Gemini API 路径格式: /v1beta/models/{model_name}:{action}
