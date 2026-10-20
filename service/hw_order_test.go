@@ -357,6 +357,9 @@ func hwOrderTestSetup(t *testing.T) *hwFakeProvider {
 		&model.HwUserSignal{},
 		&model.HwFirstPurchaseClaim{},
 		&model.HwAffiliateRetry{},
+		// A purchase reaches the freeze hold: a frozen account loses what is
+		// left of its free package when it pays, so the flag table must exist.
+		&model.HwAccountFlag{},
 	))
 	hwOrderTestCleanTables(t)
 	t.Cleanup(func() { hwOrderTestCleanTables(t) })
@@ -404,7 +407,7 @@ func hwOrderTestSetup(t *testing.T) *hwFakeProvider {
 
 func hwOrderTestCleanTables(t *testing.T) {
 	t.Helper()
-	for _, table := range []string{"hw_orders", "hw_credit_packages", "hw_user_signals", "hw_first_purchase_claims", "hw_affiliate_retries"} {
+	for _, table := range []string{"hw_orders", "hw_credit_packages", "hw_user_signals", "hw_first_purchase_claims", "hw_affiliate_retries", "hw_account_flags"} {
 		require.NoError(t, model.DB.Exec("DELETE FROM "+table).Error)
 	}
 }
