@@ -30,9 +30,17 @@ func TestHwWebhookRouteKeepsAcceptingBursts(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	previousDB, previousSQLitePath, previousMaster := model.DB, common.SQLitePath, common.IsMasterNode
 	previousRedis, previousMemoryCache := common.RedisEnabled, common.MemoryCacheEnabled
+	previousCriticalEnabled, previousCriticalNum, previousCriticalDuration := common.CriticalRateLimitEnable, common.CriticalRateLimitNum, common.CriticalRateLimitDuration
 	common.IsMasterNode = false
 	common.RedisEnabled = false
 	common.MemoryCacheEnabled = false
+	// The middleware builds its limiter from these values when the route is
+	// registered, so they must hold the production defaults here: otherwise a
+	// limiter put back on the route would silently be a no-op and this test could
+	// never fail.
+	common.CriticalRateLimitEnable = true
+	common.CriticalRateLimitNum = 20
+	common.CriticalRateLimitDuration = 20 * 60
 	common.SQLitePath = filepath.Join(t.TempDir(), "hw-webhook-routes.db")
 	t.Setenv("SQL_DSN", "")
 	t.Setenv("LOG_SQL_DSN", "")
@@ -46,6 +54,9 @@ func TestHwWebhookRouteKeepsAcceptingBursts(t *testing.T) {
 		common.IsMasterNode = previousMaster
 		common.RedisEnabled = previousRedis
 		common.MemoryCacheEnabled = previousMemoryCache
+		common.CriticalRateLimitEnable = previousCriticalEnabled
+		common.CriticalRateLimitNum = previousCriticalNum
+		common.CriticalRateLimitDuration = previousCriticalDuration
 	})
 	require.NoError(t, model.DB.AutoMigrate(&model.HwOrder{}))
 
