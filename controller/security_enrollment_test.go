@@ -98,9 +98,13 @@ func setupSecurityEnrollmentTest(t *testing.T) (*model.User, service.AuthIdentit
 		common.RedisEnabled, common.SessionSecret = previousRedis, previousSecret
 		common.PasswordLoginEncryptionEnabled = previousEncryption
 		*system_setting.GetPasskeySettings() = previousSettings
-		connection, err := db.DB()
-		if err == nil {
-			_ = connection.Close()
+		// Both pools must be closed: on Windows an open handle makes the
+		// temporary directory cleanup fail the test after it already passed.
+		for _, database := range []*gorm.DB{db, logDB} {
+			connection, err := database.DB()
+			if err == nil {
+				_ = connection.Close()
+			}
 		}
 	})
 	password, err := common.Password2Hash("enrollment-password")

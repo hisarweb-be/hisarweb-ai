@@ -320,6 +320,54 @@ func TestSecurityLoginFactorStateDoesNotAddPasswordLoginQueries(t *testing.T) {
 	assert.Equal(t, 2, queries, "only the existing credential lookup and the replacement factor-state lookup run before the challenge")
 }
 
+// TestHwProductionRefusesDefaultAdminLogin proves the administrator pair that
+// every deployment guide of this project publishes cannot open a production
+// deployment, and that a local run keeps the ordinary credential flow. The
+// query counter separates the two: a production refusal must answer before any
+// stored row is consulted, while outside production the same pair reaches the
+// credential lookup and is accepted.
+func TestHwProductionRefusesDefaultAdminLogin(t *testing.T) {
+	setupSecurityEnrollmentTest(t)
+	previousPasswordLogin := common.PasswordLoginEnabled
+	common.PasswordLoginEnabled = true
+	t.Cleanup(func() { common.PasswordLoginEnabled = previousPasswordLogin })
+
+	password, err := common.Password2Hash("123456")
+	require.NoError(t, err)
+	require.NoError(t, model.DB.Create(&model.User{
+		Username:    "root",
+		Password:    password,
+		Role:        common.RoleRootUser,
+		Status:      common.UserStatusEnabled,
+		Group:       "default",
+		AuthVersion: 1,
+		AffCode:     "hwdefaultadmin",
+	}).Error)
+
+	queries := 0
+	require.NoError(t, model.DB.Callback().Query().After("gorm:query").Register("hw_default_admin_login_queries", func(tx *gorm.DB) {
+		if !tx.DryRun {
+			queries++
+		}
+	}))
+	t.Cleanup(func() { _ = model.DB.Callback().Query().Remove("hw_default_admin_login_queries") })
+
+	const body = `{"username":"root","password":"123456"}`
+
+	t.Setenv("APP_ENV", common.HwAppEnvProduction)
+	queries = 0
+	response := securityEnrollmentRequest(http.MethodPost, "/api/user/login", body, "", service.AuthIdentity{}, Login)
+	assert.Contains(t, response.Body.String(), `"success":false`)
+	assert.Contains(t, response.Body.String(), "Username or password is incorrect", "a refusal must look like any other failed login")
+	assert.Equal(t, 0, queries, "the production refusal must not consult the stored administrator row")
+
+	t.Setenv("APP_ENV", "")
+	queries = 0
+	response = securityEnrollmentRequest(http.MethodPost, "/api/user/login", body, "", service.AuthIdentity{}, Login)
+	assert.Positive(t, queries, "outside production the same pair must reach the normal credential lookup")
+	assert.NotContains(t, response.Body.String(), "Username or password is incorrect", "outside production the stored credentials must still be accepted")
+}
+
 type boundLoginOAuthProvider struct {
 	authFlowTestOAuthProvider
 	userID int
