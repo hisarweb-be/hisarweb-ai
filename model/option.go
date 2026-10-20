@@ -59,6 +59,9 @@ func InitOptionMap() {
 	common.OptionMap[HwMinTopUpTryOption] = "100"
 	common.OptionMap[HwMaxTopUpTryOption] = "20000"
 	common.OptionMap[HwMaxOpenOrdersOption] = "3"
+	common.OptionMap[HwWindowCapacityUSDOption] = ""
+	common.OptionMap[HwPhase0MeasurementDoneOption] = "false"
+	common.OptionMap[HwCustomerWindowCeilingUSDOption] = ""
 	common.OptionMap[HwCheckoutReturnURLOption] = ""
 	common.OptionMap["TaskPluginEnabled"] = strconv.FormatBool(constant.TaskPluginEnabled)
 	jsplugin.DefaultRegistry.SetEnabled(constant.TaskPluginEnabled)
