@@ -95,6 +95,12 @@ func Distribute() func(c *gin.Context) {
 						common.SetContextKey(c, constant.ContextKeyUsingGroup, playgroundRequest.Group)
 					}
 				}
+				// A free trial account may only reach the model class its
+				// credit is meant for, whatever channel the group has.
+				if !HwFreeGroupModelAllowed(common.GetContextKeyString(c, constant.ContextKeyUsingGroup), modelRequest.Model) {
+					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorGroupAccessDenied))
+					return
+				}
 			}
 		}
 		if pinned || shouldSelectChannel {
