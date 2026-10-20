@@ -74,6 +74,8 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.POST("/waffo-pancake/webhook/:env", anonymousRequestBodyLimit, controller.WaffoPancakeWebhook)
 		// HisarWeb AI: top-up orders and the card payment webhook.
 		SetHwRoutes(apiRouter)
+		// HisarWeb AI: the Telegram bot webhook that carries the phone step.
+		SetHwTelegramRoutes(apiRouter)
 
 		// Universal secure verification routes
 		apiRouter.GET("/verify/methods", middleware.UserAuth(), middleware.DisableCache(), controller.GetVerificationMethods)

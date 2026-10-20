@@ -9,23 +9,41 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// Telegram accounts are phone-bound upstream: Telegram issues one account per
-// phone number and re-registering the number retires the old account. oauth
-// tokens do not carry the phone number itself, so the stable Telegram identity
-// is what this fork records as the phone signal. Two accounts that bind the
-// same Telegram account therefore share a phone hash, and part A's unique
-// free-credit claim refuses the second one.
+// The Telegram login widget returns the account identity only: id, name, user
+// name, photo, auth date and the signature. The login widget never carries the
+// phone number, and a person who retires a Telegram account can start another
+// one with the same SIM, so the identity is a weak signal. The number itself
+// comes from the bot's share-contact button (request_contact), which Telegram
+// marks as the sender's own number. This fork therefore records the identity
+// under its own kind and trusts only the shared number as the phone signal.
 
-// HwRecordTelegramPhoneStep stores the Telegram identity of a user as the
-// phone-bound signal (kind phone). The value is prefixed before hashing so it
-// can never collide with a normalised +90 phone number, and like every signal
-// only the keyed hash is stored.
+// HwRecordTelegramPhoneStep stores the Telegram identity of a user as the weak
+// Telegram signal (kind telegram), never as a phone signal. The value is
+// prefixed before hashing so it can never collide with a normalised +90 phone
+// number, and like every signal only the keyed hash is stored.
 func HwRecordTelegramPhoneStep(userID int, telegramID string) error {
 	telegramID = strings.TrimSpace(telegramID)
 	if userID <= 0 || telegramID == "" {
 		return ErrHwInvalidUserSignal
 	}
-	return hwUpsertHashedSignalRow(userID, HwSignalKindPhone, "telegram:"+telegramID)
+	return hwUpsertHashedSignalRow(userID, HwSignalKindTelegram, "telegram:"+telegramID)
+}
+
+// HwRecordPhoneSignal normalises a number that the customer shared through the
+// bot's contact button and stores its keyed hash as the phone signal (kind
+// phone). It is the only path that writes a phone signal, so the free trial
+// credit can only follow a number Telegram itself attributes to the sender.
+// The raw number never reaches the table, a log line or an answer; an invalid
+// or foreign number is refused with ErrHwInvalidPhoneNumber and stores nothing.
+func HwRecordPhoneSignal(userID int, rawPhone string) error {
+	if userID <= 0 {
+		return ErrHwInvalidUserSignal
+	}
+	phone, err := hwNormalizePhone(rawPhone)
+	if err != nil {
+		return err
+	}
+	return hwUpsertHashedSignalRow(userID, HwSignalKindPhone, phone)
 }
 
 // HwRecordDevPhoneStep is the local-development stand-in for the Telegram step:

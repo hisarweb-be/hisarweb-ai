@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"os"
@@ -75,16 +76,27 @@ func HwNormalizeDeviceToken(header string) (string, error) {
 	return "", ErrHwInvalidDeviceToken
 }
 
-// HwCompleteTelegramPhoneStep records the Telegram step of an account and then
-// tries the free trial credit: Telegram accounts are phone-bound upstream, so
-// the Telegram identity is the phone signal. The grant still passes the frozen
-// flag, the confirmed-email gate and every part A check; the return is
-// (granted, reason) with the same reason strings as part A plus "frozen" and
-// "email_unverified". Nothing but the outcome is logged.
+// HwCompleteTelegramPhoneStep records the Telegram identity of an account as
+// the weak Telegram signal, asks the bot to prompt for the phone number and
+// then tries the free trial credit. Without a number shared through the bot the
+// grant answers "unverified": a Telegram login alone proves an account, not a
+// phone number, and the same SIM can start a new Telegram account. The grant
+// still passes the frozen flag, the confirmed-email gate and every part A
+// check; the return is (granted, reason) with the same reason strings as part A
+// plus "frozen" and "email_unverified". Nothing but the outcome is logged.
 func HwCompleteTelegramPhoneStep(userID int, telegramID string) (granted bool, reason string, err error) {
 	if err := model.HwRecordTelegramPhoneStep(userID, telegramID); err != nil {
 		return false, "", err
 	}
+	// The Telegram login proves the account, not a phone number, so the credit
+	// still waits for the number shared through the bot. The bot may only write
+	// to a chat the customer opened itself, so this prompt reaches the customers
+	// who started the bot before; for everyone else the same prompt answers the
+	// /start that opens the chat. A failed prompt costs the prompt only, never
+	// the login, and the customer's language is not known here: the site default
+	// is Turkish.
+	texts := hwTelegramTextsFor("tr")
+	hwAnswerTelegramChat(context.Background(), telegramID, texts.Prompt, texts.Button)
 	user, err := model.GetUserById(userID, false)
 	if err != nil {
 		return false, "", err

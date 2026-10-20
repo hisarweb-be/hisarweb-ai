@@ -388,6 +388,7 @@ func migrateDB() error {
 		&HwFreeCreditClaim{},
 		&HwSignupIp{},
 		&HwAccountFlag{},
+		&HwTelegramUpdate{},
 		&HwOrder{},
 		&HwAffiliateRetry{},
 		&HwPriceSnapshot{},
