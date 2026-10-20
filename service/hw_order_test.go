@@ -1060,9 +1060,13 @@ func TestHwTopUpExpiresUnpaidOrders(t *testing.T) {
 	var expired model.HwOrder
 	require.NoError(t, model.DB.Where("merchant_ref = ?", stale.MerchantRef).First(&expired).Error)
 	assert.Equal(t, model.HwOrderStatusExpired, expired.Status)
-	var claims int64
-	require.NoError(t, model.DB.Model(&model.HwFirstPurchaseClaim{}).Where("user_id = ?", buyer.Id).Count(&claims).Error)
-	assert.Zero(t, claims)
+	// The expired order never held the claim, so the close releases nothing: the
+	// claim of the still-open order is untouched. Releasing only the claim of the
+	// order being closed is what keeps a discount from being freed while another
+	// order still holds it.
+	var claim model.HwFirstPurchaseClaim
+	require.NoError(t, model.DB.Where("user_id = ?", buyer.Id).First(&claim).Error)
+	assert.Equal(t, fresh.MerchantRef, claim.OrderRef)
 
 	// A provider that cannot be reached, or refuses the cancel, leaves the
 	// order open and the claim held; the next round tries again.

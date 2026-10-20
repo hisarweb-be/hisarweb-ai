@@ -81,13 +81,9 @@ func HwRevolutPermitLoopbackHTTPForTest() {
 	hwRevolutAllowLoopbackHTTP = true
 }
 
-// hwRevolutHostIsLoopback reports whether a URL host is a loopback address.
-func hwRevolutHostIsLoopback(host string) bool {
-	hostname := host
-	if strings.Contains(hostname, ":") {
-		hostname, _, _ = strings.Cut(hostname, "]")
-		hostname = strings.TrimPrefix(hostname, "[")
-	}
+// hwRevolutHostIsLoopback reports whether a bare host name (no port, no
+// brackets) is a loopback address.
+func hwRevolutHostIsLoopback(hostname string) bool {
 	switch hostname {
 	case "localhost", "127.0.0.1", "::1":
 		return true
@@ -113,7 +109,7 @@ func HwRevolutConfigFromEnv() (HwRevolutConfig, error) {
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return HwRevolutConfig{}, ErrHwRevolutNotConfigured
 	}
-	if parsed.Scheme != "https" && !(parsed.Scheme == "http" && hwRevolutAllowLoopbackHTTP && hwRevolutHostIsLoopback(parsed.Host)) {
+	if parsed.Scheme != "https" && !(parsed.Scheme == "http" && hwRevolutAllowLoopbackHTTP && hwRevolutHostIsLoopback(parsed.Hostname())) {
 		return HwRevolutConfig{}, ErrHwRevolutInsecureBaseURL
 	}
 	apiVersion := strings.TrimSpace(os.Getenv(HwRevolutAPIVersionEnv))
