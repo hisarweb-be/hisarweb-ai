@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 
@@ -164,20 +165,20 @@ func HwContentSecurityPolicy() string {
 	}
 
 	if common.TurnstileCheckEnabled {
-		frameSources = append(frameSources, hwTurnstileOrigin)
-		scriptSources = append(scriptSources, hwTurnstileOrigin)
-		connectSources = append(connectSources, hwTurnstileOrigin)
+		frameSources = hwAddOrigins(frameSources, hwTurnstileOrigin)
+		scriptSources = hwAddOrigins(scriptSources, hwTurnstileOrigin)
+		connectSources = hwAddOrigins(connectSources, hwTurnstileOrigin)
 		// Turnstile proves the challenge in a Web Worker it creates from a blob.
 		directives["worker-src"] = "'self' blob:"
 	}
 	if common.TelegramOAuthEnabled {
-		frameSources = append(frameSources, hwTelegramOAuthOrigin)
-		scriptSources = append(scriptSources, hwTelegramScriptOrigin)
-		connectSources = append(connectSources, hwTelegramOAuthOrigin)
+		frameSources = hwAddOrigins(frameSources, hwTelegramOAuthOrigin)
+		scriptSources = hwAddOrigins(scriptSources, hwTelegramScriptOrigin)
+		connectSources = hwAddOrigins(connectSources, hwTelegramOAuthOrigin)
 	}
 	if os.Getenv("GOOGLE_ANALYTICS_ID") != "" {
-		scriptSources = append(scriptSources, hwGoogleTagManagerOrigin)
-		connectSources = append(connectSources, hwGoogleTagManagerOrigin, hwGoogleAnalyticsOrigin)
+		scriptSources = hwAddOrigins(scriptSources, hwGoogleTagManagerOrigin)
+		connectSources = hwAddOrigins(connectSources, hwGoogleTagManagerOrigin, hwGoogleAnalyticsOrigin)
 	}
 	if os.Getenv("UMAMI_WEBSITE_ID") != "" {
 		umamiScriptURL := os.Getenv("UMAMI_SCRIPT_URL")
@@ -185,12 +186,12 @@ func HwContentSecurityPolicy() string {
 			umamiScriptURL = hwUmamiDefaultScriptURL
 		}
 		if origin := hwHttpsURLOrigin(umamiScriptURL); origin != "" {
-			scriptSources = append(scriptSources, origin)
-			connectSources = append(connectSources, origin)
+			scriptSources = hwAddOrigins(scriptSources, origin)
+			connectSources = hwAddOrigins(connectSources, origin)
 		}
 	}
-	frameSources = append(frameSources, hwCspExtraOrigins(HwCspExtraFrameSrcEnv)...)
-	connectSources = append(connectSources, hwCspExtraOrigins(HwCspExtraConnectSrcEnv)...)
+	frameSources = hwAddOrigins(frameSources, hwCspExtraOrigins(HwCspExtraFrameSrcEnv)...)
+	connectSources = hwAddOrigins(connectSources, hwCspExtraOrigins(HwCspExtraConnectSrcEnv)...)
 
 	directives["script-src"] = strings.Join(scriptSources, " ")
 	directives["connect-src"] = strings.Join(connectSources, " ")
@@ -217,6 +218,18 @@ func hwIndexScriptSources() []string {
 	hwIndexScriptHashesMu.RLock()
 	defer hwIndexScriptHashesMu.RUnlock()
 	return append([]string(nil), hwIndexScriptHashes...)
+}
+
+// hwAddOrigins appends the origins that the directive does not carry yet. An
+// operator list that repeats a built-in origin, or itself, must not produce the
+// same source twice in the policy.
+func hwAddOrigins(sources []string, origins ...string) []string {
+	for _, origin := range origins {
+		if origin != "" && !slices.Contains(sources, origin) {
+			sources = append(sources, origin)
+		}
+	}
+	return sources
 }
 
 // hwCspExtraOrigins reads the comma-separated list of an environment variable
