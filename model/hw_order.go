@@ -177,6 +177,9 @@ type HwOrderSettlement struct {
 	// DiscountApplied is true when the first-purchase discount was still held
 	// by this order when the payment was settled.
 	DiscountApplied bool
+	// ForfeitedFreeQuota is the remaining free trial credit this purchase
+	// retired because the account was frozen; paid credit is never part of it.
+	ForfeitedFreeQuota int
 	// AdminNote is the admin-visible reason recorded on the order when the
 	// discount was not applied; empty when it was.
 	AdminNote string
@@ -269,10 +272,11 @@ func HwSettleOrderPayment(merchantRef, revolutOrderID, cardFingerprint string, n
 				settlement.DiscountApplied = true
 			}
 		}
-		granted, err := GrantCreditPackage(tx, order.UserId, creditQuota, HwSourcePurchase, order.MerchantRef, now)
+		granted, forfeited, err := GrantCreditPackageInTx(tx, order.UserId, creditQuota, HwSourcePurchase, order.MerchantRef, now)
 		if err != nil {
 			return err
 		}
+		settlement.ForfeitedFreeQuota = forfeited
 		updates := map[string]any{"status": HwOrderStatusPaid, "paid_at": now, "admin_note": settlement.AdminNote}
 		if !settlement.DiscountApplied && order.DiscountKind == HwDiscountFirstPurchase {
 			// A paid first-purchase order means the discount was really spent;
