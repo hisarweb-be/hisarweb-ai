@@ -5,6 +5,8 @@ import (
 	"errors"
 	"os"
 	"strings"
+
+	"golang.org/x/net/idna"
 )
 
 // The embedded list of known disposable email domains. go:embed keeps the
@@ -58,19 +60,48 @@ func HwReloadHwDisposableDomains() {
 	hwDisposableDomainSet = loadHwDisposableDomains()
 }
 
+// hwAsciiEmailDomain reduces a domain to the ASCII form the mail system
+// delivers to. A mailbox may be written with fullwidth letters or an
+// ideographic full stop ("ｍａｉｌｉｎａｔｏｒ.com", "mailinator。com"), and a
+// trailing dot is the legal absolute spelling ("mailinator.com."). All of them
+// reach the same server, so all of them must reach the same list entry. The
+// second return is false when the domain cannot be converted, which the caller
+// treats as blocked: an unconvertible domain is no proof of a permanent address.
+func hwAsciiEmailDomain(domain string) (string, bool) {
+	domain = strings.TrimRight(strings.TrimSpace(domain), ".")
+	if domain == "" {
+		return "", false
+	}
+	ascii, err := idna.Lookup.ToASCII(domain)
+	if err != nil {
+		return "", false
+	}
+	ascii = strings.TrimRight(strings.ToLower(strings.TrimSpace(ascii)), ".")
+	if ascii == "" {
+		return "", false
+	}
+	return ascii, true
+}
+
 // HwEmailDomainBlocked reports whether the domain of an email address, or any
 // parent domain of it, is on the disposable list. The address is normalised
-// first: case never matters, and plus-addressing or dots in the local part do
-// not change the domain, so they cannot dodge the check.
+// first: case never matters, plus-addressing or dots in the local part do not
+// change the domain, a non-ASCII domain is reduced to its punycode form before
+// the comparison, and a trailing dot is dropped. A domain that cannot be
+// converted is treated as blocked.
 func HwEmailDomainBlocked(email string) bool {
 	_, domain, ok := strings.Cut(strings.ToLower(strings.TrimSpace(email)), "@")
 	if !ok || domain == "" {
 		return false
 	}
+	ascii, ok := hwAsciiEmailDomain(domain)
+	if !ok {
+		return true
+	}
 	// Walk the domain from the exact name up to its registrable suffixes:
 	// "a.b.mailinator.com" checks itself, then "b.mailinator.com", then
 	// "mailinator.com", then "com".
-	labels := strings.Split(domain, ".")
+	labels := strings.Split(ascii, ".")
 	for i := range len(labels) {
 		if _, blocked := hwDisposableDomainSet[strings.Join(labels[i:], ".")]; blocked {
 			return true

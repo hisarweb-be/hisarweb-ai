@@ -53,6 +53,25 @@ func TestHwEmailDomainBlocked(t *testing.T) {
 		assert.True(t, HwEmailDomainBlocked(" a+b@SHARKLASERS.com "))
 	})
 
+	t.Run("unicode, punycode and trailing-dot spellings reach the same entry", func(t *testing.T) {
+		for _, email := range []string{
+			"user@ｍａｉｌｉｎａｔｏｒ.com", // fullwidth letters
+			"user@mailinator。com", // ideographic full stop
+			"user@ｍａｉｌ.mailinator.com",
+			"user@mailinator.com.", // absolute form with a trailing dot
+			"user@MAILINATOR.COM.",
+			"user@temp-mail。org",
+		} {
+			assert.True(t, HwEmailDomainBlocked(email), "%s must be blocked", email)
+		}
+		assert.False(t, HwEmailDomainBlocked("user@example.com."), "a trailing dot on an ordinary domain stays allowed")
+		assert.False(t, HwEmailDomainBlocked("user@example。com"))
+	})
+
+	t.Run("a domain that cannot be converted is blocked", func(t *testing.T) {
+		assert.True(t, HwEmailDomainBlocked("user@exa mple!.com"), "an unconvertible domain is no proof of a permanent address")
+	})
+
 	t.Run("ordinary domains are allowed", func(t *testing.T) {
 		for _, email := range []string{
 			"user@gmail.com",
