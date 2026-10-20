@@ -32,6 +32,7 @@ export type HwLanguage = 'tr' | 'en'
 
 const tr = {
   navTopUp: 'Kredi yükle',
+  navBuy: 'Satın al',
   navCompare: 'Fiyat karşılaştırma',
   navQuality: 'Kalite ölçümleri',
 
@@ -100,14 +101,20 @@ const tr = {
   finalCtaButton: 'Ücretsiz hesap aç',
 
   topUpTitle: 'Kredi yükle',
+  topUpPageTitle: 'Satın al',
   topUpLead:
     'Yüklemek istediğiniz bakiye değerini seçin. Hesabınıza tam değer geçer; ödenecek tutar indirimden sonra hesaplanır.',
   topUpPresetLabel: 'Hazır tutarlar',
   topUpCustomLabel: 'Kendi tutarınız (TL)',
+  topUpCustomPlaceholder: 'Örn. 1500',
   topUpValueLabel: 'Bakiye değeri',
   topUpPayableLabel: 'Ödenecek tutar',
+  topUpPayableNote:
+    'İndirimli ödenecek tutarı ödeme sayfasında görürsünüz.',
   topUpDiscountFirst: 'İlk alışveriş indirimi (%50, 1000 TL değerine kadar)',
   topUpDiscountRepeat: 'Sonraki alışveriş indirimi (%15)',
+  topUpDiscountRule:
+    'İlk alışverişinizde 1000 TL değerine kadar %50, bu değerin üzerindeki kısımda %15 indirim uygulanır; sonraki alışverişlerde indirim %15’tir. İndirim ödeme sırasında otomatik hesaplanır.',
   topUpKdvNote: 'Fiyatlara KDV dahildir.',
   topUpSubmit: 'Ödemeye geç',
   topUpSubmitting: 'Ödeme sayfası açılıyor…',
@@ -120,14 +127,22 @@ const tr = {
     'Ödeme şu anda kullanılamıyor. Lütfen biraz sonra tekrar deneyin.',
   topUpErrorDefault: 'Sipariş başlatılamadı. Lütfen tekrar deneyin.',
   topUpReturnTitle: 'Ödeme sayfasından döndünüz',
+  topUpReturnPending: 'Bakiye, ödeme onaydan sonra görünür.',
   topUpReturnBody:
     'Ödeme onaylandığında bakiye kısa süre içinde hesabınıza eklenir. Bakiye hemen görünmezse birkaç dakika sonra yenileyin.',
   topUpRefresh: 'Bakiyeyi yenile',
+
+  topUpPackagesTitle: 'Paketleriniz',
+  topUpPackagesLead:
+    'Kalan bakiye ve son kullanma tarihi, paket başına gösterilir.',
+  topUpPackagesLoading: 'Paketler yükleniyor…',
+  topUpPackagesError: 'Paketler okunamadı. Lütfen tekrar deneyin.',
 
   balanceTitle: 'Bakiyeniz',
   balanceTotal: 'Toplam: {amount}',
   balanceEmpty: 'Henüz bakiyeniz yok. Yukarıdan kredi yükleyebilirsiniz.',
   balancePackageLine: '{source}: {amount} · son kullanma {date}',
+  balancePackageQuota: '{quota} kredi',
   balanceNoRate:
     'Bakiyenin TL değeri şu anda hesaplanamıyor: günlük kur henüz yayınlanmadı.',
   packageSourcePurchase: 'Satın alınan bakiye',
@@ -181,6 +196,7 @@ export type HwTextKey = keyof typeof tr
 
 const en: Record<HwTextKey, string> = {
   navTopUp: 'Top up',
+  navBuy: 'Buy credit',
   navCompare: 'Price comparison',
   navQuality: 'Quality results',
 
@@ -247,14 +263,19 @@ const en: Record<HwTextKey, string> = {
   finalCtaButton: 'Create a free account',
 
   topUpTitle: 'Top up',
+  topUpPageTitle: 'Buy credit',
   topUpLead:
     'Choose the balance value you want. Your account receives the full value; the amount you pay follows from the discount.',
   topUpPresetLabel: 'Preset amounts',
   topUpCustomLabel: 'Your own amount (TRY)',
+  topUpCustomPlaceholder: 'e.g. 1500',
   topUpValueLabel: 'Balance value',
   topUpPayableLabel: 'You pay',
+  topUpPayableNote: 'The amount you pay after the discount is shown on the payment page.',
   topUpDiscountFirst: 'First-purchase discount (50%, up to TRY 1,000 of value)',
   topUpDiscountRepeat: 'Later-purchase discount (15%)',
+  topUpDiscountRule:
+    'Your first purchase gets 50% off up to TRY 1,000 of value and 15% above that; later purchases get 15% off. The discount is applied automatically at payment.',
   topUpKdvNote: 'Prices include VAT.',
   topUpSubmit: 'Continue to payment',
   topUpSubmitting: 'Opening the payment page…',
@@ -267,14 +288,21 @@ const en: Record<HwTextKey, string> = {
     'Payment is not available right now. Please try again a bit later.',
   topUpErrorDefault: 'The order could not be started. Please try again.',
   topUpReturnTitle: 'You are back from the payment page',
+  topUpReturnPending: 'The balance appears after the payment is confirmed.',
   topUpReturnBody:
     'Once the payment is confirmed the balance is added to your account within moments. If it is not there yet, refresh in a few minutes.',
   topUpRefresh: 'Refresh balance',
+
+  topUpPackagesTitle: 'Your packages',
+  topUpPackagesLead: 'The remaining balance and expiry date are shown per package.',
+  topUpPackagesLoading: 'Loading the packages…',
+  topUpPackagesError: 'The packages could not be loaded. Please try again.',
 
   balanceTitle: 'Your balance',
   balanceTotal: 'Total: {amount}',
   balanceEmpty: 'You have no balance yet. Top up above.',
   balancePackageLine: '{source}: {amount} · expires {date}',
+  balancePackageQuota: '{quota} credits',
   balanceNoRate:
     'The lira value of your balance cannot be shown right now: the daily rate has not been published yet.',
   packageSourcePurchase: 'Purchased balance',
@@ -351,4 +379,14 @@ export function useHwText(): (key: HwTextKey, vars?: HwTextVars) => string {
   const dictionary =
     hwTexts[pickHwLanguage(i18n.resolvedLanguage ?? i18n.language)]
   return (key, vars) => fillHwText(dictionary[key], vars)
+}
+
+/**
+ * The language these pages talk to the server in. `language` in the top-up
+ * request only selects the description on the payment page, so it follows the
+ * page language and not the customer's locale.
+ */
+export function useHwLanguage(): HwLanguage {
+  const { i18n } = useTranslation()
+  return pickHwLanguage(i18n.resolvedLanguage ?? i18n.language)
 }
