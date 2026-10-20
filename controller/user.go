@@ -78,6 +78,15 @@ func Login(c *gin.Context) {
 		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
+	if common.HwIsProduction() && common.HwIsDefaultAdminCredential(username, password) {
+		// The default administrator pair is public knowledge. A production
+		// deployment refuses it even when an upgraded database still holds the
+		// account, and answers exactly like any other failed login so the
+		// refusal reveals nothing about the stored rows.
+		common.SysLog(common.LogText("login refused: the default administrator password is disabled in production"))
+		common.ApiErrorT(c, "Username or password is incorrect, or user has been banned")
+		return
+	}
 	user := model.User{
 		Username: username,
 		Password: password,
