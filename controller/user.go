@@ -78,15 +78,6 @@ func Login(c *gin.Context) {
 		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
-	if common.HwIsProduction() && common.HwIsDefaultAdminCredential(username, password) {
-		// The default administrator pair is public knowledge. A production
-		// deployment refuses it even when an upgraded database still holds the
-		// account, and answers exactly like any other failed login so the
-		// refusal reveals nothing about the stored rows.
-		common.SysLog(common.LogText("login refused: the default administrator password is disabled in production"))
-		common.ApiErrorT(c, "Username or password is incorrect, or user has been banned")
-		return
-	}
 	user := model.User{
 		Username: username,
 		Password: password,
@@ -102,6 +93,21 @@ func Login(c *gin.Context) {
 		default:
 			common.ApiErrorT(c, "Username or password is incorrect, or user has been banned")
 		}
+		return
+	}
+
+	// The default administrator pair of the upstream project is public
+	// knowledge. The check runs on the row that was just found, because that is
+	// the account that would open the console: ValidateAndFill also resolves an
+	// e-mail address, an upgraded database may carry a renamed administrator,
+	// and only a lookup after the fact sees all of those. A production
+	// deployment refuses the pair and answers exactly like any other failed
+	// login, so the refusal reveals nothing about the stored rows. An ordinary
+	// user who happens to use the same password keeps logging in.
+	if common.HwIsProduction() && (user.Role == common.RoleRootUser || user.Id == 1) &&
+		common.ValidatePasswordAndHash("123456", user.Password) {
+		common.SysLog(common.LogText("login refused: the default administrator password is disabled in production"))
+		common.ApiErrorT(c, "Username or password is incorrect, or user has been banned")
 		return
 	}
 

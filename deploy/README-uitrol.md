@@ -64,6 +64,24 @@ opties uit omgevingsvariabelen); dat valt buiten H2 en is een open punt in het v
 5. Auto Deploy blijft uit (bureau-regel sinds 1 okt 2026, `kennis/infra/coolify-uitrol.md`). Uitrollen
    gaat via de CTO-route met een goedkeuringskaart; nooit via een push naar main.
 
+## Geüpgradede database waarin de beheerder nog 123456 heeft
+
+De productiepoort weigert dat paar voortaan, ook wanneer het als e-mailadres van de beheerder wordt
+ingevoerd. Kleinste bestaande route om het eenmalig te herstellen (geen nieuwe code, geen ingreep in
+de gebruikersrij):
+
+1. Zorg dat de root-rij een bereikbaar en uniek adres heeft:
+   `SELECT id, username, email FROM users WHERE role = 100;` en zo nodig
+   `UPDATE users SET email = '<adres>' WHERE id = <id>;`.
+2. Vraag een herstelcode aan: `GET /api/reset_password?email=<adres>`. Dat werkt alleen als SMTP in
+   het beheerpaneel is ingesteld; die instelling gebruikt elke mail van de dienst.
+3. Wissel de code in: `POST /api/user/reset` met `{"email":"<adres>","token":"<code>"}`. Het antwoord
+   bevat eenmalig een nieuw wachtwoord; daarmee meld je aan en wijzig je het in het beheerpaneel. Alle
+   bestaande sessies van de beheerder worden hierbij ingetrokken.
+
+Zonder SMTP is er na de upgrade geen inlogroute voor de beheerder: stel SMTP dan eerst in (via het
+beheerpaneel van de vorige versie of de opties-tabel) vóór je uitrolt.
+
 ## Terugrolpunten en gegevens
 
 - `app_data` (named volume op `/data`): SQLite-bestand, uploads en logs.

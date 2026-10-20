@@ -47,12 +47,3 @@ func HwIsProduction() bool {
 func HwUpstreamPaymentsEnabled() bool {
 	return GetEnvOrDefaultBool(HwUpstreamPaymentsEnv, false)
 }
-
-// HwIsDefaultAdminCredential recognises the administrator username/password
-// pair that old versions of this gateway created on an empty database. The pair
-// is public knowledge (it is in the source and in every deployment guide), so a
-// production server must never accept it, even when an upgraded database still
-// carries such a row.
-func HwIsDefaultAdminCredential(username, password string) bool {
-	return strings.EqualFold(strings.TrimSpace(username), "root") && password == "123456"
-}
