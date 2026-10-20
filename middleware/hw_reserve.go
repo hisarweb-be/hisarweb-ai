@@ -173,15 +173,18 @@ func hwAbortReserve(c *gin.Context, statusCode int, code types.ErrorCode, messag
 		retryAfterSeconds = 0
 	}
 	c.Header("Retry-After", strconv.Itoa(retryAfterSeconds))
-	apiError := types.NewErrorWithStatusCode(errors.New(message), code, statusCode, types.ErrOptionWithSkipRetry())
+	// The Claude envelope has no separate code field, so the error type carries
+	// our own code; the OpenAI envelope carries it in "code".
+	claudeError := types.WithClaudeError(types.ClaudeError{Type: string(code), Message: message}, statusCode, types.ErrOptionWithSkipRetry())
+	openAIError := types.NewErrorWithStatusCode(errors.New(message), code, statusCode, types.ErrOptionWithSkipRetry())
 	if strings.Contains(c.Request.URL.Path, "/messages") {
 		c.AbortWithStatusJSON(statusCode, gin.H{
 			"type":  "error",
-			"error": apiError.ToClaudeError(),
+			"error": claudeError.ToClaudeError(),
 		})
 	} else {
 		c.AbortWithStatusJSON(statusCode, gin.H{
-			"error": apiError.ToOpenAIError(),
+			"error": openAIError.ToOpenAIError(),
 		})
 	}
 	hwReserveCountRefusal(reason)
