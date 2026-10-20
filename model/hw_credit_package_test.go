@@ -43,6 +43,7 @@ func createHwTestUser(t *testing.T, quota int) User {
 		AffCode:     "hwaff" + common.GetRandomString(8),
 	}
 	require.NoError(t, DB.Create(&user).Error)
+	t.Cleanup(func() { DB.Unscoped().Delete(&User{}, user.Id) })
 	return user
 }
 
