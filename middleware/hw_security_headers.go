@@ -53,18 +53,20 @@ const (
 	// sets UMAMI_WEBSITE_ID without UMAMI_SCRIPT_URL.
 	hwUmamiDefaultScriptURL = "https://analytics.umami.is/script.js"
 
-	// HwCspExtraFrameSrcEnv and HwCspExtraConnectSrcEnv widen frame-src and
-	// connect-src with a comma-separated list of https origins, for the few
-	// pages that render an administrator-configured URL in a frame (home page,
-	// about page, chat presets). Entries that are not a bare https origin are
-	// ignored instead of breaking the policy.
+	// The HwCspExtra*Env variables widen one directive each with a comma-separated
+	// list of https origins: frame-src and connect-src for the few pages that
+	// render an administrator-configured URL in a frame (home page, about page,
+	// chat presets), img-src/style-src/font-src for a hosted logo, a style sheet
+	// or a font the console loads. Every entry must be a bare https origin;
+	// anything else is ignored instead of breaking the policy. No variable can
+	// widen script-src or replace the policy as a whole: the hashes of the
+	// inline scripts and the absence of 'unsafe-inline'/'unsafe-eval' stay the
+	// guarantee that an injected script cannot run.
 	HwCspExtraFrameSrcEnv   = "HW_CSP_EXTRA_FRAME_SRC"
 	HwCspExtraConnectSrcEnv = "HW_CSP_EXTRA_CONNECT_SRC"
-
-	// HwCspPolicyEnv replaces the built policy with a full operator-supplied
-	// one, for a deployment that adds a host we cannot know here (for example a
-	// hosted logo or an analytics endpoint). An empty value means the default.
-	HwCspPolicyEnv = "HW_CSP_POLICY"
+	HwCspExtraImgSrcEnv     = "HW_CSP_EXTRA_IMG_SRC"
+	HwCspExtraStyleSrcEnv   = "HW_CSP_EXTRA_STYLE_SRC"
+	HwCspExtraFontSrcEnv    = "HW_CSP_EXTRA_FONT_SRC"
 )
 
 var (
@@ -145,31 +147,18 @@ func HwRequestIsHTTPS(c *gin.Context) bool {
 //     'none' keeps the console out of any frame, which is stricter than the
 //     X-Frame-Options: DENY that older browsers read.
 func HwContentSecurityPolicy() string {
-	if override := strings.TrimSpace(os.Getenv(HwCspPolicyEnv)); override != "" {
-		return override
-	}
-
 	scriptSources := append([]string{"'self'"}, hwIndexScriptSources()...)
 	connectSources := []string{"'self'"}
 	frameSources := make([]string, 0, 4)
+	styleSources := []string{"'self'", "'unsafe-inline'"}
+	imgSources := []string{"'self'", "data:", "blob:"}
+	fontSources := []string{"'self'", "data:"}
 
-	directives := map[string]string{
-		"default-src":     "'self'",
-		"style-src":       "'self' 'unsafe-inline'",
-		"img-src":         "'self' data: blob:",
-		"font-src":        "'self' data:",
-		"frame-ancestors": "'none'",
-		"base-uri":        "'self'",
-		"form-action":     "'self'",
-		"object-src":      "'none'",
-	}
-
-	if common.TurnstileCheckEnabled {
+	turnstile := common.TurnstileCheckEnabled
+	if turnstile {
 		frameSources = hwAddOrigins(frameSources, hwTurnstileOrigin)
 		scriptSources = hwAddOrigins(scriptSources, hwTurnstileOrigin)
 		connectSources = hwAddOrigins(connectSources, hwTurnstileOrigin)
-		// Turnstile proves the challenge in a Web Worker it creates from a blob.
-		directives["worker-src"] = "'self' blob:"
 	}
 	if common.TelegramOAuthEnabled {
 		frameSources = hwAddOrigins(frameSources, hwTelegramOAuthOrigin)
@@ -192,13 +181,30 @@ func HwContentSecurityPolicy() string {
 	}
 	frameSources = hwAddOrigins(frameSources, hwCspExtraOrigins(HwCspExtraFrameSrcEnv)...)
 	connectSources = hwAddOrigins(connectSources, hwCspExtraOrigins(HwCspExtraConnectSrcEnv)...)
+	imgSources = hwAddOrigins(imgSources, hwCspExtraOrigins(HwCspExtraImgSrcEnv)...)
+	styleSources = hwAddOrigins(styleSources, hwCspExtraOrigins(HwCspExtraStyleSrcEnv)...)
+	fontSources = hwAddOrigins(fontSources, hwCspExtraOrigins(HwCspExtraFontSrcEnv)...)
 
-	directives["script-src"] = strings.Join(scriptSources, " ")
-	directives["connect-src"] = strings.Join(connectSources, " ")
+	directives := map[string]string{
+		"default-src":     "'self'",
+		"script-src":      strings.Join(scriptSources, " "),
+		"style-src":       strings.Join(styleSources, " "),
+		"img-src":         strings.Join(imgSources, " "),
+		"font-src":        strings.Join(fontSources, " "),
+		"connect-src":     strings.Join(connectSources, " "),
+		"frame-ancestors": "'none'",
+		"base-uri":        "'self'",
+		"form-action":     "'self'",
+		"object-src":      "'none'",
+	}
 	if len(frameSources) == 0 {
 		directives["frame-src"] = "'none'"
 	} else {
 		directives["frame-src"] = strings.Join(frameSources, " ")
+	}
+	if turnstile {
+		// Turnstile proves the challenge in a Web Worker it creates from a blob.
+		directives["worker-src"] = "'self' blob:"
 	}
 
 	order := []string{
