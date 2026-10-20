@@ -17,4 +17,7 @@ func SetHwRouter(apiRouter *gin.RouterGroup) {
 	hwRouter.GET("/pricing/compare", middleware.CriticalRateLimit(), controller.HwPricingCompare)
 	hwRouter.GET("/quality/latest", middleware.CriticalRateLimit(), controller.HwQualityLatest)
 	hwRouter.POST("/quality/run", middleware.AdminAuth(), controller.HwQualityRun)
+	// The bureau reserve of the current window (part B2). Admin only; it reports
+	// numbers, never the token or the URL of the measurement.
+	hwRouter.GET("/admin/reserve", middleware.AdminAuth(), controller.HwAdminReserveStatus)
 }
