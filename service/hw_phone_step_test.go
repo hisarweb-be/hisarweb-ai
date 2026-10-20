@@ -2,9 +2,14 @@ package service
 
 import (
 	"bytes"
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -26,17 +31,20 @@ func hwPhoneStepTestSetup(t *testing.T) {
 	require.NoError(t, model.DB.AutoMigrate(
 		&model.HwCreditPackage{}, &model.HwUserSignal{}, &model.HwFirstPurchaseClaim{},
 		&model.HwFreeCreditClaim{}, &model.HwAccountFlag{}, &model.HwSignupIp{},
+		&model.HwTelegramUpdate{},
 	))
 	for _, table := range []string{
 		"hw_credit_packages", "hw_user_signals", "hw_first_purchase_claims",
-		"hw_free_credit_claims", "hw_account_flags", "hw_signup_ips", "users",
+		"hw_free_credit_claims", "hw_account_flags", "hw_signup_ips",
+		"hw_telegram_updates", "users",
 	} {
 		require.NoError(t, model.DB.Exec("DELETE FROM "+table).Error)
 	}
 	t.Cleanup(func() {
 		for _, table := range []string{
 			"hw_credit_packages", "hw_user_signals", "hw_first_purchase_claims",
-			"hw_free_credit_claims", "hw_account_flags", "hw_signup_ips", "users",
+			"hw_free_credit_claims", "hw_account_flags", "hw_signup_ips",
+			"hw_telegram_updates", "users",
 		} {
 			model.DB.Exec("DELETE FROM " + table)
 		}
@@ -74,51 +82,89 @@ func hwPhoneStepFreePackages(t *testing.T, userID int) []model.HwCreditPackage {
 	return packages
 }
 
+// hwPhoneStepTestTelegramUser creates a user whose account is linked to the
+// given Telegram identity, as the Telegram login leaves it.
+func hwPhoneStepTestTelegramUser(t *testing.T, email, telegramID string) model.User {
+	t.Helper()
+	user := hwPhoneStepTestUser(t, email)
+	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", user.Id).Update("telegram_id", telegramID).Error)
+	user.TelegramId = telegramID
+	return user
+}
+
+// hwPhoneStepSignals returns the signals of a user of one kind.
+func hwPhoneStepSignals(t *testing.T, userID int, kind string) []model.HwUserSignal {
+	t.Helper()
+	var signals []model.HwUserSignal
+	require.NoError(t, model.DB.Where("user_id = ? AND kind = ?", userID, kind).Find(&signals).Error)
+	return signals
+}
+
 func TestHwCompleteTelegramPhoneStep(t *testing.T) {
 	hwPhoneStepTestSetup(t)
+	// No bot token: the prompt after the login fails silently, as it does for a
+	// customer who has not started the bot.
+	t.Setenv(hwTelegramBotTokenEnv, "")
 
-	t.Run("grants once and refuses the same telegram identity on a second account", func(t *testing.T) {
+	t.Run("a telegram identity alone earns nothing", func(t *testing.T) {
+		user := hwPhoneStepTestUser(t, "only-telegram@example.com")
+		granted, reason, err := HwCompleteTelegramPhoneStep(user.Id, "12345678")
+		require.NoError(t, err)
+		assert.False(t, granted, "the login widget proves an account, not a phone number")
+		assert.Equal(t, "unverified", reason)
+		assert.Empty(t, hwPhoneStepFreePackages(t, user.Id))
+		assert.Equal(t, 0, hwPhoneStepUserQuota(t, user.Id))
+		assert.Len(t, hwPhoneStepSignals(t, user.Id, "telegram"), 1)
+		assert.Empty(t, hwPhoneStepSignals(t, user.Id, "phone"), "the identity is not a phone signal")
+	})
+
+	t.Run("after the number was shared the credit follows once", func(t *testing.T) {
 		first := hwPhoneStepTestUser(t, "first@example.com")
+		require.NoError(t, model.HwRecordPhoneSignal(first.Id, "0555 000 11 22"))
 		granted, reason, err := HwCompleteTelegramPhoneStep(first.Id, "12345678")
 		require.NoError(t, err)
-		assert.True(t, granted, "the first account with a telegram step gets the free credit (reason %q)", reason)
+		assert.True(t, granted, "the account with a shared number gets the credit (reason %q)", reason)
 		assert.Equal(t, 1, len(hwPhoneStepFreePackages(t, first.Id)))
 		assert.Greater(t, hwPhoneStepUserQuota(t, first.Id), 0)
 		var reloaded model.User
 		require.NoError(t, model.DB.Where("id = ?", first.Id).First(&reloaded).Error)
 		assert.Equal(t, "free", reloaded.Group, "the granted account moves to the free group")
 
+		// A second account that shares the same number earns nothing, whatever
+		// its Telegram identity is.
 		second := hwPhoneStepTestUser(t, "second@example.com")
-		granted, reason, err = HwCompleteTelegramPhoneStep(second.Id, "12345678")
+		require.NoError(t, model.HwRecordPhoneSignal(second.Id, "+90 555 000 11 22"))
+		granted, reason, err = HwCompleteTelegramPhoneStep(second.Id, "87654321")
 		require.NoError(t, err)
-		assert.False(t, granted, "a second account with the same telegram identity is refused")
+		assert.False(t, granted)
 		assert.Equal(t, "shared_phone", reason)
 		assert.Empty(t, hwPhoneStepFreePackages(t, second.Id))
-		assert.Equal(t, 0, hwPhoneStepUserQuota(t, second.Id))
 
-		// A different telegram identity still gets its own credit.
+		// A different number still gets its own credit.
 		third := hwPhoneStepTestUser(t, "third@example.com")
-		granted, _, err = HwCompleteTelegramPhoneStep(third.Id, "87654321")
+		require.NoError(t, model.HwRecordPhoneSignal(third.Id, "0555 000 33 44"))
+		granted, _, err = HwCompleteTelegramPhoneStep(third.Id, "11122233")
 		require.NoError(t, err)
 		assert.True(t, granted)
 	})
 
 	t.Run("without a confirmed email nothing is granted", func(t *testing.T) {
 		user := hwPhoneStepTestUser(t, "")
-		granted, reason, err := HwCompleteTelegramPhoneStep(user.Id, "11122233")
+		require.NoError(t, model.HwRecordPhoneSignal(user.Id, "0555 000 55 66"))
+		granted, reason, err := HwCompleteTelegramPhoneStep(user.Id, "12121212")
 		require.NoError(t, err)
 		assert.False(t, granted)
 		assert.Equal(t, "email_unverified", reason)
 		assert.Empty(t, hwPhoneStepFreePackages(t, user.Id))
-		// The step itself is recorded: the phone signal exists even without a
+		// The steps themselves are recorded: the signals exist even without a
 		// grant, so a later confirmed email can still claim once.
-		var signals []model.HwUserSignal
-		require.NoError(t, model.DB.Where("user_id = ? AND kind = ?", user.Id, "phone").Find(&signals).Error)
-		assert.Len(t, signals, 1)
+		assert.Len(t, hwPhoneStepSignals(t, user.Id, "phone"), 1)
+		assert.Len(t, hwPhoneStepSignals(t, user.Id, "telegram"), 1)
 	})
 
 	t.Run("a frozen account gets nothing", func(t *testing.T) {
 		user := hwPhoneStepTestUser(t, "frozen@example.com")
+		require.NoError(t, model.HwRecordPhoneSignal(user.Id, "0555 000 77 88"))
 		frozen, err := model.FreezeHwAccounts([]int{user.Id}, model.HwFreezeReasonSharedDevice, common.GetTimestamp())
 		require.NoError(t, err)
 		require.Equal(t, 1, frozen)
@@ -129,21 +175,17 @@ func TestHwCompleteTelegramPhoneStep(t *testing.T) {
 		assert.Empty(t, hwPhoneStepFreePackages(t, user.Id))
 	})
 
-	t.Run("the stored phone signal is a keyed hash, never the telegram identity", func(t *testing.T) {
+	t.Run("the stored telegram signal is a keyed hash, never the identity", func(t *testing.T) {
 		user := hwPhoneStepTestUser(t, "hash@example.com")
 		_, _, err := HwCompleteTelegramPhoneStep(user.Id, "99887766")
 		require.NoError(t, err)
-		var signals []model.HwUserSignal
-		require.NoError(t, model.DB.Where("user_id = ?", user.Id).Find(&signals).Error)
+		signals := hwPhoneStepSignals(t, user.Id, "telegram")
 		require.Len(t, signals, 1)
-		assert.Equal(t, "phone", signals[0].Kind)
 		assert.Len(t, signals[0].Hash, 64)
 		assert.NotContains(t, signals[0].Hash, "99887766")
 		var claims []model.HwFreeCreditClaim
 		require.NoError(t, model.DB.Where("user_id = ?", user.Id).Find(&claims).Error)
-		require.Len(t, claims, 1)
-		assert.Len(t, claims[0].PhoneHash, 64)
-		assert.NotContains(t, claims[0].PhoneHash, "99887766")
+		assert.Empty(t, claims, "an identity alone reserves no phone claim")
 	})
 
 	t.Run("the free amount follows the environment and part A's cap", func(t *testing.T) {
@@ -256,22 +298,26 @@ func TestHwAbusePathsKeepSignalValuesOutOfLogs(t *testing.T) {
 		deviceToken = "abcdef0123456789abcdef0123456789"
 		clientIp    = "203.0.113.77"
 		telegramID  = "telegram-identity-778899"
+		sharedPhone = "+90 555 000 99 88"
 		firstEmail  = "hmsignal@example.com"
 		secondEmail = "hmsignal2@example.com"
 	)
+	t.Setenv(hwTelegramBotTokenEnv, "")
 	now := common.GetTimestamp()
 
 	first := hwPhoneStepTestUser(t, firstEmail)
 	require.NoError(t, model.UpsertHwUserSignals(first.Id, model.HwUserSignals{DeviceToken: deviceToken, Ip: clientIp}))
+	require.NoError(t, model.HwRecordPhoneSignal(first.Id, sharedPhone))
 	granted, reason, err := HwCompleteTelegramPhoneStep(first.Id, telegramID)
 	require.NoError(t, err)
 	require.True(t, granted, "first account gets the credit, reason %q", reason)
 
 	second := hwPhoneStepTestUser(t, secondEmail)
 	require.NoError(t, model.UpsertHwUserSignals(second.Id, model.HwUserSignals{DeviceToken: deviceToken, Ip: clientIp}))
-	granted, _, err = HwCompleteTelegramPhoneStep(second.Id, telegramID)
+	require.NoError(t, model.HwRecordPhoneSignal(second.Id, sharedPhone))
+	granted, _, err = HwCompleteTelegramPhoneStep(second.Id, "telegram-identity-990011")
 	require.NoError(t, err)
-	assert.False(t, granted, "the second account on the same Telegram identity is refused")
+	assert.False(t, granted, "the second account on the same phone number is refused")
 
 	_, err = model.HwDailyAbuseSweep(now)
 	require.NoError(t, err)
@@ -282,8 +328,287 @@ func TestHwAbusePathsKeepSignalValuesOutOfLogs(t *testing.T) {
 
 	logs := buffer.String()
 	require.NotEmpty(t, logs, "the abuse paths do write their outcome")
-	for _, raw := range []string{deviceToken, clientIp, telegramID, firstEmail, secondEmail} {
+	for _, raw := range []string{deviceToken, clientIp, telegramID, sharedPhone, "+905550009988", "5550009988", firstEmail, secondEmail} {
 		assert.NotContains(t, logs, raw)
 	}
 	assert.NotRegexp(t, regexp.MustCompile(`[0-9a-f]{64}`), logs, "no keyed hash reaches a log line")
+}
+
+// hwTelegramSent is one message the fake bot API received.
+type hwTelegramSent struct {
+	ChatId int64
+	Text   string
+	// Button is the label of the share-contact button, empty when the message
+	// carried no keyboard.
+	Button string
+}
+
+// hwFakeTelegramAPI stands in for the bot API. It records what the service
+// sends, so a test can read the answer a customer would get.
+type hwFakeTelegramAPI struct {
+	mu   sync.Mutex
+	sent []hwTelegramSent
+}
+
+func (f *hwFakeTelegramAPI) record(sent hwTelegramSent) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, sent)
+}
+
+func (f *hwFakeTelegramAPI) messages() []hwTelegramSent {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]hwTelegramSent(nil), f.sent...)
+}
+
+// hwTelegramTestSetup starts a fake bot API and configures the environment of
+// the webhook. The token and the secret are clearly fake values.
+func hwTelegramTestSetup(t *testing.T) (*hwFakeTelegramAPI, string) {
+	t.Helper()
+	hwPhoneStepTestSetup(t)
+	api := &hwFakeTelegramAPI{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body hwTelegramMessageRequest
+		if err := common.DecodeJson(r.Body, &body); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		sent := hwTelegramSent{ChatId: body.ChatId, Text: body.Text}
+		if markup := body.ReplyMarkup; markup != nil && len(markup.Keyboard) == 1 && len(markup.Keyboard[0]) == 1 {
+			sent.Button = markup.Keyboard[0][0].Text
+		}
+		api.record(sent)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(server.Close)
+	const secret = "test-webhook-secret"
+	t.Setenv(hwTelegramAPIBaseEnv, server.URL)
+	t.Setenv(hwTelegramBotTokenEnv, "test-bot-token")
+	t.Setenv(hwTelegramWebhookSecretEnv, secret)
+	return api, secret
+}
+
+func hwInt64Ptr(value int64) *int64 {
+	return &value
+}
+
+// hwTelegramUpdateBody renders one bot update around the given message.
+func hwTelegramUpdateBody(t *testing.T, updateID int64, message map[string]any) []byte {
+	t.Helper()
+	body, err := common.Marshal(map[string]any{"update_id": updateID, "message": message})
+	require.NoError(t, err)
+	return body
+}
+
+// hwTelegramContactUpdate renders a message that shares a contact. A nil
+// contactUserID omits the field, as a contact without a Telegram user does.
+func hwTelegramContactUpdate(t *testing.T, updateID, fromID int64, languageCode string, contactUserID *int64, phone string) []byte {
+	t.Helper()
+	contact := map[string]any{"phone_number": phone}
+	if contactUserID != nil {
+		contact["user_id"] = *contactUserID
+	}
+	return hwTelegramUpdateBody(t, updateID, map[string]any{
+		"message_id": updateID,
+		"from":       map[string]any{"id": fromID, "language_code": languageCode},
+		"chat":       map[string]any{"id": fromID},
+		"contact":    contact,
+	})
+}
+
+// hwTelegramTextUpdate renders a text message, as the /start that opens the
+// bot chat.
+func hwTelegramTextUpdate(t *testing.T, updateID, fromID int64, languageCode, text string) []byte {
+	t.Helper()
+	return hwTelegramUpdateBody(t, updateID, map[string]any{
+		"message_id": updateID,
+		"from":       map[string]any{"id": fromID, "language_code": languageCode},
+		"chat":       map[string]any{"id": fromID},
+		"text":       text,
+	})
+}
+
+func TestHwTelegramWebhookPhoneStep(t *testing.T) {
+	t.Run("the sender's own number is recorded and earns the credit", func(t *testing.T) {
+		api, secret := hwTelegramTestSetup(t)
+		user := hwPhoneStepTestTelegramUser(t, "own-number@example.com", "700001")
+		body := hwTelegramContactUpdate(t, 1, 700001, "tr", hwInt64Ptr(700001), "+90 555 000 12 34")
+
+		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+		assert.Equal(t, http.StatusOK, outcome.HTTPStatus())
+		assert.Len(t, hwPhoneStepSignals(t, user.Id, "phone"), 1)
+		assert.Len(t, hwPhoneStepFreePackages(t, user.Id), 1)
+		assert.Greater(t, hwPhoneStepUserQuota(t, user.Id), 0)
+
+		sent := api.messages()
+		require.Len(t, sent, 1)
+		assert.Equal(t, int64(700001), sent[0].ChatId)
+		assert.Equal(t, hwTelegramTextsFor("tr").Accepted, sent[0].Text)
+		assert.NotContains(t, sent[0].Text, "555")
+	})
+
+	t.Run("a contact of someone else is refused", func(t *testing.T) {
+		api, secret := hwTelegramTestSetup(t)
+		user := hwPhoneStepTestTelegramUser(t, "forwarded@example.com", "700002")
+		body := hwTelegramContactUpdate(t, 2, 700002, "en", hwInt64Ptr(999999), "+90 555 000 22 33")
+
+		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+		assert.Equal(t, http.StatusOK, outcome.HTTPStatus())
+		assert.Empty(t, hwPhoneStepSignals(t, user.Id, "phone"))
+		assert.Empty(t, hwPhoneStepFreePackages(t, user.Id))
+		sent := api.messages()
+		require.Len(t, sent, 1)
+		assert.Equal(t, hwTelegramTextsFor("en").Rejected, sent[0].Text)
+	})
+
+	t.Run("a contact without a Telegram user id is refused", func(t *testing.T) {
+		_, secret := hwTelegramTestSetup(t)
+		user := hwPhoneStepTestTelegramUser(t, "no-user-id@example.com", "700003")
+		body := hwTelegramContactUpdate(t, 3, 700003, "tr", nil, "+90 555 000 33 44")
+
+		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+		assert.Equal(t, http.StatusOK, outcome.HTTPStatus())
+		assert.Empty(t, hwPhoneStepSignals(t, user.Id, "phone"))
+		assert.Empty(t, hwPhoneStepFreePackages(t, user.Id))
+	})
+
+	t.Run("a wrong or missing secret is refused without processing", func(t *testing.T) {
+		for _, testCase := range []struct {
+			name   string
+			header string
+		}{
+			{"wrong secret", "not-the-secret"},
+			{"missing secret", ""},
+		} {
+			t.Run(testCase.name, func(t *testing.T) {
+				api, secret := hwTelegramTestSetup(t)
+				user := hwPhoneStepTestTelegramUser(t, "forged@example.com", "700004")
+				body := hwTelegramContactUpdate(t, 4, 700004, "tr", hwInt64Ptr(700004), "+90 555 000 44 55")
+
+				outcome := HwHandleTelegramWebhook(context.Background(), body, testCase.header, time.Now())
+				assert.Equal(t, http.StatusUnauthorized, outcome.HTTPStatus())
+				assert.NotEmpty(t, secret)
+				assert.Empty(t, hwPhoneStepSignals(t, user.Id, "phone"))
+				assert.Empty(t, hwPhoneStepFreePackages(t, user.Id))
+				assert.Empty(t, api.messages())
+				var claimed int64
+				require.NoError(t, model.DB.Model(&model.HwTelegramUpdate{}).Count(&claimed).Error)
+				assert.Zero(t, claimed, "a refused update is not claimed either")
+			})
+		}
+	})
+
+	t.Run("without a configured secret every update is refused", func(t *testing.T) {
+		_, secret := hwTelegramTestSetup(t)
+		user := hwPhoneStepTestTelegramUser(t, "unconfigured@example.com", "700005")
+		t.Setenv(hwTelegramWebhookSecretEnv, "")
+		body := hwTelegramContactUpdate(t, 5, 700005, "tr", hwInt64Ptr(700005), "+90 555 000 55 66")
+
+		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+		assert.Equal(t, http.StatusServiceUnavailable, outcome.HTTPStatus())
+		assert.Empty(t, hwPhoneStepSignals(t, user.Id, "phone"))
+	})
+
+	t.Run("a second account with the same number earns nothing", func(t *testing.T) {
+		api, secret := hwTelegramTestSetup(t)
+		first := hwPhoneStepTestTelegramUser(t, "number-first@example.com", "700006")
+		second := hwPhoneStepTestTelegramUser(t, "number-second@example.com", "700007")
+
+		firstOutcome := HwHandleTelegramWebhook(context.Background(), hwTelegramContactUpdate(t, 6, 700006, "tr", hwInt64Ptr(700006), "0555 000 66 77"), secret, time.Now())
+		require.Equal(t, http.StatusOK, firstOutcome.HTTPStatus())
+		outcome := HwHandleTelegramWebhook(context.Background(), hwTelegramContactUpdate(t, 7, 700007, "tr", hwInt64Ptr(700007), "+90 555 000 66 77"), secret, time.Now())
+		assert.Equal(t, http.StatusOK, outcome.HTTPStatus())
+
+		assert.Len(t, hwPhoneStepFreePackages(t, first.Id), 1)
+		assert.Empty(t, hwPhoneStepFreePackages(t, second.Id), "the second account on one number earns nothing")
+		assert.Len(t, hwPhoneStepSignals(t, second.Id, "phone"), 1, "the number is still recorded as a signal")
+		sent := api.messages()
+		require.Len(t, sent, 2)
+		assert.Equal(t, hwTelegramTextsFor("tr").Rejected, sent[1].Text)
+	})
+
+	t.Run("a Telegram account that is linked to no user earns nothing", func(t *testing.T) {
+		api, secret := hwTelegramTestSetup(t)
+		body := hwTelegramContactUpdate(t, 8, 700008, "tr", hwInt64Ptr(700008), "+90 555 000 88 99")
+
+		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+		assert.Equal(t, http.StatusOK, outcome.HTTPStatus())
+		var signals int64
+		require.NoError(t, model.DB.Model(&model.HwUserSignal{}).Count(&signals).Error)
+		assert.Zero(t, signals)
+		var packages int64
+		require.NoError(t, model.DB.Model(&model.HwCreditPackage{}).Count(&packages).Error)
+		assert.Zero(t, packages)
+		assert.Empty(t, api.messages())
+	})
+
+	t.Run("an invalid or foreign number is refused", func(t *testing.T) {
+		for _, phone := range []string{"12345", "+1 555 123 4567", "+90 555 000 11 2a"} {
+			t.Run(phone, func(t *testing.T) {
+				api, secret := hwTelegramTestSetup(t)
+				user := hwPhoneStepTestTelegramUser(t, "bad-number@example.com", "700009")
+				body := hwTelegramContactUpdate(t, 9, 700009, "en", hwInt64Ptr(700009), phone)
+
+				outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+				assert.Equal(t, http.StatusOK, outcome.HTTPStatus())
+				assert.Empty(t, hwPhoneStepSignals(t, user.Id, "phone"))
+				assert.Empty(t, hwPhoneStepFreePackages(t, user.Id))
+				sent := api.messages()
+				require.Len(t, sent, 1)
+				assert.Equal(t, hwTelegramTextsFor("en").Rejected, sent[0].Text)
+			})
+		}
+	})
+
+	t.Run("a repeated update id is handled once", func(t *testing.T) {
+		api, secret := hwTelegramTestSetup(t)
+		user := hwPhoneStepTestTelegramUser(t, "repeat@example.com", "700010")
+		body := hwTelegramContactUpdate(t, 10, 700010, "tr", hwInt64Ptr(700010), "+90 555 000 10 10")
+
+		first := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+		require.Equal(t, http.StatusOK, first.HTTPStatus())
+		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+		assert.Equal(t, http.StatusOK, outcome.HTTPStatus(), "a repeated delivery is acknowledged")
+
+		assert.Len(t, hwPhoneStepSignals(t, user.Id, "phone"), 1)
+		assert.Len(t, hwPhoneStepFreePackages(t, user.Id), 1)
+		assert.Len(t, api.messages(), 1, "the repeated delivery sends no second answer")
+		var claimed int64
+		require.NoError(t, model.DB.Model(&model.HwTelegramUpdate{}).Count(&claimed).Error)
+		assert.Equal(t, int64(1), claimed)
+	})
+
+	t.Run("a start command answers with the share-contact button", func(t *testing.T) {
+		api, secret := hwTelegramTestSetup(t)
+		hwPhoneStepTestTelegramUser(t, "start@example.com", "700011")
+		body := hwTelegramTextUpdate(t, 11, 700011, "tr", "/start")
+
+		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+		assert.Equal(t, http.StatusOK, outcome.HTTPStatus())
+		sent := api.messages()
+		require.Len(t, sent, 1)
+		assert.Equal(t, hwTelegramTextsFor("tr").Prompt, sent[0].Text)
+		assert.Equal(t, hwTelegramTextsFor("tr").Button, sent[0].Button, "the prompt carries the share-contact button")
+	})
+
+	t.Run("the number stays out of the logs and the answers", func(t *testing.T) {
+		hwTelegramTestSetup(t)
+		var buffer bytes.Buffer
+		originalOut, originalErr := gin.DefaultWriter, gin.DefaultErrorWriter
+		gin.DefaultWriter, gin.DefaultErrorWriter = &buffer, &buffer
+		t.Cleanup(func() {
+			gin.DefaultWriter, gin.DefaultErrorWriter = originalOut, originalErr
+		})
+		hwPhoneStepTestTelegramUser(t, "quiet@example.com", "700012")
+		body := hwTelegramContactUpdate(t, 12, 700012, "tr", hwInt64Ptr(700012), "+90 555 000 12 12")
+
+		outcome := HwHandleTelegramWebhook(context.Background(), body, "test-webhook-secret", time.Now())
+		assert.Equal(t, http.StatusOK, outcome.HTTPStatus())
+
+		logs := buffer.String()
+		assert.NotContains(t, logs, "5550001212")
+		assert.NotContains(t, logs, "+905550001212")
+		assert.NotRegexp(t, regexp.MustCompile(`[0-9a-f]{64}`), logs, "no keyed hash reaches a log line")
+	})
 }
