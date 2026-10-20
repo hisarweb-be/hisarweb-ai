@@ -109,6 +109,79 @@ func TestHwDailyAbuseSweepSharedSignals(t *testing.T) {
 	})
 }
 
+func TestHwDailyAbuseSweepSharedDevice(t *testing.T) {
+	now := int64(1_700_000_000)
+
+	t.Run("a device token shared by two accounts freezes neither", func(t *testing.T) {
+		hwAbuseSweepTestSetup(t)
+		owner := hwSweepTestUser(t, now-3600)
+		copier := hwSweepTestUser(t, now-3600)
+		require.NoError(t, UpsertHwUserSignals(owner.Id, HwUserSignals{DeviceToken: "device-copied", Phone: "+905551110001"}))
+		require.NoError(t, UpsertHwUserSignals(copier.Id, HwUserSignals{DeviceToken: "device-copied", Phone: "+905551110002"}))
+
+		report, err := HwDailyAbuseSweep(now)
+		require.NoError(t, err)
+		assert.Zero(t, report.FrozenTotal, "a copied device token alone must freeze no one")
+		for _, user := range []User{owner, copier} {
+			frozen, err := HwAccountFrozen(user.Id)
+			require.NoError(t, err)
+			assert.False(t, frozen)
+		}
+	})
+
+	t.Run("a device token with a second shared signal freezes the group", func(t *testing.T) {
+		hwAbuseSweepTestSetup(t)
+		first := hwSweepTestUser(t, now-3600)
+		second := hwSweepTestUser(t, now-3600)
+		require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{DeviceToken: "device-pair", Ip: "198.51.100.7", Phone: "+905551110011"}))
+		require.NoError(t, UpsertHwUserSignals(second.Id, HwUserSignals{DeviceToken: "device-pair", Ip: "198.51.100.7", Phone: "+905551110012"}))
+
+		report, err := HwDailyAbuseSweep(now)
+		require.NoError(t, err)
+		assert.Equal(t, 2, report.SharedDevice)
+		assert.Equal(t, HwFreezeReasonSharedDevice, hwFlagOf(t, first.Id).Reason)
+		assert.Equal(t, HwFreezeReasonSharedDevice, hwFlagOf(t, second.Id).Reason)
+	})
+
+	t.Run("five accounts on one device token freeze on the default threshold", func(t *testing.T) {
+		hwAbuseSweepTestSetup(t)
+		var users []User
+		for i := range hwSweepDefaultDeviceUsers {
+			user := hwSweepTestUser(t, now-3600)
+			require.NoError(t, UpsertHwUserSignals(user.Id, HwUserSignals{
+				DeviceToken: "device-bulk",
+				Phone:       fmt.Sprintf("+9055511101%02d", i),
+			}))
+			users = append(users, user)
+		}
+
+		report, err := HwDailyAbuseSweep(now)
+		require.NoError(t, err)
+		assert.Equal(t, hwSweepDefaultDeviceUsers, report.SharedDevice)
+		for _, user := range users {
+			frozen, err := HwAccountFrozen(user.Id)
+			require.NoError(t, err)
+			assert.True(t, frozen, "one token on five accounts is a signup cycle, not a copy")
+		}
+	})
+
+	t.Run("the device threshold is configurable", func(t *testing.T) {
+		hwAbuseSweepTestSetup(t)
+		t.Setenv(hwSweepDeviceUsersEnv, "3")
+		for i := range 3 {
+			user := hwSweepTestUser(t, now-3600)
+			require.NoError(t, UpsertHwUserSignals(user.Id, HwUserSignals{
+				DeviceToken: "device-three",
+				Phone:       fmt.Sprintf("+9055511201%02d", i),
+			}))
+		}
+
+		report, err := HwDailyAbuseSweep(now)
+		require.NoError(t, err)
+		assert.Equal(t, 3, report.SharedDevice)
+	})
+}
+
 func TestHwDailyAbuseSweepWaves(t *testing.T) {
 	hwAbuseSweepTestSetup(t)
 	now := int64(1_700_000_000)

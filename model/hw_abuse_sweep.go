@@ -16,10 +16,12 @@ import (
 // from one address in one day is a wave.
 const (
 	hwSweepSharedUsersEnv = "HW_SWEEP_SHARED_USERS"
+	hwSweepDeviceUsersEnv = "HW_SWEEP_DEVICE_USERS"
 	hwSweepHourWaveEnv    = "HW_SWEEP_HOUR_WAVE"
 	hwSweepIpDayWaveEnv   = "HW_SWEEP_IP_DAY_WAVE"
 
 	hwSweepDefaultSharedUsers = 2
+	hwSweepDefaultDeviceUsers = 5
 	hwSweepDefaultHourWave    = 30
 	hwSweepDefaultIpDayWave   = 5
 
@@ -47,10 +49,11 @@ func hwSweepThreshold(env string, fallback int) int {
 }
 
 // HwDailyAbuseSweep is the nightly panic net behind the inline checks. It
-// freezes common-user accounts for review: (a) accounts that share a phone,
-// device or card signal with another account, (b) signup waves, meaning an
-// unusually full registration hour or an address that produced an unusual
-// number of accounts in one day. Freezing never touches balances: paid credit
+// freezes common-user accounts for review: (a) accounts that share a phone or
+// card signal with another account, or a device token together with a second
+// shared signal or across an unusual number of accounts, (b) signup waves,
+// meaning an unusually full registration hour or an address that produced an
+// unusual number of accounts in one day. Freezing never touches balances: paid credit
 // and the remaining balance stay exactly as they are, and the block only
 // applies to API usage that draws on the free trial credit. An administrator
 // thaws accounts after review. Log lines carry counts only.
@@ -58,16 +61,16 @@ func HwDailyAbuseSweep(now int64) (*HwAbuseSweepReport, error) {
 	report := &HwAbuseSweepReport{}
 	sharedUsers := hwSweepThreshold(hwSweepSharedUsersEnv, hwSweepDefaultSharedUsers)
 
-	// (a) Shared phone, device and card signals. The IP signal stays out: one
-	// address legitimately serves a whole household or office, and the per-day
-	// signup counter already caps what an address can create.
+	// (a) Shared phone and card signals. The IP signal stays out: one address
+	// legitimately serves a whole household or office, and the per-day signup
+	// counter already caps what an address can create. The device token has its
+	// own rule below, because a browser-chosen token costs an attacker nothing.
 	for _, kind := range []struct {
 		signalKind string
 		reason     string
 		count      *int
 	}{
 		{HwSignalKindPhone, HwFreezeReasonSharedPhone, &report.SharedPhone},
-		{HwSignalKindDevice, HwFreezeReasonSharedDevice, &report.SharedDevice},
 		{HwSignalKindCard, HwFreezeReasonSharedCard, &report.SharedCard},
 	} {
 		ids, err := hwUserIDsOnSharedSignal(kind.signalKind, sharedUsers)
@@ -81,6 +84,23 @@ func HwDailyAbuseSweep(now int64) (*HwAbuseSweepReport, error) {
 		*kind.count = frozen
 		report.FrozenTotal += frozen
 	}
+
+	// A device token is renewable per account and a copied token says nothing
+	// about the person holding it, so a shared device alone never freezes. An
+	// account counts when it also shares a phone number, address hash or card
+	// fingerprint with another account of the same device group, or when one
+	// token turned up on at least HW_SWEEP_DEVICE_USERS accounts.
+	deviceUsers := hwSweepThreshold(hwSweepDeviceUsersEnv, hwSweepDefaultDeviceUsers)
+	deviceIDs, err := hwUserIDsOnSharedDevice(deviceUsers)
+	if err != nil {
+		return report, err
+	}
+	deviceFrozen, err := FreezeHwAccounts(deviceIDs, HwFreezeReasonSharedDevice, now)
+	if err != nil {
+		return report, err
+	}
+	report.SharedDevice = deviceFrozen
+	report.FrozenTotal += deviceFrozen
 
 	// (b) Signup waves. Registration hour buckets over the last 24 hours: an
 	// hour at or above the threshold is a wave, and the accounts it created go
@@ -144,6 +164,85 @@ func hwUserIDsOnSharedSignal(kind string, sharedUsers int) ([]int, error) {
 		return nil, err
 	}
 	return userIDs, nil
+}
+
+// hwUserIDsOnSharedDevice returns the accounts that a shared device token marks
+// for review. The token is chosen by the browser and a copy costs nothing, so
+// the token alone never freezes an account: an account counts only when it also
+// shares a phone number, address hash or card fingerprint with another account
+// of the same device group, or when one token appears on at least bulkUsers
+// accounts — the shape of one person cycling through signups rather than one
+// copied token.
+func hwUserIDsOnSharedDevice(bulkUsers int) ([]int, error) {
+	var hashes []string
+	if err := DB.Model(&HwUserSignal{}).
+		Select("hash").
+		Where("kind = ? AND hash <> ?", HwSignalKindDevice, "").
+		Group("hash").
+		Having("COUNT(DISTINCT user_id) >= ?", 2).
+		Pluck("hash", &hashes).Error; err != nil {
+		return nil, err
+	}
+	var userIDs []int
+	for _, hash := range hashes {
+		var group []int
+		if err := DB.Model(&HwUserSignal{}).
+			Where("kind = ? AND hash = ?", HwSignalKindDevice, hash).
+			Distinct().
+			Pluck("user_id", &group).Error; err != nil {
+			return nil, err
+		}
+		if len(group) < 2 {
+			continue
+		}
+		if len(group) >= bulkUsers {
+			userIDs = append(userIDs, group...)
+			continue
+		}
+		second, err := hwUsersSharingSecondSignal(group)
+		if err != nil {
+			return nil, err
+		}
+		userIDs = append(userIDs, second...)
+	}
+	return userIDs, nil
+}
+
+// hwUsersSharingSecondSignal returns the users of one device group that also
+// share a phone number, address hash or card fingerprint with another user of
+// that same group. A second signal held by only one account of the group proves
+// nothing about the group.
+func hwUsersSharingSecondSignal(group []int) ([]int, error) {
+	var signals []HwUserSignal
+	if err := DB.Where("user_id IN ? AND kind IN ? AND hash <> ?", group,
+		[]string{HwSignalKindPhone, HwSignalKindIp, HwSignalKindCard}, "").
+		Find(&signals).Error; err != nil {
+		return nil, err
+	}
+	usersBySignal := make(map[string]map[int]struct{}, len(signals))
+	for _, signal := range signals {
+		key := signal.Kind + "\x00" + signal.Hash
+		if usersBySignal[key] == nil {
+			usersBySignal[key] = make(map[int]struct{}, 2)
+		}
+		usersBySignal[key][signal.UserId] = struct{}{}
+	}
+	qualifying := make(map[int]struct{}, len(group))
+	for _, users := range usersBySignal {
+		if len(users) < 2 {
+			continue
+		}
+		for userID := range users {
+			qualifying[userID] = struct{}{}
+		}
+	}
+	shared := make([]int, 0, len(qualifying))
+	for _, userID := range group {
+		if _, ok := qualifying[userID]; ok {
+			shared = append(shared, userID)
+		}
+	}
+	return shared, nil
 }
 
 // hwSignupWaveUserIDs finds users created in a registration hour that reached

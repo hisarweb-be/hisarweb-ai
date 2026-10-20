@@ -196,7 +196,7 @@ func TestHwGrantFreeCreditIfPhoneStepSkipped(t *testing.T) {
 		assert.Empty(t, hwPhoneStepFreePackages(t, user.Id))
 	})
 
-	t.Run("the same device token on two accounts refuses the second", func(t *testing.T) {
+	t.Run("a copied device token refuses no second account", func(t *testing.T) {
 		t.Setenv("APP_ENV", "development")
 		t.Setenv("HW_SKIP_PHONE_STEP", "1")
 		deviceToken := strings.Repeat("ab", 32)
@@ -210,9 +210,8 @@ func TestHwGrantFreeCreditIfPhoneStepSkipped(t *testing.T) {
 		require.NoError(t, model.UpsertHwUserSignals(second.Id, model.HwUserSignals{DeviceToken: deviceToken}))
 		granted, reason, err = HwGrantFreeCreditIfPhoneStepSkipped(second.Id)
 		require.NoError(t, err)
-		assert.False(t, granted, "a second account from the same device is refused")
-		assert.Equal(t, "shared_device", reason)
-		assert.Empty(t, hwPhoneStepFreePackages(t, second.Id))
+		assert.True(t, granted, "the browser chooses the token, so a copy refuses nothing (reason %q)", reason)
+		assert.Len(t, hwPhoneStepFreePackages(t, second.Id), 1)
 	})
 }
 

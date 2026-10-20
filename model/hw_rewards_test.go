@@ -329,24 +329,29 @@ func TestHwGrantFreeTrialCreditGuards(t *testing.T) {
 		assert.Zero(t, count, "no free package is issued on a device token alone")
 	})
 
-	t.Run("refuses a device another account already used for the free credit", func(t *testing.T) {
+	t.Run("a copied device token refuses and blocks no other account", func(t *testing.T) {
 		hwCreditTestSetup(t)
-		first := createHwTestUser(t, 0)
-		second := createHwTestUser(t, 0)
-		hwMarkPhoneVerified(t, first.Id)
-		hwMarkPhoneVerified(t, second.Id)
-		require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{DeviceToken: "device-one"}))
-		require.NoError(t, UpsertHwUserSignals(second.Id, HwUserSignals{DeviceToken: "device-one"}))
+		victim := createHwTestUser(t, 0)
+		attacker := createHwTestUser(t, 0)
+		hwMarkPhoneVerified(t, victim.Id)
+		hwMarkPhoneVerified(t, attacker.Id)
+		// The attacker copies the browser-chosen token of the victim into its own
+		// account; that must neither deny the victim's credit nor freeze anyone.
+		require.NoError(t, UpsertHwUserSignals(victim.Id, HwUserSignals{DeviceToken: "device-copied"}))
+		require.NoError(t, UpsertHwUserSignals(attacker.Id, HwUserSignals{DeviceToken: "device-copied"}))
 
-		granted, reason, err := HwGrantFreeTrialCredit(first.Id, 100, now)
+		granted, reason, err := HwGrantFreeTrialCredit(victim.Id, 100, now)
 		require.NoError(t, err)
 		require.True(t, granted, "reason: %s", reason)
 
-		granted, reason, err = HwGrantFreeTrialCredit(second.Id, 100, now)
+		granted, reason, err = HwGrantFreeTrialCredit(attacker.Id, 100, now)
 		require.NoError(t, err)
-		assert.False(t, granted)
-		assert.Equal(t, HwFreeTrialSharedSignal+"device", reason)
-		assert.Equal(t, 0, getUserQuotaFromDB(t, second.Id))
+		assert.True(t, granted, "a shared device token is no refusal: %s", reason)
+
+		assert.Equal(t, 100, getUserQuotaFromDB(t, victim.Id), "the victim keeps the free credit")
+		frozen, err := HwAccountFrozen(victim.Id)
+		require.NoError(t, err)
+		assert.False(t, frozen, "a copied token must not freeze the account that owns it")
 	})
 
 	t.Run("refuses a card another account already used for the free credit", func(t *testing.T) {

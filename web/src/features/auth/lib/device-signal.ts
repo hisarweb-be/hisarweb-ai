@@ -21,13 +21,19 @@ For commercial licensing, please contact support@quantumnous.com
 //
 // The server accepts a hex token of 16 to 128 characters in the X-HW-Device
 // header, hashes it again with its own secret and keeps only that hash. This
-// helper therefore never sends a raw browser trait: it hashes a small set of
-// coarse traits (screen, language, time zone, hardware concurrency) plus a
-// canvas rendering into one hex string. The token is only as stable as the
-// browser: a private window or a changed screen size yields another token,
-// which costs the free trial credit but never blocks the signup.
+// helper therefore never sends a raw browser trait: it hashes several coarse
+// traits (screen, language, time zone, hardware concurrency) together with the
+// drawn pixels of a canvas into one hex string. The token is only as stable as
+// the browser: a private window or a changed screen size yields another token.
+// The server treats a device token as a weak signal only, so an unstable token
+// costs nothing beyond that hint.
 
 const HW_DEVICE_TOKEN_KEY = 'hw-device-token'
+
+// The end of every PNG data URL holds the same constant IEND chunk and CRC, so
+// those trailing characters are identical in every browser and carry no signal.
+// They are dropped instead of being hashed as if they identified a device.
+const HW_PNG_FIXED_TAIL_LENGTH = 64
 
 let cachedToken: string | null = null
 
@@ -57,6 +63,8 @@ function browserTraits(): string {
   return [
     screenInfo?.width,
     screenInfo?.height,
+    screenInfo?.availWidth,
+    screenInfo?.availHeight,
     screenInfo?.colorDepth,
     navigatorInfo.language,
     navigatorInfo.languages?.join(','),
@@ -78,7 +86,11 @@ function canvasTrait(): string {
     context.fillRect(0, 0, 60, 20)
     context.fillStyle = '#069'
     context.fillText('HisarWeb', 2, 2)
-    return canvas.toDataURL().slice(-32)
+    const dataUrl = canvas.toDataURL()
+    const payloadStart = dataUrl.indexOf(',') + 1
+    const payloadEnd = dataUrl.length - HW_PNG_FIXED_TAIL_LENGTH
+    if (payloadStart <= 0 || payloadEnd <= payloadStart) return ''
+    return dataUrl.slice(payloadStart, payloadEnd)
   } catch {
     return ''
   }
