@@ -35,7 +35,7 @@ For commercial licensing, please contact support@quantumnous.com
    nodig is en de eerste weergave niet wacht. */
 @font-face {
   font-family: 'Inter var';
-  src: url('/fonts/inter-var.ttf') format('truetype');
+  src: url('../../public/fonts/inter-var.ttf') format('truetype');
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
