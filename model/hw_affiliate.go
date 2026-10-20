@@ -6,6 +6,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // HwAffiliatePercent is the share of a paid purchase's list value that the
@@ -186,4 +187,90 @@ func HwRevokeAffiliateReward(orderRef string, now int64) error {
 		}
 	}
 	return nil
+}
+
+// hwAffiliateRetryMaxAttempts bounds how often the retry queue re-attempts one
+// reward. The queue is picked up every reconciliation round (10 minutes), so
+// this is roughly an hour of retries before the loss is escalated to the log.
+const hwAffiliateRetryMaxAttempts = 6
+
+// HwAffiliateRetry is the retry queue of affiliate rewards whose grant failed
+// with a storage error after a payment was already settled. Losing the reward
+// silently is not acceptable, so the failed grant is recorded here, unique per
+// purchase reference, and the reconciliation round retries it.
+type HwAffiliateRetry struct {
+	Id        int    `json:"id" gorm:"primaryKey"`
+	OrderRef  string `json:"order_ref" gorm:"type:varchar(128);not null;uniqueIndex"`
+	BuyerId   int    `json:"buyer_id" gorm:"not null"`
+	ListQuota int    `json:"list_quota" gorm:"not null"`
+	Attempts  int    `json:"attempts" gorm:"not null;default:0"`
+	CreatedAt int64  `json:"created_at" gorm:"not null;default:0"`
+}
+
+func (HwAffiliateRetry) TableName() string {
+	return "hw_affiliate_retries"
+}
+
+// HwEnqueueAffiliateRetry records a reward grant that failed after its payment
+// was settled, so the reconciliation round retries it. The unique index on the
+// purchase reference makes a second enqueue for the same purchase a quiet
+// no-op.
+func HwEnqueueAffiliateRetry(buyerID int, listQuota int, orderRef string, now int64) (bool, error) {
+	if buyerID <= 0 || listQuota <= 0 || orderRef == "" || now <= 0 {
+		return false, ErrHwInvalidCreditGrant
+	}
+	retry := HwAffiliateRetry{OrderRef: orderRef, BuyerId: buyerID, ListQuota: listQuota, CreatedAt: now}
+	result := DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "order_ref"}},
+		DoNothing: true,
+	}).Create(&retry)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected == 1, nil
+}
+
+// HwRetryPendingAffiliateRewards works the retry queue. A grant that succeeded
+// or was refused for a permanent reason removes its row; a storage failure
+// counts one attempt, and a row whose attempts run out is dropped with an error
+// log so the loss is visible to the operator. Only counts are logged, never
+// values: an order reference or a quota never reaches the log.
+func HwRetryPendingAffiliateRewards(now int64) (granted int, dropped int, err error) {
+	if now <= 0 {
+		return 0, 0, ErrHwInvalidCreditGrant
+	}
+	var rows []HwAffiliateRetry
+	if err := DB.Order("id").Find(&rows).Error; err != nil {
+		return 0, 0, err
+	}
+	var firstErr error
+	for _, row := range rows {
+		ok, reason, grantErr := HwGrantAffiliateReward(row.BuyerId, row.ListQuota, row.OrderRef, now)
+		switch {
+		case grantErr == nil:
+			// granted, or a permanent refusal reason: either way this row is
+			// done and must not be retried again.
+			if ok {
+				granted++
+			} else if reason == HwAffiliateNotPaidPurchase {
+				// The purchase package is gone (for example a refund took the
+				// order back); nothing left to reward.
+			}
+			if err := DB.Where("id = ?", row.Id).Delete(&HwAffiliateRetry{}).Error; err != nil && firstErr == nil {
+				firstErr = err
+			}
+		case row.Attempts+1 >= hwAffiliateRetryMaxAttempts:
+			dropped++
+			common.SysError(common.LogText("affiliate reward retry gave up after %d attempts (class %s)", row.Attempts+1, hwErrorClass(grantErr)))
+			if err := DB.Where("id = ?", row.Id).Delete(&HwAffiliateRetry{}).Error; err != nil && firstErr == nil {
+				firstErr = err
+			}
+		default:
+			if err := DB.Model(&HwAffiliateRetry{}).Where("id = ?", row.Id).
+				Update("attempts", row.Attempts+1).Error; err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+	return granted, dropped, firstErr
 }

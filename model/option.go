@@ -55,6 +55,11 @@ func InitOptionMap() {
 	common.OptionMap["DisplayTokenStatEnabled"] = strconv.FormatBool(common.DisplayTokenStatEnabled)
 	common.OptionMap["DrawingEnabled"] = strconv.FormatBool(common.DrawingEnabled)
 	common.OptionMap["TaskEnabled"] = strconv.FormatBool(common.TaskEnabled)
+	common.OptionMap[HwTryPerUsdOption] = ""
+	common.OptionMap[HwMinTopUpTryOption] = "100"
+	common.OptionMap[HwMaxTopUpTryOption] = "20000"
+	common.OptionMap[HwMaxOpenOrdersOption] = "3"
+	common.OptionMap[HwCheckoutReturnURLOption] = ""
 	common.OptionMap["TaskPluginEnabled"] = strconv.FormatBool(constant.TaskPluginEnabled)
 	jsplugin.DefaultRegistry.SetEnabled(constant.TaskPluginEnabled)
 	common.OptionMap[setting.TaskPluginMarketplaceSourcesKey] = setting.TaskPluginMarketplaceSources2JsonString()

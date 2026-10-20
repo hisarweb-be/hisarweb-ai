@@ -386,6 +386,7 @@ func InitResources() error {
 	model.StartHwCreditExpiryJob()
 	// Freeze shared-signal and signup-wave accounts for review once a day.
 	model.StartHwDailyAbuseSweepJob()
+	service.StartHwOrderExpiryJob()
 
 	// Refresh the TL price snapshot (price list + daily rate) once a day on
 	// the master node.
