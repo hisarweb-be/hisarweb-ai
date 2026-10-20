@@ -362,3 +362,59 @@ func TestHwCustomerMailLanguageChoice(t *testing.T) {
 
 	hwMailTestAssertNoSupplierName(t, *mails)
 }
+
+// The address confirmation and the password reset leave in the name of the site
+// the operator set, in Turkish unless the customer reads English. Neither mail
+// may carry the name of the upstream project or of a model supplier.
+func TestHwAccountMails(t *testing.T) {
+	previousName := common.SystemName
+	common.SystemName = "HisarWeb AI"
+	t.Cleanup(func() { common.SystemName = previousName })
+
+	t.Run("the verification mail is Turkish with the site name", func(t *testing.T) {
+		subject, content := HwEmailVerificationMail("", "428193", 15)
+		assert.Equal(t, "HisarWeb AI e-posta doğrulama", subject)
+		assert.Contains(t, content, "Merhaba,")
+		assert.Contains(t, content, "428193")
+		assert.Contains(t, content, "15 dakika")
+		hwMailTestAssertNoSupplierName(t, []hwMailTestMessage{{Subject: subject, Content: content}})
+		assert.NotContains(t, subject+content, "New API")
+		assert.NotContains(t, strings.ToLower(subject+content), "newapi")
+	})
+
+	t.Run("an english reader gets the english text", func(t *testing.T) {
+		subject, content := HwEmailVerificationMail("en-US", "428193", 15)
+		assert.Equal(t, "HisarWeb AI email verification", subject)
+		assert.Contains(t, content, "Hello,")
+		assert.Contains(t, content, "428193")
+	})
+
+	t.Run("other languages fall back to Turkish", func(t *testing.T) {
+		subject, _ := HwEmailVerificationMail("zh-CN", "428193", 15)
+		assert.Equal(t, "HisarWeb AI e-posta doğrulama", subject)
+		assert.Equal(t, hwLanguageTurkish, HwAccountMailLanguage("zh-CN"))
+		assert.Equal(t, hwLanguageEnglish, HwAccountMailLanguage("en"))
+	})
+
+	t.Run("the reset mail carries the link and the reset text", func(t *testing.T) {
+		link := "https://example.test/user/reset?email=a%40b.test&token=778899"
+		subject, content := HwPasswordResetMail("tr", link, 15)
+		assert.Equal(t, "HisarWeb AI şifre sıfırlama", subject)
+		assert.Contains(t, content, "778899")
+		assert.Contains(t, content, "15 dakika")
+		englishSubject, englishContent := HwPasswordResetMail("en", link, 15)
+		assert.Equal(t, "HisarWeb AI password reset", englishSubject)
+		assert.Contains(t, englishContent, "reset your password")
+		hwMailTestAssertNoSupplierName(t, []hwMailTestMessage{
+			{Subject: subject, Content: content},
+			{Subject: englishSubject, Content: englishContent},
+		})
+	})
+
+	t.Run("an empty site name never leaves the mail without a brand", func(t *testing.T) {
+		common.SystemName = "  "
+		t.Cleanup(func() { common.SystemName = "HisarWeb AI" })
+		subject, _ := HwEmailVerificationMail("tr", "1", 15)
+		assert.Equal(t, "HisarWeb AI e-posta doğrulama", subject)
+	})
+}
