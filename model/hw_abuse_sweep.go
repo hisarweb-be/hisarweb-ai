@@ -139,6 +139,9 @@ func HwDailyAbuseSweep(now int64) (*HwAbuseSweepReport, error) {
 	if err := HwDeleteOldSignupIpRows(now, 2); err != nil {
 		return report, err
 	}
+	if err := HwDeleteOldTelegramUpdates(now, HwTelegramUpdateKeepDays); err != nil {
+		return report, err
+	}
 	if report.FrozenTotal > 0 {
 		common.SysLog(common.LogText("hw: abuse sweep froze %d accounts (shared phone %d, shared device %d, shared card %d, signup waves %d)",
 			report.FrozenTotal, report.SharedPhone, report.SharedDevice, report.SharedCard, report.SignupWave))

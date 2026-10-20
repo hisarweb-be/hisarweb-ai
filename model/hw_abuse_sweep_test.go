@@ -16,12 +16,12 @@ import (
 func hwAbuseSweepTestSetup(t *testing.T) {
 	t.Helper()
 	hwCreditTestSetup(t)
-	require.NoError(t, DB.AutoMigrate(&HwAccountFlag{}, &HwSignupIp{}))
-	for _, table := range []string{"hw_account_flags", "hw_signup_ips", "users"} {
+	require.NoError(t, DB.AutoMigrate(&HwAccountFlag{}, &HwSignupIp{}, &HwTelegramUpdate{}))
+	for _, table := range []string{"hw_account_flags", "hw_signup_ips", "hw_telegram_updates", "users"} {
 		require.NoError(t, DB.Exec("DELETE FROM "+table).Error)
 	}
 	t.Cleanup(func() {
-		for _, table := range []string{"hw_account_flags", "hw_signup_ips", "users"} {
+		for _, table := range []string{"hw_account_flags", "hw_signup_ips", "hw_telegram_updates", "users"} {
 			DB.Exec("DELETE FROM " + table)
 		}
 	})
@@ -504,6 +504,24 @@ func TestHwUnfreezeAccount(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, isFrozen)
 	})
+}
+
+// The Telegram update log grows with every onboarding message. Telegram retries
+// a delivery for a short while only, so the sweep keeps a week of claims and
+// drops the rest; a fresh claim must survive.
+func TestHwDailyAbuseSweepKeepsOneWeekOfTelegramUpdates(t *testing.T) {
+	hwAbuseSweepTestSetup(t)
+	now := int64(1_700_000_000)
+	require.NoError(t, DB.Create(&HwTelegramUpdate{UpdateId: 11, CreatedAt: now - 8*24*3600}).Error)
+	require.NoError(t, DB.Create(&HwTelegramUpdate{UpdateId: 12, CreatedAt: now - 6*24*3600}).Error)
+	require.NoError(t, DB.Create(&HwTelegramUpdate{UpdateId: 13, CreatedAt: now - 7*24*3600 + 60}).Error)
+
+	_, err := HwDailyAbuseSweep(now)
+	require.NoError(t, err)
+
+	var remaining []int64
+	require.NoError(t, DB.Model(&HwTelegramUpdate{}).Order("update_id").Pluck("update_id", &remaining).Error)
+	assert.Equal(t, []int64{12, 13}, remaining, "a week of update claims stays, the older one goes")
 }
 
 // hwSweepTestSignalSeen pins the observation time of every signal of a user, so

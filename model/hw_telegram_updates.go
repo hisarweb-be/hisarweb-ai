@@ -50,3 +50,18 @@ func HwReleaseTelegramUpdate(updateID int64) error {
 	}
 	return DB.Where("update_id = ?", updateID).Delete(&HwTelegramUpdate{}).Error
 }
+
+// HwTelegramUpdateKeepDays is how long a claim is kept. Telegram retries a
+// delivery for a short while only, so a week covers every retry it makes and
+// keeps the table from growing one row per onboarding message forever.
+const HwTelegramUpdateKeepDays = 7
+
+// HwDeleteOldTelegramUpdates drops the claims older than keepDays, counted back
+// from now. The daily abuse sweep calls it; a claim that is gone can only be
+// claimed again, which is the idempotent path the handler already takes.
+func HwDeleteOldTelegramUpdates(now int64, keepDays int) error {
+	if keepDays <= 0 {
+		keepDays = HwTelegramUpdateKeepDays
+	}
+	return DB.Where("created_at < ?", now-int64(keepDays)*24*3600).Delete(&HwTelegramUpdate{}).Error
+}
