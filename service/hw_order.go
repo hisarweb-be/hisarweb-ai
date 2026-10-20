@@ -176,6 +176,7 @@ func HwCreateTopUpOrder(ctx context.Context, userID int, request HwTopUpRequest,
 		PayableTryMinor:   payableMinor.IntPart(),
 		Currency:          model.HwOrderCurrency,
 		DiscountKind:      discountKind,
+		Language:          hwLanguageTag(request.Language),
 		Status:            model.HwOrderStatusCreated,
 		CreatedAt:         now.Unix(),
 	}
@@ -224,8 +225,20 @@ func hwAbandonOrder(merchantRef string, releaseClaim func(), now time.Time) {
 	}
 }
 
+// hwLanguageTag reduces a client language value to the two tags the site
+// speaks. Anything that is not English falls back to Turkish, the default
+// language of the site (SM-10), both for the provider description and for the
+// order record the customer mail job reads.
+func hwLanguageTag(language string) string {
+	tag := strings.ToLower(strings.TrimSpace(language))
+	if tag == hwLanguageEnglish || strings.HasPrefix(tag, hwLanguageEnglish+"-") {
+		return hwLanguageEnglish
+	}
+	return hwLanguageTurkish
+}
+
 func hwTopUpDescription(language string) string {
-	if strings.EqualFold(strings.TrimSpace(language), "tr") {
+	if hwLanguageTag(language) == hwLanguageTurkish {
 		return "HisarWeb AI kredi yüklemesi"
 	}
 	return "HisarWeb AI credit top-up"

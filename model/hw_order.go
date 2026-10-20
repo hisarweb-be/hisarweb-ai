@@ -71,9 +71,14 @@ type HwOrder struct {
 	PayableTryMinor   int64   `json:"payable_try_minor" gorm:"not null"`
 	Currency          string  `json:"currency" gorm:"type:varchar(3);not null"`
 	DiscountKind      string  `json:"discount_kind" gorm:"type:varchar(32);not null"`
-	Status            string  `json:"status" gorm:"type:varchar(16);not null;index"`
-	CreatedAt         int64   `json:"created_at" gorm:"not null;default:0"`
-	PaidAt            int64   `json:"paid_at" gorm:"not null;default:0"`
+	// Language is the language the customer chose at the checkout ("tr" or
+	// "en"). The customer mail job reads the choice of the latest order first,
+	// because that is the language the customer was reading when they last
+	// dealt with us.
+	Language  string `json:"language" gorm:"type:varchar(8);not null;default:''"`
+	Status    string `json:"status" gorm:"type:varchar(16);not null;index"`
+	CreatedAt int64  `json:"created_at" gorm:"not null;default:0"`
+	PaidAt    int64  `json:"paid_at" gorm:"not null;default:0"`
 	// AdminNote records why an order was settled outside the normal rules (a
 	// late payment without its discount, a provider report that disagreed) or
 	// what a refund left owed. It is operational text for the admin only; the
@@ -98,12 +103,20 @@ func hwOrderCloseStatus(status string) bool {
 	}
 }
 
+// hwOrderLanguageValid reports whether Language holds one of the two tags the
+// site speaks. An order records the language before a customer-facing mail is
+// planned from it, so an unknown tag is refused instead of being carried along.
+func hwOrderLanguageValid(language string) bool {
+	return language == "tr" || language == "en"
+}
+
 // HwCreateOrder stores a new order before the payment provider is called, so an
 // arriving webhook always finds it. The reference is ours and unique.
 func HwCreateOrder(order *HwOrder) error {
 	if order == nil || order.UserId <= 0 || strings.TrimSpace(order.MerchantRef) == "" ||
 		order.ListQuota <= 0 || order.ListValueTryMinor <= 0 || order.PayableTryMinor <= 0 ||
-		order.Currency != HwOrderCurrency || order.CreatedAt <= 0 || !hwOrderIsOpen(order.Status) {
+		order.Currency != HwOrderCurrency || order.CreatedAt <= 0 || !hwOrderIsOpen(order.Status) ||
+		!hwOrderLanguageValid(order.Language) {
 		return ErrHwInvalidOrder
 	}
 	if order.DiscountKind != HwDiscountFirstPurchase && order.DiscountKind != HwDiscountReturning {

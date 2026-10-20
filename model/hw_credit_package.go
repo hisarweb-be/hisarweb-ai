@@ -79,6 +79,18 @@ type HwCreditPackage struct {
 	OrderRef         string `json:"order_ref" gorm:"type:varchar(128);not null;uniqueIndex:idx_hw_credit_packages_source_order_ref,priority:2"`
 	RetiredAt        int64  `json:"retired_at" gorm:"not null;default:0"`
 	RetiredRemaining int    `json:"retired_remaining" gorm:"not null;default:0"`
+	// ExtensionSeconds is the outage time added to ExpiresAt by the status
+	// incidents (see hwAttachCreditExtensions). It is loaded from
+	// hw_credit_extensions and never written on this row, so the extension stays
+	// one fact per outage and package.
+	ExtensionSeconds int64 `json:"extension_seconds" gorm:"-"`
+}
+
+// HwEffectiveExpiresAt is the expiry the customer actually has: the package's
+// own expiry plus every outage extension. The derived fill, the retirement and
+// the package list all compare against this value.
+func (pkg HwCreditPackage) HwEffectiveExpiresAt() int64 {
+	return pkg.ExpiresAt + pkg.ExtensionSeconds
 }
 
 func (HwCreditPackage) TableName() string {
@@ -94,7 +106,8 @@ type HwPackageView struct {
 	GrantedQuota   int    `json:"granted_quota"`
 	RemainingQuota int    `json:"remaining_quota"`
 	CreatedAt      int64  `json:"created_at"`
-	ExpiresAt      int64  `json:"expires_at"`
+	// ExpiresAt is the effective expiry, including the outage extensions.
+	ExpiresAt int64 `json:"expires_at"`
 }
 
 func isValidHwCreditSource(source string) bool {
@@ -336,6 +349,9 @@ func HwPromoteToPaidGroup(tx *gorm.DB, userID int) error {
 // Balance above the sum of all active packages (legacy or manually adjusted
 // quota) belongs to no package and never expires.
 //
+// A package whose expiry was extended by an outage is placed and filled at its
+// effective expiry (ExpiresAt plus ExtensionSeconds).
+//
 // The returned views follow the fill order: latest expiry first.
 func HwPackageRemaining(userID int, quotaNow int, pkgs []HwCreditPackage) []HwPackageView {
 	active := make([]HwCreditPackage, 0, len(pkgs))
@@ -345,7 +361,7 @@ func HwPackageRemaining(userID int, quotaNow int, pkgs []HwCreditPackage) []HwPa
 		}
 	}
 	slices.SortFunc(active, func(a, b HwCreditPackage) int {
-		if order := cmp.Compare(b.ExpiresAt, a.ExpiresAt); order != 0 {
+		if order := cmp.Compare(b.HwEffectiveExpiresAt(), a.HwEffectiveExpiresAt()); order != 0 {
 			return order
 		}
 		return cmp.Compare(b.Id, a.Id)
@@ -363,7 +379,7 @@ func HwPackageRemaining(userID int, quotaNow int, pkgs []HwCreditPackage) []HwPa
 			GrantedQuota:   pkg.GrantedQuota,
 			RemainingQuota: remaining,
 			CreatedAt:      pkg.CreatedAt,
-			ExpiresAt:      pkg.ExpiresAt,
+			ExpiresAt:      pkg.HwEffectiveExpiresAt(),
 		})
 	}
 	return views
@@ -381,6 +397,9 @@ func ListUserCreditPackages(userID int) ([]HwPackageView, error) {
 	}
 	var pkgs []HwCreditPackage
 	if err := DB.Where("user_id = ? AND retired_at = 0", userID).Find(&pkgs).Error; err != nil {
+		return nil, err
+	}
+	if err := hwAttachCreditExtensions(DB, pkgs); err != nil {
 		return nil, err
 	}
 	return HwPackageRemaining(userID, user.Quota, pkgs), nil
@@ -471,6 +490,11 @@ func retireExpiredPackagesForUser(userID int, now int64) (int, error) {
 		if err := tx.Where("user_id = ? AND retired_at = 0", userID).Find(&pkgs).Error; err != nil {
 			return err
 		}
+		// The outage extensions are part of the expiry this run compares with, so
+		// they are loaded before the fill assigns the remaining quota.
+		if err := hwAttachCreditExtensions(tx, pkgs); err != nil {
+			return err
+		}
 		// Derive the fill over every active package, not only the expiring ones:
 		// the expiring package holds whatever is left after the later ones. A
 		// deleted account has no balance to fill from, so its packages retire
@@ -483,7 +507,7 @@ func retireExpiredPackagesForUser(userID int, now int64) (int, error) {
 		}
 		expiringQuota := 0
 		for _, pkg := range pkgs {
-			if pkg.ExpiresAt > now {
+			if pkg.HwEffectiveExpiresAt() > now {
 				continue
 			}
 			rest := remaining[pkg.Id]
