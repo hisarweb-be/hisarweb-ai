@@ -418,6 +418,7 @@ func hwSettleConfirmedOrder(order *model.HwOrder, providerOrder hwRevolutOrderRe
 	}
 	if settlement.Granted {
 		model.HwSyncCachesAfterGrant(settlement.UserId, settlement.GrantedQuota, model.HwSourcePurchase)
+		model.HwSyncCachesAfterFreeForfeit(settlement.UserId, settlement.ForfeitedFreeQuota)
 	}
 	// Re-record the card signal of every paid discounted order, so the
 	// shared-card checks of later orders keep working even when the payment

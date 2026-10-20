@@ -70,6 +70,9 @@ var accessTokenExemptRoutes = []string{
 	"GET /api/subscription/epay/return",
 	"POST /api/subscription/epay/return",
 
+	// Bot callback: authenticated by the secret header registered with the bot.
+	"POST /api/hw/telegram/webhook",
+
 	// API key authentication (TokenAuthReadOnly).
 	"GET /api/usage/token/",
 	"GET /api/log/token",

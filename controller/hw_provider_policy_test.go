@@ -25,8 +25,8 @@ func TestHwSupplierOutageRetriesLumiaOnceThenFallsBack(t *testing.T) {
 	lumia := env.fake("lumia")
 	openrouter := env.fake("openrouter")
 	lumia.setMode(hwFakeTimeout)
-	env.addChannel("lumia-primary", "paid", "lumia", 0, lumia)
-	env.addChannel("emergency", "paid", "openrouter", 1, openrouter)
+	env.addChannel("lumia-primary", "paid", "lumia", hwTestModel, 0, lumia)
+	env.addChannel("emergency", "paid", "openrouter", hwTestModel, 1, openrouter)
 
 	recorder := env.post("/v1/chat/completions", hwChatRequest(hwTestModel, false))
 
@@ -48,22 +48,28 @@ func TestHwSupplierOutageRetriesLumiaOnceThenFallsBack(t *testing.T) {
 // emergency channel is wrongly listed in the free group, and unknown groups
 // behave the same as free.
 func TestHwFreeAndUnknownGroupsNeverReachEmergencySupplier(t *testing.T) {
+	// The free case asks for the Haiku class, the only class the free-group
+	// model gate lets through; a Sonnet request of a free account is refused
+	// before any channel is chosen and would never reach the supplier route this
+	// test protects. The unknown group is not a trial account and stays on the
+	// Sonnet class.
 	for _, testCase := range []struct {
 		name  string
 		group string
+		model string
 	}{
-		{name: "free", group: "free"},
-		{name: "unknown", group: "internal-ops"},
+		{name: "free", group: "free", model: "claude-haiku-4-5"},
+		{name: "unknown", group: "internal-ops", model: hwTestModel},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			env := hwNewEnv(t, testCase.group, 1_000_000)
 			lumia := env.fake("lumia")
 			openrouter := env.fake("openrouter")
 			lumia.setMode(hwFakeTimeout)
-			env.addChannel("lumia-primary", testCase.group, "lumia", 0, lumia)
-			env.addChannel("wrongly-tagged-emergency", testCase.group, "openrouter", 1, openrouter)
+			env.addChannel("lumia-primary", testCase.group, "lumia", testCase.model, 0, lumia)
+			env.addChannel("wrongly-tagged-emergency", testCase.group, "openrouter", testCase.model, 1, openrouter)
 
-			recorder := env.post("/v1/chat/completions", hwChatRequest(hwTestModel, false))
+			recorder := env.post("/v1/chat/completions", hwChatRequest(testCase.model, false))
 
 			require.Equal(t, 503, recorder.Code, recorder.Body.String())
 			assert.Contains(t, recorder.Body.String(), "service_busy")
@@ -76,7 +82,9 @@ func TestHwFreeAndUnknownGroupsNeverReachEmergencySupplier(t *testing.T) {
 
 // T3b: the paid rule looks at the account group as well. A free account whose
 // token stands on the paid group through a usable-group grant must not reach
-// the emergency supplier either.
+// the emergency supplier either. The request uses the Haiku class: the model
+// gate already refuses the Sonnet class of a free account before a channel is
+// chosen, so only the Haiku class reaches the supplier route under test.
 func TestHwFreeAccountWithPaidTokenNeverReachesEmergencySupplier(t *testing.T) {
 	env := hwNewEnv(t, "free", 1_000_000)
 	hwGrantTokenGroup(t, "free", "paid")
@@ -86,10 +94,10 @@ func TestHwFreeAccountWithPaidTokenNeverReachesEmergencySupplier(t *testing.T) {
 	lumia := env.fake("lumia")
 	openrouter := env.fake("openrouter")
 	lumia.setMode(hwFakeTimeout)
-	env.addChannel("lumia-primary", "paid", "lumia", 0, lumia)
-	env.addChannel("emergency", "paid", "openrouter", 1, openrouter)
+	env.addChannel("lumia-primary", "paid", "lumia", "claude-haiku-4-5", 0, lumia)
+	env.addChannel("emergency", "paid", "openrouter", "claude-haiku-4-5", 1, openrouter)
 
-	recorder := env.post("/v1/chat/completions", hwChatRequest(hwTestModel, false))
+	recorder := env.post("/v1/chat/completions", hwChatRequest("claude-haiku-4-5", false))
 
 	require.Equal(t, http.StatusServiceUnavailable, recorder.Code, recorder.Body.String())
 	assert.Contains(t, recorder.Body.String(), "service_busy")
@@ -101,12 +109,18 @@ func TestHwFreeAccountWithPaidTokenNeverReachesEmergencySupplier(t *testing.T) {
 // (here: the OpenRouter channel type, no tag) must not serve a free group. The
 // group has no tagged supplier for the model, so before the fix the request was
 // relayed to the emergency channel untouched.
+//
+// The request uses the Haiku class on purpose: the free-group model gate refuses
+// the Sonnet class before any channel is looked at, so the Sonnet class never
+// reaches the supplier route this test protects. The Haiku class is the model
+// class a free account really may call, and it must still never land on the
+// untagged emergency channel.
 func TestHwUntaggedEmergencyChannelNeverServesFreeGroup(t *testing.T) {
 	env := hwNewEnv(t, "free", 1_000_000)
 	openrouter := env.fake("openrouter")
-	env.addUntaggedChannel("tagless-emergency", "free", constant.ChannelTypeOpenRouter, 0, openrouter)
+	env.addUntaggedChannel("tagless-emergency", "free", constant.ChannelTypeOpenRouter, "claude-haiku-4-5", 0, openrouter)
 
-	recorder := env.post("/v1/chat/completions", hwChatRequest(hwTestModel, false))
+	recorder := env.post("/v1/chat/completions", hwChatRequest("claude-haiku-4-5", false))
 
 	require.Equal(t, http.StatusServiceUnavailable, recorder.Code, recorder.Body.String())
 	assert.Contains(t, recorder.Body.String(), "service_busy")
@@ -130,7 +144,7 @@ func TestHwUpgradeRequestHeadersNeverBypassTheMask(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			env := hwNewEnv(t, "paid", 1_000_000)
 			lumia := env.fake("lumia")
-			env.addChannel("lumia-primary", "paid", "lumia", 0, lumia)
+			env.addChannel("lumia-primary", "paid", "lumia", hwTestModel, 0, lumia)
 
 			recorder := env.postWithHeaders("/v1/chat/completions", hwChatRequest(hwTestModel, false), testCase.headers)
 
@@ -166,9 +180,9 @@ func TestHwAliasFallbackStaysInsideTheModelFamily(t *testing.T) {
 	aliasTwo := env.fake("lumia-two")
 	openrouter := env.fake("openrouter")
 	aliasOne.setMode(hwFakeStatus500)
-	env.addChannel("lumia-alias-1", "paid", "lumia", 0, aliasOne)
-	env.addChannel("lumia-alias-2", "paid", "lumia", 0, aliasTwo)
-	env.addChannel("emergency", "paid", "openrouter", 1, openrouter)
+	env.addChannel("lumia-alias-1", "paid", "lumia", hwTestModel, 0, aliasOne)
+	env.addChannel("lumia-alias-2", "paid", "lumia", hwTestModel, 0, aliasTwo)
+	env.addChannel("emergency", "paid", "openrouter", hwTestModel, 1, openrouter)
 
 	recorder := env.post("/v1/chat/completions", hwChatRequest(hwTestModel, false))
 
@@ -184,7 +198,7 @@ func TestHwAliasFallbackStaysInsideTheModelFamily(t *testing.T) {
 func TestHwNeverSelectsAnotherModelFamily(t *testing.T) {
 	env := hwNewEnv(t, "paid", 1_000_000)
 	foreign := env.fake("lumia-foreign")
-	channel := env.addChannel("lumia-gpt-only", "paid", "lumia", 0, foreign)
+	channel := env.addChannel("lumia-gpt-only", "paid", "lumia", hwTestModel, 0, foreign)
 	mapping, err := common.Marshal(map[string]string{hwTestModel: "gpt-4o-mini"})
 	require.NoError(t, err)
 	mappingText := string(mapping)
@@ -202,8 +216,8 @@ func TestHwHealthyLumiaChannelWins(t *testing.T) {
 	env := hwNewEnv(t, "paid", 1_000_000)
 	lumia := env.fake("lumia")
 	openrouter := env.fake("openrouter")
-	env.addChannel("lumia-primary", "paid", "lumia", 0, lumia)
-	env.addChannel("emergency", "paid", "openrouter", 1, openrouter)
+	env.addChannel("lumia-primary", "paid", "lumia", hwTestModel, 0, lumia)
+	env.addChannel("emergency", "paid", "openrouter", hwTestModel, 1, openrouter)
 
 	recorder := env.post("/v1/chat/completions", hwChatRequest(hwTestModel, false))
 
@@ -218,7 +232,7 @@ func TestHwFunctionCallingPassesThrough(t *testing.T) {
 	env := hwNewEnv(t, "paid", 1_000_000)
 	lumia := env.fake("lumia")
 	lumia.enableToolCall(true)
-	env.addChannel("lumia-primary", "paid", "lumia", 0, lumia)
+	env.addChannel("lumia-primary", "paid", "lumia", hwTestModel, 0, lumia)
 
 	t.Run("openai non-stream", func(t *testing.T) {
 		recorder := env.post("/v1/chat/completions", hwChatRequest(hwTestModel, false))
@@ -305,8 +319,8 @@ func TestHwStreamCutMidStreamYieldsOwnErrorEvent(t *testing.T) {
 			lumia := env.fake("lumia")
 			openrouter := env.fake("openrouter")
 			lumia.setMode(hwFakeCutStream)
-			env.addChannel("lumia-primary", "paid", "lumia", 0, lumia)
-			env.addChannel("emergency", "paid", "openrouter", 1, openrouter)
+			env.addChannel("lumia-primary", "paid", "lumia", hwTestModel, 0, lumia)
+			env.addChannel("emergency", "paid", "openrouter", hwTestModel, 1, openrouter)
 
 			before := env.userQuota(t)
 			recorder := env.post(testCase.path, testCase.payload)
@@ -348,8 +362,8 @@ func TestHwStreamCutBeforeFirstChunkFallsBack(t *testing.T) {
 		lumia := env.fake("lumia")
 		openrouter := env.fake("openrouter")
 		lumia.setMode(hwFakeCutEarly)
-		env.addChannel("lumia-primary", "paid", "lumia", 0, lumia)
-		env.addChannel("emergency", "paid", "openrouter", 1, openrouter)
+		env.addChannel("lumia-primary", "paid", "lumia", hwTestModel, 0, lumia)
+		env.addChannel("emergency", "paid", "openrouter", hwTestModel, 1, openrouter)
 
 		recorder := env.post("/v1/chat/completions", hwChatRequest(hwTestModel, true))
 
@@ -368,8 +382,8 @@ func TestHwStreamCutBeforeFirstChunkFallsBack(t *testing.T) {
 		lumia := env.fake("lumia")
 		openrouter := env.fake("openrouter")
 		lumia.setMode(hwFakeEmptyStream)
-		env.addChannel("lumia-primary", "paid", "lumia", 0, lumia)
-		env.addChannel("emergency", "paid", "openrouter", 1, openrouter)
+		env.addChannel("lumia-primary", "paid", "lumia", hwTestModel, 0, lumia)
+		env.addChannel("emergency", "paid", "openrouter", hwTestModel, 1, openrouter)
 
 		before := env.userQuota(t)
 		recorder := env.post("/v1/messages", hwClaudeRequest(hwTestModel, true))
@@ -387,7 +401,7 @@ func TestHwStreamCutBeforeFirstChunkFallsBack(t *testing.T) {
 		// The same request against a healthy supplier must cost the same: the
 		// failed attempt may neither add nor remove a charge.
 		control := hwNewEnv(t, "paid", 1_000_000)
-		control.addChannel("lumia-primary", "paid", "lumia", 0, control.fake("lumia"))
+		control.addChannel("lumia-primary", "paid", "lumia", hwTestModel, 0, control.fake("lumia"))
 		controlBefore := control.userQuota(t)
 		controlRecorder := control.post("/v1/messages", hwClaudeRequest(hwTestModel, true))
 		require.Equal(t, 200, controlRecorder.Code, controlRecorder.Body.String())
@@ -577,8 +591,8 @@ func TestHwProviderFactsAreAdminOnly(t *testing.T) {
 		lumia := env.fake("lumia")
 		openrouter := env.fake("openrouter")
 		lumia.setMode(hwFakeTimeout)
-		env.addChannel("lumia-primary", "paid", "lumia", 0, lumia)
-		env.addChannel("emergency", "paid", "openrouter", 1, openrouter)
+		env.addChannel("lumia-primary", "paid", "lumia", hwTestModel, 0, lumia)
+		env.addChannel("emergency", "paid", "openrouter", hwTestModel, 1, openrouter)
 
 		recorder := env.post("/v1/chat/completions", hwChatRequest(hwTestModel, false))
 		require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
@@ -592,9 +606,9 @@ func TestHwProviderFactsAreAdminOnly(t *testing.T) {
 		aliasTwo := env.fake("lumia-two")
 		openrouter := env.fake("openrouter")
 		aliasOne.setMode(hwFakeStatus500)
-		env.addChannel("lumia-alias-1", "paid", "lumia", 0, aliasOne)
-		env.addChannel("lumia-alias-2", "paid", "lumia", 0, aliasTwo)
-		env.addChannel("emergency", "paid", "openrouter", 1, openrouter)
+		env.addChannel("lumia-alias-1", "paid", "lumia", hwTestModel, 0, aliasOne)
+		env.addChannel("lumia-alias-2", "paid", "lumia", hwTestModel, 0, aliasTwo)
+		env.addChannel("emergency", "paid", "openrouter", hwTestModel, 1, openrouter)
 
 		recorder := env.post("/v1/chat/completions", hwChatRequest(hwTestModel, false))
 		require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
@@ -628,8 +642,8 @@ func TestHwCustomerNeverSeesTheSupplierName(t *testing.T) {
 		lumia := env.fake("lumia")
 		openrouter := env.fake("openrouter")
 		lumia.setMode(hwFakeTimeout)
-		env.addChannel("lumia-primary", "paid", "lumia", 0, lumia)
-		env.addChannel("emergency", "paid", "openrouter", 1, openrouter)
+		env.addChannel("lumia-primary", "paid", "lumia", hwTestModel, 0, lumia)
+		env.addChannel("emergency", "paid", "openrouter", hwTestModel, 1, openrouter)
 
 		for _, testCase := range cases {
 			t.Run(testCase.name, func(t *testing.T) {
@@ -657,8 +671,8 @@ func TestHwCustomerNeverSeesTheSupplierName(t *testing.T) {
 		lumia := env.fake("lumia")
 		openrouter := env.fake("openrouter")
 		lumia.setMode(hwFakeTimeout)
-		env.addChannel("lumia-primary", "paid", "lumia", 0, lumia)
-		env.addChannel("emergency", "paid", "openrouter", 1, openrouter)
+		env.addChannel("lumia-primary", "paid", "lumia", hwTestModel, 0, lumia)
+		env.addChannel("emergency", "paid", "openrouter", hwTestModel, 1, openrouter)
 		openrouter.enableLeakField(true)
 
 		recorder := env.post("/v1/chat/completions", hwChatRequest(hwTestModel, false))
@@ -685,7 +699,7 @@ func TestHwUpstreamAliasIsAdminOnly(t *testing.T) {
 	const alias = "claude-sonnet-5-5-alias-9"
 	env := hwNewEnv(t, "paid", 1_000_000)
 	lumia := env.fake("lumia")
-	channel := env.addChannel("lumia-primary", "paid", "lumia", 0, lumia)
+	channel := env.addChannel("lumia-primary", "paid", "lumia", hwTestModel, 0, lumia)
 	mapping := `{"` + hwTestModel + `":"` + alias + `"}`
 	channel.ModelMapping = &mapping
 	require.NoError(t, env.db.Save(channel).Error)

@@ -26,6 +26,7 @@ import {
 } from '@/lib/server-error-message'
 import { useAuthStore } from '@/stores/auth-store'
 
+import { getHwDeviceToken } from './lib/device-signal'
 import {
   clearPasswordEncryptionCache,
   encryptPassword,
@@ -248,8 +249,13 @@ export async function telegramLogin(
 
 // User registration
 export async function register(payload: RegisterPayload): Promise<ApiResponse> {
+  // One free trial credit per device: the token is a hashed browser signal, not
+  // an identifier the server can reverse. A missing token registers the account
+  // without a device signal.
+  const deviceToken = await getHwDeviceToken()
   const res = await api.post(`/api/user/register`, payload, {
     params: { turnstile: payload.turnstile ?? '' },
+    headers: deviceToken ? { 'X-HW-Device': deviceToken } : undefined,
   })
   return res.data
 }

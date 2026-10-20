@@ -907,6 +907,11 @@ func buildResponsesWSErrorPayload(eventID, streamID string, apiErr *types.NewAPI
 // pinned to a channel: the check is stricter there on purpose, because a
 // persistent connection keeps serving the model after the pin was resolved.
 func checkResponsesWSModelAccess(c *gin.Context, modelName string) *types.NewAPIError {
+	// A free trial account keeps the model class of the trial on this path as
+	// well; the account group decides, exactly as in the HTTP distributor.
+	if !middleware.HwFreeGroupModelAllowed(middleware.HwAccountGroup(c), modelName) {
+		return types.NewErrorWithStatusCode(errors.New("the free trial account cannot use this model"), types.ErrorCodeAccessDenied, http.StatusForbidden, types.ErrOptionWithSkipRetry())
+	}
 	if !common.GetContextKeyBool(c, appconstant.ContextKeyTokenModelLimitEnabled) {
 		return nil
 	}

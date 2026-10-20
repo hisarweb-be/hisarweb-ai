@@ -52,10 +52,11 @@ func (HwFreeCreditClaim) TableName() string {
 // The credit is refused when the user has no phone hash (reason unverified): a
 // device token is supplied by the browser and renewable per account, so it does
 // not verify a person. It is further refused when another account that shares a
-// device, phone number or card fingerprint already received the free credit
-// (reason shared_<kind>; the phone hash also reserves a unique claim row, so two
+// phone number or card fingerprint already received the free credit (reason
+// shared_<kind>; the phone hash also reserves a unique claim row, so two
 // accounts with the same phone cannot both pass in the same instant), or when
-// the amount is above the cap (reason quota_too_high). Only the first call has
+// the amount is above the cap (reason quota_too_high). A shared device token is
+// no refusal: the browser chooses it, so a copy must not deny another account. Only the first call has
 // an effect; the package expires after hwFreeCreditValiditySeconds. A repeated
 // call on another day converts the TRY amount against another rate and
 // therefore arrives with another quota; it is answered as already_granted
@@ -157,9 +158,11 @@ func HwGrantFreeTrialCredit(userID int, freeQuota int, now int64) (granted bool,
 
 // hwFreeTrialSharedSignalKind reports a signal kind on which another account
 // already received the free credit. It looks at the whole signal history, so
-// changing a device or an IP address does not clear the match.
+// changing a phone number or a card does not clear the match. The device token
+// is deliberately absent: the browser chooses it, so anyone who copies a token
+// could otherwise deny the free credit of the account that owns it.
 func hwFreeTrialSharedSignalKind(userID int) (string, error) {
-	for _, kind := range []string{HwSignalKindDevice, HwSignalKindPhone, HwSignalKindCard} {
+	for _, kind := range []string{HwSignalKindPhone, HwSignalKindCard} {
 		var hashes []string
 		if err := DB.Model(&HwUserSignal{}).
 			Where("user_id = ? AND kind = ? AND hash <> ?", userID, kind, "").

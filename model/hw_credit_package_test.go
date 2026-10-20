@@ -19,7 +19,7 @@ func hwCreditTestSetup(t *testing.T) {
 	t.Setenv(hwSignalSaltEnv, hwTestSignalSalt)
 	// The extension table belongs to the same fixture: the derived fill of a
 	// package reads it, so every package path needs it migrated.
-	require.NoError(t, DB.AutoMigrate(&HwCreditPackage{}, &HwUserSignal{}, &HwFirstPurchaseClaim{}, &HwFreeCreditClaim{}, &HwCreditExtension{}))
+	require.NoError(t, DB.AutoMigrate(&HwCreditPackage{}, &HwUserSignal{}, &HwFirstPurchaseClaim{}, &HwFreeCreditClaim{}, &HwCreditExtension{}, &HwAccountFlag{}))
 	require.NoError(t, DB.Exec("DELETE FROM hw_credit_packages").Error)
 	require.NoError(t, DB.Exec("DELETE FROM hw_user_signals").Error)
 	require.NoError(t, DB.Exec("DELETE FROM hw_first_purchase_claims").Error)
@@ -45,6 +45,7 @@ func createHwTestUser(t *testing.T, quota int) User {
 		AffCode:     "hwaff" + common.GetRandomString(8),
 	}
 	require.NoError(t, DB.Create(&user).Error)
+	t.Cleanup(func() { DB.Unscoped().Delete(&User{}, user.Id) })
 	return user
 }
 
@@ -439,5 +440,109 @@ func TestHwPackageRemaining(t *testing.T) {
 	t.Run("negative balance", func(t *testing.T) {
 		views := HwPackageRemaining(7, -5, packages())
 		assert.Equal(t, map[int]int{1: 0, 2: 0, 3: 0, 4: 0}, remainingOf(views))
+	})
+}
+
+// A frozen account that pays must not carry its remaining free credit into the
+// paid group: the freeze blocks the trial credit, and the purchase would
+// otherwise be the way around it. Paid credit stays untouched.
+func TestHwPurchaseByFrozenAccountForfeitsTheFreeCredit(t *testing.T) {
+	hwCreditTestSetup(t)
+	require.NoError(t, DB.AutoMigrate(&HwAccountFlag{}))
+	require.NoError(t, DB.Exec("DELETE FROM hw_account_flags").Error)
+	t.Cleanup(func() {
+		DB.Exec("DELETE FROM hw_account_flags")
+	})
+	now := int64(1_700_000_000)
+
+	t.Run("a frozen account keeps only what it paid for", func(t *testing.T) {
+		user := createHwTestUser(t, 0)
+		freeRef := fmt.Sprintf("free:%d", user.Id)
+		granted, err := GrantCreditPackage(nil, user.Id, 100, HwSourceFree, freeRef, now)
+		require.NoError(t, err)
+		require.True(t, granted)
+
+		frozen, err := FreezeHwAccounts([]int{user.Id}, HwFreezeReasonSharedPhone, now+10)
+		require.NoError(t, err)
+		require.Equal(t, 1, frozen)
+
+		granted, err = GrantCreditPackage(nil, user.Id, 50, HwSourcePurchase, "order-frozen", now+20)
+		require.NoError(t, err)
+		require.True(t, granted)
+
+		assert.Equal(t, 50, getUserQuotaFromDB(t, user.Id), "only the paid credit may be spent after the purchase")
+		freePackage := hwTestPackageByOrderRef(t, freeRef)
+		assert.Equal(t, now+20, freePackage.RetiredAt, "the free package is retired at the moment of payment")
+		assert.Equal(t, 100, freePackage.RetiredRemaining)
+		purchasePackage := hwTestPackageByOrderRef(t, "order-frozen")
+		assert.Zero(t, purchasePackage.RetiredAt, "the paid package stays usable in full")
+
+		var reloaded User
+		require.NoError(t, DB.Where("id = ?", user.Id).First(&reloaded).Error)
+		assert.Equal(t, hwGroupPaid, reloaded.Group)
+	})
+
+	t.Run("an account in good standing keeps its free credit", func(t *testing.T) {
+		user := createHwTestUser(t, 0)
+		freeRef := fmt.Sprintf("free:%d", user.Id)
+		granted, err := GrantCreditPackage(nil, user.Id, 100, HwSourceFree, freeRef, now)
+		require.NoError(t, err)
+		require.True(t, granted)
+
+		granted, err = GrantCreditPackage(nil, user.Id, 50, HwSourcePurchase, "order-clear", now+20)
+		require.NoError(t, err)
+		require.True(t, granted)
+
+		assert.Equal(t, 150, getUserQuotaFromDB(t, user.Id))
+		assert.Zero(t, hwTestPackageByOrderRef(t, freeRef).RetiredAt)
+	})
+}
+
+// The same hole in the other order: an account that paid first and is frozen
+// later must lose its remaining free credit, while an account that never paid
+// keeps it so a thaw loses nothing.
+func TestHwFreezeAfterPurchaseForfeitsTheFreeCredit(t *testing.T) {
+	hwCreditTestSetup(t)
+	require.NoError(t, DB.AutoMigrate(&HwAccountFlag{}))
+	require.NoError(t, DB.Exec("DELETE FROM hw_account_flags").Error)
+	t.Cleanup(func() {
+		DB.Exec("DELETE FROM hw_account_flags")
+	})
+	now := int64(1_700_000_000)
+
+	t.Run("a payer frozen later keeps only what it paid for", func(t *testing.T) {
+		user := createHwTestUser(t, 0)
+		freeRef := fmt.Sprintf("free:%d", user.Id)
+		granted, err := GrantCreditPackage(nil, user.Id, 100, HwSourceFree, freeRef, now)
+		require.NoError(t, err)
+		require.True(t, granted)
+		granted, err = GrantCreditPackage(nil, user.Id, 50, HwSourcePurchase, "order-first", now+10)
+		require.NoError(t, err)
+		require.True(t, granted)
+		require.Equal(t, 150, getUserQuotaFromDB(t, user.Id))
+
+		frozen, err := FreezeHwAccounts([]int{user.Id}, HwFreezeReasonSharedPhone, now+20)
+		require.NoError(t, err)
+		require.Equal(t, 1, frozen)
+
+		assert.Equal(t, 50, getUserQuotaFromDB(t, user.Id), "only the paid credit may be spent after the freeze")
+		freePackage := hwTestPackageByOrderRef(t, freeRef)
+		assert.Equal(t, now+20, freePackage.RetiredAt)
+		assert.Equal(t, 100, freePackage.RetiredRemaining)
+	})
+
+	t.Run("an account that never paid keeps its trial credit", func(t *testing.T) {
+		user := createHwTestUser(t, 0)
+		freeRef := fmt.Sprintf("free:%d", user.Id)
+		granted, err := GrantCreditPackage(nil, user.Id, 100, HwSourceFree, freeRef, now)
+		require.NoError(t, err)
+		require.True(t, granted)
+
+		frozen, err := FreezeHwAccounts([]int{user.Id}, HwFreezeReasonSharedPhone, now+20)
+		require.NoError(t, err)
+		require.Equal(t, 1, frozen)
+
+		assert.Equal(t, 100, getUserQuotaFromDB(t, user.Id))
+		assert.Equal(t, int64(0), hwTestPackageByOrderRef(t, freeRef).RetiredAt)
 	})
 }

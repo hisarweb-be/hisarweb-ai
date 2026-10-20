@@ -128,19 +128,15 @@ func isValidHwCreditSource(source string) bool {
 // own tx must commit it and then call HwSyncCachesAfterGrant, otherwise the
 // cached balance stays behind until it is rehydrated.
 func GrantCreditPackage(tx *gorm.DB, userID int, quota int, source string, orderRef string, now int64) (bool, error) {
-	if userID <= 0 || quota <= 0 || !isValidHwCreditSource(source) || orderRef == "" || now <= 0 {
-		return false, ErrHwInvalidCreditGrant
-	}
-	if err := common.ValidateWalletQuota(quota); err != nil {
-		return false, err
-	}
 	if tx != nil {
-		return grantCreditPackageTx(tx, userID, quota, source, orderRef, now)
+		granted, _, err := GrantCreditPackageInTx(tx, userID, quota, source, orderRef, now)
+		return granted, err
 	}
 	var granted bool
+	var forfeited int
 	err := DB.Transaction(func(inner *gorm.DB) error {
 		var err error
-		granted, err = grantCreditPackageTx(inner, userID, quota, source, orderRef, now)
+		granted, forfeited, err = GrantCreditPackageInTx(inner, userID, quota, source, orderRef, now)
 		return err
 	})
 	if err != nil {
@@ -148,8 +144,26 @@ func GrantCreditPackage(tx *gorm.DB, userID int, quota int, source string, order
 	}
 	if granted {
 		HwSyncCachesAfterGrant(userID, quota, source)
+		HwSyncCachesAfterFreeForfeit(userID, forfeited)
 	}
 	return granted, nil
+}
+
+// GrantCreditPackageInTx issues a package on the caller's transaction. Beside
+// whether the grant happened it reports the free trial credit the grant
+// forfeited: a purchase by a frozen account retires what is left of the free
+// package, because the freeze blocks that credit and paying must not be the way
+// around it. Paid credit is never touched. A caller outside this package must
+// lower the cached balance by the forfeited amount after commit, next to
+// HwSyncCachesAfterGrant.
+func GrantCreditPackageInTx(tx *gorm.DB, userID int, quota int, source string, orderRef string, now int64) (granted bool, forfeited int, err error) {
+	if tx == nil || userID <= 0 || quota <= 0 || !isValidHwCreditSource(source) || orderRef == "" || now <= 0 {
+		return false, 0, ErrHwInvalidCreditGrant
+	}
+	if err := common.ValidateWalletQuota(quota); err != nil {
+		return false, 0, err
+	}
+	return grantCreditPackageTx(tx, userID, quota, source, orderRef, now)
 }
 
 // HwSyncCachesAfterGrant brings the user caches in line with a credit grant that
@@ -171,7 +185,20 @@ func HwSyncCachesAfterGrant(userID int, quota int, source string) {
 	}
 }
 
-func grantCreditPackageTx(tx *gorm.DB, userID int, quota int, source string, orderRef string, now int64) (bool, error) {
+// HwSyncCachesAfterFreeForfeit lowers the cached balance by the free credit a
+// purchase of a frozen account retired. It belongs directly after
+// HwSyncCachesAfterGrant of the same purchase; the stored balance already
+// reflects both changes.
+func HwSyncCachesAfterFreeForfeit(userID int, quota int) {
+	if quota <= 0 {
+		return
+	}
+	if err := cacheDecrUserQuota(userID, int64(quota)); err != nil {
+		common.SysLog(common.LogText("failed to sync forfeited free credit to user quota cache: %s", err.Error()))
+	}
+}
+
+func grantCreditPackageTx(tx *gorm.DB, userID int, quota int, source string, orderRef string, now int64) (bool, int, error) {
 	validity := int64(hwCreditPackageValiditySeconds)
 	if source == HwSourceFree {
 		validity = hwFreeCreditValiditySeconds
@@ -193,7 +220,7 @@ func grantCreditPackageTx(tx *gorm.DB, userID int, quota int, source string, ord
 		DoNothing: true,
 	}).Create(&pkg)
 	if result.Error != nil {
-		return false, result.Error
+		return false, 0, result.Error
 	}
 	if result.RowsAffected == 0 {
 		// The conflict target exists already. Only an identical issuance is a quiet
@@ -201,22 +228,81 @@ func grantCreditPackageTx(tx *gorm.DB, userID int, quota int, source string, ord
 		// caller error, not a second grant.
 		var existing HwCreditPackage
 		if err := tx.Where("source = ? AND order_ref = ?", source, orderRef).First(&existing).Error; err != nil {
-			return false, err
+			return false, 0, err
 		}
 		if existing.UserId != userID || existing.GrantedQuota != quota {
-			return false, ErrHwOrderRefConflict
+			return false, 0, ErrHwOrderRefConflict
 		}
-		return false, nil
+		return false, 0, nil
 	}
 	if err := increaseUserQuotaInTx(tx, userID, quota); err != nil {
-		return false, err
+		return false, 0, err
 	}
 	if source == HwSourcePurchase {
 		if err := HwPromoteToPaidGroup(tx, userID); err != nil {
-			return false, err
+			return false, 0, err
+		}
+		// Paying lifts the account out of the free group. A frozen account must
+		// not carry the trial credit along, so the remaining free package is
+		// retired here, in the same transaction as the purchase.
+		forfeited, err := hwForfeitFreePackagesForFrozenAccount(tx, userID, now)
+		if err != nil {
+			return false, 0, err
+		}
+		return true, forfeited, nil
+	}
+	return true, 0, nil
+}
+
+// hwForfeitFreePackagesForFrozenAccount retires the active free packages of an
+// account that is under review at the moment it pays. The remaining quota is
+// derived the same way the expiry job derives it, so the amount taken from the
+// balance is exactly what the fill assigned to the free package. Paid packages
+// and any balance that belongs to no package are untouched. A purchase of an
+// account that is not frozen changes nothing here.
+func hwForfeitFreePackagesForFrozenAccount(tx *gorm.DB, userID int, now int64) (int, error) {
+	if tx == nil || userID <= 0 {
+		return 0, nil
+	}
+	var frozenRows int64
+	if err := tx.Model(&HwAccountFlag{}).Where("user_id = ? AND frozen = ?", userID, true).Count(&frozenRows).Error; err != nil {
+		return 0, err
+	}
+	if frozenRows == 0 {
+		return 0, nil
+	}
+	var user User
+	if err := tx.Select("id", "quota").Where("id = ?", userID).First(&user).Error; err != nil {
+		return 0, err
+	}
+	var pkgs []HwCreditPackage
+	if err := tx.Where("user_id = ? AND retired_at = 0", userID).Find(&pkgs).Error; err != nil {
+		return 0, err
+	}
+	remaining := make(map[int]int, len(pkgs))
+	for _, view := range HwPackageRemaining(userID, user.Quota, pkgs) {
+		remaining[view.Id] = view.RemainingQuota
+	}
+	forfeited := 0
+	for _, pkg := range pkgs {
+		if pkg.Source != HwSourceFree {
+			continue
+		}
+		rest := remaining[pkg.Id]
+		forfeited += rest
+		if err := tx.Model(&HwCreditPackage{}).
+			Where("id = ? AND retired_at = 0", pkg.Id).
+			UpdateColumns(map[string]any{"retired_at": now, "retired_remaining": rest}).Error; err != nil {
+			return 0, err
 		}
 	}
-	return true, nil
+	if forfeited == 0 {
+		return 0, nil
+	}
+	if err := hwDecreaseUserQuota(tx, userID, forfeited); err != nil {
+		return 0, err
+	}
+	return forfeited, nil
 }
 
 // increaseUserQuotaInTx mirrors increaseUserQuota but runs on the caller's

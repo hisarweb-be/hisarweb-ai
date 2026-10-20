@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"net"
 	"os"
 	"strings"
 
@@ -40,9 +41,19 @@ var ErrHwSignalSaltTooShort = errors.New("HW_SIGNAL_SALT is shorter than 32 byte
 // ErrHwInvalidUserSignal rejects a signal write for an unknown user.
 var ErrHwInvalidUserSignal = errors.New("invalid user signal")
 
-// ErrHwInvalidPhoneNumber rejects a phone number that is not a Turkish number
-// in one of the accepted spellings.
+// ErrHwInvalidPhoneNumber rejects a phone number that is not in one of the
+// accepted spellings or does not belong to an accepted country code.
 var ErrHwInvalidPhoneNumber = errors.New("invalid phone number")
+
+// hwPhoneCountryCodesEnv names the comma-separated country codes a phone number
+// may carry. The default accepts Turkey only, so a foreign number never becomes
+// the signal that earns the free trial credit.
+const hwPhoneCountryCodesEnv = "HW_PHONE_COUNTRY_CODES"
+
+// hwDefaultPhoneCountryCode is the country code used when
+// HW_PHONE_COUNTRY_CODES is unset, empty or holds no usable code, and the code a
+// national spelling (without a country code) is completed with.
+const hwDefaultPhoneCountryCode = "90"
 
 // Signal kinds recorded in hw_user_signals. Every kind is hashed before it is
 // stored; the table never holds a raw address, number or fingerprint.
@@ -51,6 +62,11 @@ const (
 	HwSignalKindIp     = "ip"
 	HwSignalKindPhone  = "phone"
 	HwSignalKindCard   = "card"
+	// HwSignalKindTelegram records the Telegram identity of an account. It is
+	// deliberately not the phone kind: the login widget gives no number, and one
+	// person can retire a Telegram account and create another with the same SIM.
+	// Only a number shared through the bot's contact button is a phone signal.
+	HwSignalKindTelegram = "telegram"
 )
 
 // HwUserSignal is one historical abuse signal of a user. A user has many rows:
@@ -140,48 +156,120 @@ func HwHashSignalValue(value string) (string, error) {
 	return hex.EncodeToString(mac.Sum(nil)), nil
 }
 
-// hwNormalizeTrPhone reduces a Turkish phone number to E.164 (+90XXXXXXXXXX).
+// hwPhoneCountryCodes reads the country codes a number may carry from
+// HW_PHONE_COUNTRY_CODES (comma separated, a leading plus is dropped). Without
+// a usable setting only Turkey is accepted.
+func hwPhoneCountryCodes() []string {
+	codes := make([]string, 0, 4)
+	for part := range strings.SplitSeq(os.Getenv(hwPhoneCountryCodesEnv), ",") {
+		code := strings.TrimPrefix(strings.TrimSpace(part), "+")
+		if code == "" || len(code) > 3 {
+			continue
+		}
+		digits := true
+		for _, r := range code {
+			if r < '0' || r > '9' {
+				digits = false
+				break
+			}
+		}
+		if digits {
+			codes = append(codes, code)
+		}
+	}
+	if len(codes) == 0 {
+		return []string{hwDefaultPhoneCountryCode}
+	}
+	return codes
+}
+
+// hwValidPhoneNationalLength checks the part of a number after its country
+// code. Turkish numbers are always ten digits (three-digit area code plus seven
+// digits); another accepted country code is bound by the fifteen-digit total of
+// E.164 instead, because national lengths differ per country.
+func hwValidPhoneNationalLength(code string, national int) bool {
+	if code == hwDefaultPhoneCountryCode {
+		return national == 10
+	}
+	return national >= 6 && len(code)+national <= 15
+}
+
+// hwNormalizePhone reduces a phone number to E.164 (+90XXXXXXXXXX by default).
 // Accepted spellings are "+90 555 123 45 67", "905551234567", "0555 123 45 67"
 // and a bare "555 123 45 67"; spaces, dashes, dots, parentheses and a leading
-// plus are separators. Anything that does not leave exactly ten digits after the
-// country code or the leading zero is refused: two spellings of one number must
-// produce one hash, and an unrecognisable number must not be stored at all.
-func hwNormalizeTrPhone(raw string) (string, error) {
+// plus are separators. A number that carries a country code outside
+// HW_PHONE_COUNTRY_CODES is refused, and so is anything that does not leave a
+// national part of the right length: two spellings of one number must produce
+// one hash, and an unrecognisable or foreign number must not be stored at all.
+func hwNormalizePhone(raw string) (string, error) {
 	var digits strings.Builder
-	for _, r := range strings.TrimSpace(raw) {
+	international := false
+	for i, r := range strings.TrimSpace(raw) {
 		switch {
 		case r >= '0' && r <= '9':
 			digits.WriteRune(r)
-		case r == ' ' || r == '-' || r == '.' || r == '(' || r == ')' || r == '+':
+		case r == '+' && i == 0:
+			international = true
+		case r == ' ' || r == '-' || r == '.' || r == '(' || r == ')':
 			// Separator only, carries no value.
 		default:
 			return "", ErrHwInvalidPhoneNumber
 		}
 	}
 	number := digits.String()
-	switch {
-	case len(number) == 12 && strings.HasPrefix(number, "90"):
-		number = number[2:]
-	case len(number) == 11 && strings.HasPrefix(number, "0"):
-		number = number[1:]
+	codes := hwPhoneCountryCodes()
+	for _, code := range codes {
+		if national, ok := strings.CutPrefix(number, code); ok && hwValidPhoneNationalLength(code, len(national)) {
+			return "+" + code + national, nil
+		}
 	}
-	if len(number) != 10 {
+	if international {
+		// The plus promises a country code; one we do not accept is refused
+		// instead of being read as a national number.
 		return "", ErrHwInvalidPhoneNumber
 	}
-	return "+90" + number, nil
+	// A national spelling: one trunk zero is dropped and the default country
+	// code is prepended.
+	code := codes[0]
+	national := strings.TrimPrefix(number, "0")
+	if !hwValidPhoneNationalLength(code, len(national)) {
+		return "", ErrHwInvalidPhoneNumber
+	}
+	return "+" + code + national, nil
+}
+
+// hwIpSignalValue reduces the address that the ip kind hashes. IPv4 keeps its
+// dotted form after parsing. IPv6 is reduced to its /64 prefix: one customer
+// normally controls a whole /64, so hashing the full address would let it walk
+// past the per-address signup limit and hide from the daily sweep by rotating
+// the lower 64 bits. The prefix is written in canonical network form, so every
+// notation of one address maps to one value. A value that does not parse as an
+// address is lowercased and hashed as given, as before.
+func hwIpSignalValue(raw string) string {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	ip := net.ParseIP(value)
+	if ip == nil {
+		return value
+	}
+	if ipv4 := ip.To4(); ipv4 != nil {
+		return ipv4.String()
+	}
+	mask := net.CIDRMask(64, 128)
+	return (&net.IPNet{IP: ip.Mask(mask), Mask: mask}).String()
 }
 
 // hwHashRawSignal hashes one raw signal value of a kind, normalising it first
-// where a single external form exists. Only an IP address is lowercased: its
-// notation is case-insensitive by convention. A device token and a card
-// fingerprint are opaque case-sensitive values, and a phone number is reduced
-// to digits by hwNormalizeTrPhone, which no case rule may disturb.
+// where a single external form exists. Only an IP address is lowercased and
+// reduced to its /64 prefix: its notation is case-insensitive by convention. A
+// device token and a card fingerprint are opaque case-sensitive values, and a
+// phone number is reduced to E.164 by hwNormalizePhone, which no case rule may
+// disturb.
 func hwHashRawSignal(kind, value string) (string, error) {
 	if kind == HwSignalKindIp {
-		value = strings.ToLower(strings.TrimSpace(value))
+		value = hwIpSignalValue(value)
 	}
 	if kind == HwSignalKindPhone {
-		phone, err := hwNormalizeTrPhone(value)
+		phone, err := hwNormalizePhone(value)
 		if err != nil {
 			return "", err
 		}

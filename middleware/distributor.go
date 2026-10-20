@@ -97,6 +97,15 @@ func Distribute() func(c *gin.Context) {
 				}
 			}
 		}
+		// A free trial account may only reach the model class its credit is
+		// meant for, whatever channel the group has. The account group decides,
+		// not the group the request runs as: a free token in default, vip or
+		// auto stays a free request. A pinned channel is no exception: the pin
+		// decides where a request goes, never what the trial may call.
+		if shouldSelectChannel && !HwFreeGroupModelAllowed(hwUserGroup(c), modelRequest.Model) {
+			abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorGroupAccessDenied))
+			return
+		}
 		if pinned || shouldSelectChannel {
 			usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
 			var selectErr *service.ChannelSelectError

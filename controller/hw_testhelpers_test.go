@@ -456,9 +456,12 @@ func (e *hwEnv) fake(name string) *hwFakeSupplier {
 	return supplier
 }
 
-// addChannel creates one supplier channel plus its ability row. priority
-// follows the production convention: Lumia 0, the emergency supplier 1.
-func (e *hwEnv) addChannel(name, group, tag string, priority int64, supplier *hwFakeSupplier) *model.Channel {
+// addChannel creates one supplier channel plus its ability row. The model name
+// is the customer-facing one the channel serves: the tests a free account runs
+// need the Haiku class, because the free-group model gate refuses every other
+// class before a channel is chosen. priority follows the production
+// convention: Lumia 0, the emergency supplier 1.
+func (e *hwEnv) addChannel(name, group, tag, modelName string, priority int64, supplier *hwFakeSupplier) *model.Channel {
 	e.t.Helper()
 	baseURL := supplier.server.URL
 	channelTag := tag
@@ -470,7 +473,7 @@ func (e *hwEnv) addChannel(name, group, tag string, priority int64, supplier *hw
 		Status:   common.ChannelStatusEnabled,
 		BaseURL:  &baseURL,
 		Group:    group,
-		Models:   "claude-sonnet-5-5",
+		Models:   modelName,
 		Priority: &priority,
 		Weight:   &weight,
 		Tag:      &channelTag,
@@ -479,7 +482,7 @@ func (e *hwEnv) addChannel(name, group, tag string, priority int64, supplier *hw
 	require.NoError(e.t, e.db.Create(channel).Error)
 	require.NoError(e.t, e.db.Create(&model.Ability{
 		Group:     group,
-		Model:     "claude-sonnet-5-5",
+		Model:     modelName,
 		ChannelId: channel.Id,
 		Enabled:   true,
 		Priority:  &priority,
@@ -491,7 +494,7 @@ func (e *hwEnv) addChannel(name, group, tag string, priority int64, supplier *hw
 
 // addUntaggedChannel registers a supplier channel without a tag, so a test can
 // prove that the supplier role is recognised from the channel type too.
-func (e *hwEnv) addUntaggedChannel(name, group string, channelType int, priority int64, supplier *hwFakeSupplier) *model.Channel {
+func (e *hwEnv) addUntaggedChannel(name, group string, channelType int, modelName string, priority int64, supplier *hwFakeSupplier) *model.Channel {
 	e.t.Helper()
 	baseURL := supplier.server.URL
 	weight := uint(1)
@@ -502,7 +505,7 @@ func (e *hwEnv) addUntaggedChannel(name, group string, channelType int, priority
 		Status:   common.ChannelStatusEnabled,
 		BaseURL:  &baseURL,
 		Group:    group,
-		Models:   "claude-sonnet-5-5",
+		Models:   modelName,
 		Priority: &priority,
 		Weight:   &weight,
 		AutoBan:  common.GetPointer(0),
@@ -510,7 +513,7 @@ func (e *hwEnv) addUntaggedChannel(name, group string, channelType int, priority
 	require.NoError(e.t, e.db.Create(channel).Error)
 	require.NoError(e.t, e.db.Create(&model.Ability{
 		Group:     group,
-		Model:     "claude-sonnet-5-5",
+		Model:     modelName,
 		ChannelId: channel.Id,
 		Enabled:   true,
 		Priority:  &priority,

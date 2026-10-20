@@ -272,6 +272,32 @@ func Register(c *gin.Context) {
 			return
 		}
 	}
+	// Anti-abuse gates of the signup form: the browser's device token, the
+	// disposable-domain block and the per-IP signup limit. The device header is
+	// validated up front so a malformed token cannot slip into the signal store.
+	deviceToken, err := service.HwNormalizeDeviceToken(c.GetHeader("X-HW-Device"))
+	if err != nil {
+		common.ApiErrorT(c, "Invalid device header")
+		return
+	}
+	if user.Email != "" {
+		if err := service.HwRejectDisposableEmail(user.Email); err != nil {
+			writeSecurityOperationError(c, err)
+			return
+		}
+	}
+	// c.ClientIP() trusts the proxy chain only as far as the trusted-proxy
+	// setting allows: behind a wrong setting a spoofable header would shift the
+	// limit onto other addresses, so operators must set trusted proxies before
+	// exposing this endpoint publicly.
+	if allowed, err := model.HwReserveSignupSlot(c.ClientIP(), common.GetTimestamp(), model.HwSignupIpDailyLimit); err != nil {
+		// Without a signal salt the counter cannot be written: keep the endpoint
+		// available and log the outage (amounts and errors only, never the IP).
+		common.SysError(common.LogText("hw: per-IP signup limit unavailable, registration continues: %v", err))
+	} else if !allowed {
+		common.ApiErrorT(c, "Too many accounts registered from this network today, please try again tomorrow")
+		return
+	}
 	emailForExistCheck := ""
 	if common.EmailVerificationEnabled {
 		emailForExistCheck = user.Email
@@ -341,6 +367,27 @@ func Register(c *gin.Context) {
 			common.ApiErrorT(c, "Failed to create default token")
 			return
 		}
+	}
+
+	// The new account's abuse signals: the browser's device token and the
+	// signup address, stored as keyed hashes. A failure leaves the account in
+	// place and is logged without values; the phone step below is what the free
+	// trial credit really waits for.
+	if deviceToken != "" || c.ClientIP() != "" {
+		if err := model.UpsertHwUserSignals(insertedUser.Id, model.HwUserSignals{
+			DeviceToken: deviceToken,
+			Ip:          c.ClientIP(),
+		}); err != nil {
+			common.SysError(common.LogText("hw: failed to store signup signals for user %d: %v", insertedUser.Id, err))
+		}
+	}
+	// The free trial credit itself is granted only after the phone step. In
+	// production that step is the Telegram login; HW_SKIP_PHONE_STEP outside
+	// production grants directly so the smoke test can run without Telegram.
+	if granted, _, err := service.HwGrantFreeCreditIfPhoneStepSkipped(insertedUser.Id); err != nil {
+		common.SysError(common.LogText("hw: free trial credit check failed for user %d: %v", insertedUser.Id, err))
+	} else if granted {
+		common.SysLog(common.LogText("hw: free trial credit granted at signup to user %d", insertedUser.Id))
 	}
 
 	c.JSON(http.StatusOK, gin.H{

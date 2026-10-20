@@ -51,6 +51,12 @@ func ValidateAccountEmail(email string) (string, error) {
 	if common.EmailAliasRestrictionEnabled && strings.ContainsAny(parts[0], "+.") {
 		return "", ErrAccountEmailRestricted
 	}
+	// Disposable domains are refused on every path that accepts or verifies an
+	// account address: the one-time trial credit requires an address a throwaway
+	// account cannot own.
+	if err := HwRejectDisposableEmail(email); err != nil {
+		return "", err
+	}
 	return email, nil
 }
 

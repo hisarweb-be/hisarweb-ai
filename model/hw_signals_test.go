@@ -81,6 +81,28 @@ func TestUpsertHwUserSignalsKeepsHistory(t *testing.T) {
 	}
 }
 
+// Only a number shared through the bot counts as a phone signal: a device token
+// or the Telegram identity must not make the login skip the contact prompt.
+func TestHwUserHasPhoneSignal(t *testing.T) {
+	hwCreditTestSetup(t)
+	user := createHwTestUser(t, 0)
+
+	hasPhone, err := HwUserHasPhoneSignal(user.Id)
+	require.NoError(t, err)
+	assert.False(t, hasPhone, "a fresh account has no number yet")
+
+	require.NoError(t, UpsertHwUserSignals(user.Id, HwUserSignals{DeviceToken: "dev-has-phone", Ip: "203.0.113.44"}))
+	require.NoError(t, HwRecordTelegramPhoneStep(user.Id, "424242"))
+	hasPhone, err = HwUserHasPhoneSignal(user.Id)
+	require.NoError(t, err)
+	assert.False(t, hasPhone, "a device token and a Telegram identity are no phone signal")
+
+	require.NoError(t, HwRecordPhoneSignal(user.Id, "0555 123 45 67"))
+	hasPhone, err = HwUserHasPhoneSignal(user.Id)
+	require.NoError(t, err)
+	assert.True(t, hasPhone)
+}
+
 func TestHwSharedSignal(t *testing.T) {
 	hwCreditTestSetup(t)
 	first := createHwTestUser(t, 0)
@@ -145,7 +167,7 @@ func TestUpsertHwUserSignalsAcceptsTheSameValueTwice(t *testing.T) {
 	assert.Equal(t, firstSeen, signals[0].FirstSeen, "first_seen is not touched")
 }
 
-func TestHwNormalizeTrPhone(t *testing.T) {
+func TestHwNormalizePhone(t *testing.T) {
 	cases := []struct{ given, want string }{
 		{"0555 123 45 67", "+905551234567"},
 		{"+90 555 123 45 67", "+905551234567"},
@@ -156,18 +178,32 @@ func TestHwNormalizeTrPhone(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.given, func(t *testing.T) {
-			normalised, err := hwNormalizeTrPhone(tc.given)
+			normalised, err := hwNormalizePhone(tc.given)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, normalised)
 		})
 	}
 
-	for _, given := range []string{"", "12345", "+1 555 123 4567", "0555 123 45 6a", "00905551234567"} {
+	// A foreign number is refused by default: only a Turkish number may become
+	// the signal that earns the free trial credit.
+	for _, given := range []string{"", "12345", "+1 555 123 4567", "+49 30 1234567", "0555 123 45 6a", "00905551234567"} {
 		t.Run("rejects "+given, func(t *testing.T) {
-			_, err := hwNormalizeTrPhone(given)
+			_, err := hwNormalizePhone(given)
 			require.ErrorIs(t, err, ErrHwInvalidPhoneNumber)
 		})
 	}
+
+	// The operator may add a country code; the plus then says which one.
+	t.Run("an added country code is accepted and the default stays first", func(t *testing.T) {
+		t.Setenv(hwPhoneCountryCodesEnv, "90, +49")
+		normalised, err := hwNormalizePhone("+49 30 1234567")
+		require.NoError(t, err)
+		assert.Equal(t, "+49301234567", normalised)
+		// A national spelling is still completed with the default code.
+		normalised, err = hwNormalizePhone("555 123 45 67")
+		require.NoError(t, err)
+		assert.Equal(t, "+905551234567", normalised)
+	})
 }
 
 func TestUpsertHwUserSignalsNormalisesThePhone(t *testing.T) {

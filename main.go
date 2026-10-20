@@ -309,6 +309,14 @@ func InitResources() error {
 	// 加载环境变量
 	common.InitEnv()
 
+	// Refuse an unsafe environment configuration. This runs after .env is loaded
+	// because APP_ENV and the skip flag may come from that file; the message
+	// names the variables only and FatalLog exits non-zero.
+	if err = common.HwValidateEnvironment(); err != nil {
+		common.FatalLog(common.LogText("invalid environment configuration: %s", err.Error()))
+		return err
+	}
+
 	logger.SetupLogger()
 
 	// Initialize model settings
@@ -385,6 +393,8 @@ func InitResources() error {
 
 	// Retire expired credit packages every hour on the master node.
 	model.StartHwCreditExpiryJob()
+	// Freeze shared-signal and signup-wave accounts for review once a day.
+	model.StartHwDailyAbuseSweepJob()
 	service.StartHwOrderExpiryJob()
 
 	// Refresh the TL price snapshot (price list + daily rate) once a day on
