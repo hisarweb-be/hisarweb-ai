@@ -41,7 +41,11 @@ func (HwAccountFlag) TableName() string {
 
 // FreezeHwAccounts freezes the given common-user accounts and returns how many
 // were frozen now. Accounts that are already frozen keep their original reason
-// and time, so the first finding stays visible for the review. Administrators
+// and time, so the first finding stays visible for the review. A thawed account
+// freezes again when the finding is newer than the thaw (unfrozen_at < now),
+// which is what keeps one objection from granting a lifetime of new findings;
+// a thaw made during the sweep itself carries a time at or after now and wins,
+// so the sweep never overrules the administrator it just read. Administrators
 // and the root user are never frozen.
 func FreezeHwAccounts(userIDs []int, reason string, now int64) (int, error) {
 	if reason == "" {
@@ -63,6 +67,19 @@ func FreezeHwAccounts(userIDs []int, reason string, now int64) (int, error) {
 			Columns:   []clause.Column{{Name: "user_id"}},
 			DoNothing: true,
 		}).Create(&HwAccountFlag{UserId: userID, Frozen: true, Reason: reason, FrozenAt: now})
+		if result.Error != nil {
+			return frozen, result.Error
+		}
+		if result.RowsAffected == 1 {
+			frozen++
+			hwInvalidateFrozenCache(userID)
+			continue
+		}
+		// The row exists. A frozen account keeps its first finding; a thawed
+		// account freezes again only when this finding is newer than the thaw.
+		result = DB.Model(&HwAccountFlag{}).
+			Where("user_id = ? AND frozen = ? AND unfrozen_at < ?", userID, false, now).
+			Updates(map[string]any{"frozen": true, "reason": reason, "frozen_at": now})
 		if result.Error != nil {
 			return frozen, result.Error
 		}

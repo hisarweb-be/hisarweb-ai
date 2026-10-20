@@ -251,6 +251,157 @@ func TestHwDailyAbuseSweepWaves(t *testing.T) {
 	})
 }
 
+// M4: a full registration hour is not evidence against one account. Only the
+// accounts of the wave that share a second signal with another account of the
+// same hour, or that have no confirmed email address, go to review.
+func TestHwDailyAbuseSweepWaveNeedsASecondSignal(t *testing.T) {
+	now := int64(1_700_000_000)
+	hour := (now - 3600) / 3600 * 3600
+
+	// hwSweepWaveUser creates one account of the wave hour with a confirmed
+	// email address and no signals, so only the explicit signal of the case
+	// itself can qualify it.
+	hwSweepWaveUser := func(t *testing.T, createdAt int64, email string) User {
+		t.Helper()
+		user := hwSweepTestUser(t, createdAt)
+		require.NoError(t, DB.Model(&User{}).Where("id = ?", user.Id).Update("email", email).Error)
+		return user
+	}
+
+	t.Run("an hour of confirmed emails with nothing shared freezes nobody", func(t *testing.T) {
+		hwAbuseSweepTestSetup(t)
+		t.Setenv(hwSweepHourWaveEnv, "3")
+		t.Setenv(hwSweepIpDayWaveEnv, "10")
+		var ids []int
+		for i := 0; i < 3; i++ {
+			user := hwSweepWaveUser(t, hour+int64(i)*60, fmt.Sprintf("customer-%d@example.com", i))
+			ids = append(ids, user.Id)
+		}
+
+		report, err := HwDailyAbuseSweep(now)
+		require.NoError(t, err)
+		assert.Equal(t, 0, report.SignupWave, "the hour alone never freezes a real signup")
+		for _, id := range ids {
+			frozen, err := HwAccountFrozen(id)
+			require.NoError(t, err)
+			assert.False(t, frozen)
+		}
+	})
+
+	t.Run("an account without a confirmed email in the wave freezes", func(t *testing.T) {
+		hwAbuseSweepTestSetup(t)
+		t.Setenv(hwSweepHourWaveEnv, "3")
+		t.Setenv(hwSweepIpDayWaveEnv, "10")
+		confirmed := make([]int, 0, 2)
+		for i := 0; i < 2; i++ {
+			confirmed = append(confirmed, hwSweepWaveUser(t, hour+int64(i)*60, fmt.Sprintf("known-%d@example.com", i)).Id)
+		}
+		anonymous := hwSweepTestUser(t, hour+150)
+
+		report, err := HwDailyAbuseSweep(now)
+		require.NoError(t, err)
+		assert.Equal(t, 1, report.SignupWave)
+		frozen, err := HwAccountFrozen(anonymous.Id)
+		require.NoError(t, err)
+		assert.True(t, frozen, "an unconfirmed email is the second signal")
+		for _, id := range confirmed {
+			frozen, err := HwAccountFrozen(id)
+			require.NoError(t, err)
+			assert.False(t, frozen, "a confirmed email without a second signal stays open")
+		}
+	})
+
+	t.Run("one shared signup address freezes only its accounts", func(t *testing.T) {
+		hwAbuseSweepTestSetup(t)
+		t.Setenv(hwSweepHourWaveEnv, "3")
+		t.Setenv(hwSweepIpDayWaveEnv, "10")
+		var shared []int
+		for i := 0; i < 2; i++ {
+			user := hwSweepWaveUser(t, hour+int64(i)*60, fmt.Sprintf("same-address-%d@example.com", i))
+			require.NoError(t, UpsertHwUserSignals(user.Id, HwUserSignals{Ip: "203.0.113.90"}))
+			shared = append(shared, user.Id)
+		}
+		clean := hwSweepWaveUser(t, hour+150, "other-address@example.com")
+		require.NoError(t, UpsertHwUserSignals(clean.Id, HwUserSignals{Ip: "203.0.113.91"}))
+
+		report, err := HwDailyAbuseSweep(now)
+		require.NoError(t, err)
+		assert.Equal(t, 2, report.SignupWave)
+		for _, id := range shared {
+			frozen, err := HwAccountFrozen(id)
+			require.NoError(t, err)
+			assert.True(t, frozen)
+		}
+		frozen, err := HwAccountFrozen(clean.Id)
+		require.NoError(t, err)
+		assert.False(t, frozen, "another address of the same hour is not part of the finding")
+	})
+
+	t.Run("an email pattern shared inside the wave freezes its accounts", func(t *testing.T) {
+		hwAbuseSweepTestSetup(t)
+		t.Setenv(hwSweepHourWaveEnv, "3")
+		t.Setenv(hwSweepIpDayWaveEnv, "10")
+		var patterned []int
+		for i := 0; i < 2; i++ {
+			user := hwSweepWaveUser(t, hour+int64(i)*60, fmt.Sprintf("repeated+%d@example.com", i))
+			patterned = append(patterned, user.Id)
+		}
+		clean := hwSweepWaveUser(t, hour+150, "different@example.com")
+
+		report, err := HwDailyAbuseSweep(now)
+		require.NoError(t, err)
+		assert.Equal(t, 2, report.SignupWave)
+		for _, id := range patterned {
+			frozen, err := HwAccountFrozen(id)
+			require.NoError(t, err)
+			assert.True(t, frozen, "the same local part with a different +tag is one pattern")
+		}
+		frozen, err := HwAccountFrozen(clean.Id)
+		require.NoError(t, err)
+		assert.False(t, frozen)
+	})
+
+	t.Run("a copied device token stays weak inside a wave", func(t *testing.T) {
+		hwAbuseSweepTestSetup(t)
+		t.Setenv(hwSweepHourWaveEnv, "3")
+		t.Setenv(hwSweepIpDayWaveEnv, "10")
+		var copied []int
+		for i := 0; i < 2; i++ {
+			user := hwSweepWaveUser(t, hour+int64(i)*60, fmt.Sprintf("copied-%d@example.com", i))
+			require.NoError(t, UpsertHwUserSignals(user.Id, HwUserSignals{DeviceToken: "wave-copied-device"}))
+			copied = append(copied, user.Id)
+		}
+		clean := hwSweepWaveUser(t, hour+150, "deviceless@example.com")
+
+		report, err := HwDailyAbuseSweep(now)
+		require.NoError(t, err)
+		assert.Equal(t, 0, report.SignupWave, "a device token below the bulk threshold is no second signal")
+		assert.Equal(t, 0, report.SharedDevice)
+		for _, id := range append(copied, clean.Id) {
+			frozen, err := HwAccountFrozen(id)
+			require.NoError(t, err)
+			assert.False(t, frozen)
+		}
+
+		// The same token on the whole bulk group is the shape of one person
+		// cycling through signups, and does freeze.
+		var bulk []int
+		for i := 0; i < hwSweepDefaultDeviceUsers; i++ {
+			user := hwSweepWaveUser(t, hour-7200+int64(i)*60, fmt.Sprintf("bulk-%d@example.com", i))
+			require.NoError(t, UpsertHwUserSignals(user.Id, HwUserSignals{DeviceToken: "wave-bulk-device"}))
+			bulk = append(bulk, user.Id)
+		}
+		report, err = HwDailyAbuseSweep(now)
+		require.NoError(t, err)
+		assert.Equal(t, hwSweepDefaultDeviceUsers, report.SharedDevice)
+		for _, id := range bulk {
+			frozen, err := HwAccountFrozen(id)
+			require.NoError(t, err)
+			assert.True(t, frozen)
+		}
+	})
+}
+
 func TestHwUnfreezeAccount(t *testing.T) {
 	hwAbuseSweepTestSetup(t)
 	now := int64(1_700_000_000)
@@ -279,6 +430,60 @@ func TestHwUnfreezeAccount(t *testing.T) {
 		unfrozen, err = HwUnfreezeAccount(user.Id, 42, now+61)
 		require.NoError(t, err)
 		assert.False(t, unfrozen)
+	})
+
+	// M5: one objection must not grant a lifetime of new findings, while a thaw
+	// the sweep itself has to respect never gets overruled.
+	t.Run("a thawed account freezes again on a newer finding", func(t *testing.T) {
+		user := hwSweepTestUser(t, now-7200)
+		frozen, err := FreezeHwAccounts([]int{user.Id}, HwFreezeReasonSharedPhone, now)
+		require.NoError(t, err)
+		require.Equal(t, 1, frozen)
+		unfrozen, err := HwUnfreezeAccount(user.Id, 42, now+60)
+		require.NoError(t, err)
+		require.True(t, unfrozen)
+
+		// A finding from before the thaw does not override the administrator.
+		again, err := FreezeHwAccounts([]int{user.Id}, HwFreezeReasonSharedDevice, now+30)
+		require.NoError(t, err)
+		assert.Equal(t, 0, again)
+		isFrozen, err := HwAccountFrozen(user.Id)
+		require.NoError(t, err)
+		assert.False(t, isFrozen, "an unfreeze made after the finding still wins")
+
+		// A newer finding freezes the account again and replaces the reason.
+		again, err = FreezeHwAccounts([]int{user.Id}, HwFreezeReasonSharedCard, now+120)
+		require.NoError(t, err)
+		assert.Equal(t, 1, again)
+		isFrozen, err = HwAccountFrozen(user.Id)
+		require.NoError(t, err)
+		assert.True(t, isFrozen)
+		flag := hwFlagOf(t, user.Id)
+		assert.True(t, flag.Frozen)
+		assert.Equal(t, HwFreezeReasonSharedCard, flag.Reason)
+		assert.Equal(t, now+120, flag.FrozenAt)
+		assert.Equal(t, 42, flag.UnfrozenBy, "the thaw stays in the review history")
+	})
+
+	t.Run("the sweep freezes again after a thaw", func(t *testing.T) {
+		first := hwSweepTestUser(t, now-10800)
+		second := hwSweepTestUser(t, now-10800)
+		require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{Phone: "+905559990011"}))
+		require.NoError(t, UpsertHwUserSignals(second.Id, HwUserSignals{Phone: "+905559990011"}))
+		report, err := HwDailyAbuseSweep(now)
+		require.NoError(t, err)
+		require.Equal(t, 2, report.SharedPhone)
+
+		unfrozen, err := HwUnfreezeAccount(first.Id, 42, now+60)
+		require.NoError(t, err)
+		require.True(t, unfrozen)
+
+		report, err = HwDailyAbuseSweep(now + 120)
+		require.NoError(t, err)
+		assert.Equal(t, 1, report.SharedPhone, "the still-thawed account is frozen again by the next sweep")
+		isFrozen, err := HwAccountFrozen(first.Id)
+		require.NoError(t, err)
+		assert.True(t, isFrozen)
 	})
 }
 

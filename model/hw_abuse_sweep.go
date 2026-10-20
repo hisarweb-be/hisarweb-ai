@@ -52,8 +52,10 @@ func hwSweepThreshold(env string, fallback int) int {
 // freezes common-user accounts for review: (a) accounts that share a phone or
 // card signal with another account, or a device token together with a second
 // shared signal or across an unusual number of accounts, (b) signup waves,
-// meaning an unusually full registration hour or an address that produced an
-// unusual number of accounts in one day. Freezing never touches balances: paid credit
+// meaning an account of an unusually full registration hour that shares a
+// second signal with another account of that hour or has no confirmed email
+// address, or an address that produced an unusual number of accounts in one
+// day. Freezing never touches balances: paid credit
 // and the remaining balance stay exactly as they are, and the block only
 // applies to API usage that draws on the free trial credit. An administrator
 // thaws accounts after review. Log lines carry counts only.
@@ -103,10 +105,13 @@ func HwDailyAbuseSweep(now int64) (*HwAbuseSweepReport, error) {
 	report.FrozenTotal += deviceFrozen
 
 	// (b) Signup waves. Registration hour buckets over the last 24 hours: an
-	// hour at or above the threshold is a wave, and the accounts it created go
-	// to review. Users created before the window are never touched.
+	// hour at or above the threshold is a wave. The hour alone never freezes an
+	// account, because the attacker who fills an hour also fills it with real
+	// customers; only the accounts of the wave that share a second signal with
+	// another account of that hour, or that have no confirmed email address,
+	// go to review. Users created before the window are never touched.
 	wave := hwSweepThreshold(hwSweepHourWaveEnv, hwSweepDefaultHourWave)
-	waveUserIDs, err := hwSignupWaveUserIDs(now, wave)
+	waveUserIDs, err := hwSignupWaveUserIDs(now, wave, deviceUsers)
 	if err != nil {
 		return report, err
 	}
@@ -245,11 +250,15 @@ func hwUsersSharingSecondSignal(group []int) ([]int, error) {
 	return shared, nil
 }
 
-// hwSignupWaveUserIDs finds users created in a registration hour that reached
-// the wave threshold inside the window. created_at is a unix timestamp, so the
-// bucket is plain integer division; all three supported databases run it on
-// the integer column.
-func hwSignupWaveUserIDs(now int64, wave int) ([]int, error) {
+// hwSignupWaveUserIDs finds the users created in a registration hour that
+// reached the wave threshold inside the window and that the wave actually
+// incriminates. created_at is a unix timestamp, so the bucket is plain integer
+// division; all three supported databases run it on the integer column.
+//
+// A full hour is no proof against one account: the attacker who fills it also
+// fills it with real customers, so only the accounts that carry a second
+// signal of their own go to review (see hwWaveAccountsToReview).
+func hwSignupWaveUserIDs(now int64, wave int, bulkUsers int) ([]int, error) {
 	var buckets []int64
 	if err := DB.Model(&User{}).
 		Select("created_at / 3600 AS bucket").
@@ -266,15 +275,104 @@ func hwSignupWaveUserIDs(now int64, wave int) ([]int, error) {
 	// sweep in the quiet hours between two separate waves.
 	var userIDs []int
 	for _, bucket := range buckets {
-		var inBucket []int
-		if err := DB.Model(&User{}).
+		var inBucket []User
+		if err := DB.Select("id", "email").
 			Where("created_at >= ? AND created_at < ?", bucket*3600, (bucket+1)*3600).
-			Pluck("id", &inBucket).Error; err != nil {
+			Find(&inBucket).Error; err != nil {
 			return nil, err
 		}
-		userIDs = append(userIDs, inBucket...)
+		toReview, err := hwWaveAccountsToReview(inBucket, bulkUsers)
+		if err != nil {
+			return nil, err
+		}
+		userIDs = append(userIDs, toReview...)
 	}
 	return userIDs, nil
+}
+
+// hwWaveAccountsToReview returns the accounts of one wave hour that carry a
+// second signal of their own: an address hash or an email pattern shared with
+// another account of the same hour, a device token on at least bulkUsers
+// accounts of the hour, or no confirmed email address at all. The device token
+// keeps its bulk threshold from the shared-device rule: a copied token costs
+// an attacker nothing, and a token alone must never sweep an account into
+// review.
+func hwWaveAccountsToReview(users []User, bulkUsers int) ([]int, error) {
+	ids := make([]int, 0, len(users))
+	for _, user := range users {
+		ids = append(ids, user.Id)
+	}
+	var signals []HwUserSignal
+	if len(ids) > 0 {
+		if err := DB.Where("user_id IN ? AND kind IN ? AND hash <> ?", ids,
+			[]string{HwSignalKindIp, HwSignalKindDevice}, "").Find(&signals).Error; err != nil {
+			return nil, err
+		}
+	}
+	bySignal := make(map[string]map[int]struct{}, len(signals))
+	for _, signal := range signals {
+		key := signal.Kind + "\x00" + signal.Hash
+		if bySignal[key] == nil {
+			bySignal[key] = make(map[int]struct{}, 2)
+		}
+		bySignal[key][signal.UserId] = struct{}{}
+	}
+	toReview := make(map[int]struct{}, len(users))
+	for _, user := range users {
+		if strings.TrimSpace(user.Email) == "" {
+			toReview[user.Id] = struct{}{}
+		}
+	}
+	for key, group := range bySignal {
+		if len(group) < 2 {
+			continue
+		}
+		if strings.HasPrefix(key, HwSignalKindDevice+"\x00") && len(group) < bulkUsers {
+			continue
+		}
+		for userID := range group {
+			toReview[userID] = struct{}{}
+		}
+	}
+	byPattern := make(map[string][]int, len(users))
+	for _, user := range users {
+		if pattern := hwEmailPattern(user.Email); pattern != "" {
+			byPattern[pattern] = append(byPattern[pattern], user.Id)
+		}
+	}
+	for _, group := range byPattern {
+		if len(group) < 2 {
+			continue
+		}
+		for _, userID := range group {
+			toReview[userID] = struct{}{}
+		}
+	}
+	reviewed := make([]int, 0, len(toReview))
+	for _, user := range users {
+		if _, ok := toReview[user.Id]; ok {
+			reviewed = append(reviewed, user.Id)
+		}
+	}
+	return reviewed, nil
+}
+
+// hwEmailPattern reduces an address to the shape a repeat signup keeps: lower
+// case, the local part without the +tag and without dots (the two spellings
+// every large provider delivers to the same mailbox) and the domain unchanged.
+// It returns "" for an address without a usable local part, so accounts
+// without an email never group on the empty pattern.
+func hwEmailPattern(email string) string {
+	local, domain, ok := strings.Cut(strings.ToLower(strings.TrimSpace(email)), "@")
+	if !ok || domain == "" {
+		return ""
+	}
+	local, _, _ = strings.Cut(local, "+")
+	local = strings.ReplaceAll(local, ".", "")
+	if local == "" {
+		return ""
+	}
+	return local + "@" + domain
 }
 
 // hwIpWaveUserIDs finds users whose signup address hash carried at least the
