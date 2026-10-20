@@ -121,3 +121,44 @@ export type HwQualityLatest = {
   note: string
   note_en: string
 }
+
+/** The three public state names of `GET /api/hw/status`. */
+export type HwStatusState = 'operational' | 'degraded' | 'outage'
+
+/** One own model in the public status answer. */
+export type HwStatusModel = {
+  model: string
+  status: HwStatusState
+  /**
+   * Percentage over `availability_days`, rounded by the server. The server
+   * sends 0 when there is no measurement yet, so 0 is shown as "no measurement".
+   */
+  availability_percent: number
+  message_tr: string
+  message_en: string
+}
+
+/** One outage in the public status answer. Times are unix seconds. */
+export type HwStatusIncident = {
+  started_at: number
+  /** 0 while the outage still runs. */
+  ended_at: number
+  /** Length in seconds; 0 while the outage still runs. */
+  duration: number
+  message_tr: string
+  message_en: string
+}
+
+/** `GET /api/hw/status`: the public service status, no login required. */
+export type HwStatusAnswer = {
+  /** Moment the answer was built, in unix seconds. */
+  checked_at: number
+  /** Window the availability figure covers, in days. */
+  availability_days: number
+  overall: HwStatusState
+  models: HwStatusModel[]
+  /** The running outage, when there is one. */
+  incident?: HwStatusIncident | null
+  /** Closed outages, newest first. */
+  recent: HwStatusIncident[]
+}

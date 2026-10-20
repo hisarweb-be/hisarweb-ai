@@ -24,6 +24,7 @@ import type {
   HwCreditPackages,
   HwPriceComparison,
   HwQualityLatest,
+  HwStatusAnswer,
   HwTopUpOrder,
   HwTopUpRequest,
 } from './types'
@@ -71,4 +72,10 @@ export async function getHwQualityLatest(): Promise<
 > {
   const res = await api.get('/api/hw/quality/latest')
   return requireServerSuccess(res.data as HwApiEnvelope<HwQualityLatest>)
+}
+
+/** Public service status; needs no login. */
+export async function getHwStatus(): Promise<HwApiEnvelope<HwStatusAnswer>> {
+  const res = await api.get('/api/hw/status')
+  return requireServerSuccess(res.data as HwApiEnvelope<HwStatusAnswer>)
 }

@@ -239,6 +239,12 @@ export function LandingPage() {
               >
                 {text('qualityTeaserLink')}
               </a>
+              <a
+                href='/durum'
+                className='text-primary inline-flex items-center gap-1 text-sm font-medium underline-offset-4 hover:underline'
+              >
+                {text('navStatus')}
+              </a>
             </div>
           </div>
           <ul className='border-border/50 bg-muted/20 space-y-3 rounded-xl border p-5'>
