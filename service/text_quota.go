@@ -388,6 +388,13 @@ func usageSemanticFromUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) 
 }
 
 func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent []*common.Message) {
+	if HwStreamCutBeforeOutput(ctx, relayInfo) {
+		// The supplier stream ended before its terminal event and the customer
+		// saw nothing, so the route retries. Settling this attempt would charge
+		// an answer nobody saw and make the retry's settlement a no-op, leaving
+		// the real completion tokens unbilled.
+		return
+	}
 	originUsage := usage
 	billingUsage := effectiveBillingUsage(usage)
 	if usage == nil {
