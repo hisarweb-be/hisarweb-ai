@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as authRouteRouteImport } from './routes/(auth)/route'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as DocsRouteImport } from './routes/docs'
 import { Route as DurumRouteImport } from './routes/durum'
 import { Route as FiyatKarsilastirmaRouteImport } from './routes/fiyat-karsilastirma'
 import { Route as KaliteRouteImport } from './routes/kalite'
@@ -88,6 +89,11 @@ const authRouteRoute = authRouteRouteImport.update({
 } as any)
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsRoute = DocsRouteImport.update({
+  id: '/docs',
+  path: '/docs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DurumRoute = DurumRouteImport.update({
@@ -448,6 +454,7 @@ const AuthenticatedSystemSettingsSiteSectionRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/docs': typeof DocsRoute
   '/durum': typeof DurumRoute
   '/fiyat-karsilastirma': typeof FiyatKarsilastirmaRoute
   '/kalite': typeof KaliteRoute
@@ -515,6 +522,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/docs': typeof DocsRoute
   '/durum': typeof DurumRoute
   '/fiyat-karsilastirma': typeof FiyatKarsilastirmaRoute
   '/kalite': typeof KaliteRoute
@@ -584,6 +592,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/(auth)': typeof authRouteRouteWithChildren
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/docs': typeof DocsRoute
   '/durum': typeof DurumRoute
   '/fiyat-karsilastirma': typeof FiyatKarsilastirmaRoute
   '/kalite': typeof KaliteRoute
@@ -653,6 +662,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/docs'
     | '/durum'
     | '/fiyat-karsilastirma'
     | '/kalite'
@@ -720,6 +730,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/docs'
     | '/durum'
     | '/fiyat-karsilastirma'
     | '/kalite'
@@ -788,6 +799,7 @@ export interface FileRouteTypes {
     | '/'
     | '/(auth)'
     | '/_authenticated'
+    | '/docs'
     | '/durum'
     | '/fiyat-karsilastirma'
     | '/kalite'
@@ -858,6 +870,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   authRouteRoute: typeof authRouteRouteWithChildren
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  DocsRoute: typeof DocsRoute
   DurumRoute: typeof DurumRoute
   FiyatKarsilastirmaRoute: typeof FiyatKarsilastirmaRoute
   KaliteRoute: typeof KaliteRoute
@@ -897,6 +910,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs': {
+      id: '/docs'
+      path: '/docs'
+      fullPath: '/docs'
+      preLoaderRoute: typeof DocsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/durum': {
@@ -1500,6 +1520,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   authRouteRoute: authRouteRouteWithChildren,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  DocsRoute: DocsRoute,
   DurumRoute: DurumRoute,
   FiyatKarsilastirmaRoute: FiyatKarsilastirmaRoute,
   KaliteRoute: KaliteRoute,
