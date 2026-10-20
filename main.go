@@ -351,6 +351,13 @@ func InitResources() error {
 	}
 	model.InitOptionMap()
 
+	// Fill the production defaults a fresh database still misses: the sale
+	// groups, the billing ratios of the sold models, the TL display and the
+	// brand. Existing operator values are never replaced.
+	if err = service.HwSeedDefaultOptions(); err != nil {
+		common.SysError(common.LogText("failed to seed the production defaults: %s", err.Error()))
+	}
+
 	// 清理旧的磁盘缓存文件
 	common.CleanupOldCacheFiles()
 

@@ -69,6 +69,28 @@ func hwPhoneStepTestUser(t *testing.T, email string) model.User {
 	return user
 }
 
+// hwSetTryPerUsdOption publishes (or clears) the daily rate the free trial and
+// every lira amount of the site are derived from.
+func hwSetTryPerUsdOption(t *testing.T, value string) {
+	t.Helper()
+	common.OptionMapRWMutex.Lock()
+	if common.OptionMap == nil {
+		common.OptionMap = make(map[string]string)
+	}
+	previous, hadPrevious := common.OptionMap[model.HwTryPerUsdOption]
+	common.OptionMap[model.HwTryPerUsdOption] = value
+	common.OptionMapRWMutex.Unlock()
+	t.Cleanup(func() {
+		common.OptionMapRWMutex.Lock()
+		defer common.OptionMapRWMutex.Unlock()
+		if hadPrevious {
+			common.OptionMap[model.HwTryPerUsdOption] = previous
+			return
+		}
+		delete(common.OptionMap, model.HwTryPerUsdOption)
+	})
+}
+
 func hwPhoneStepUserQuota(t *testing.T, userID int) int {
 	t.Helper()
 	var user model.User
@@ -189,12 +211,28 @@ func TestHwCompleteTelegramPhoneStep(t *testing.T) {
 		assert.Empty(t, claims, "an identity alone reserves no phone claim")
 	})
 
-	t.Run("the free amount follows the environment and part A's cap", func(t *testing.T) {
-		assert.Equal(t, common.QuotaFromFloat(3*float64(common.QuotaPerUnit)), HwFreeTrialQuota())
+	t.Run("the free amount is 100 lira at the daily rate and part A's cap holds", func(t *testing.T) {
+		hwSetTryPerUsdOption(t, "40")
+		assert.Equal(t, common.QuotaFromFloat(2.5*float64(common.QuotaPerUnit)), HwFreeTrialQuota(),
+			"100 TL at 40 TL/USD is 2.5 dollars of credit")
+
+		hwSetTryPerUsdOption(t, "")
+		assert.Equal(t, common.QuotaFromFloat(3*float64(common.QuotaPerUnit)), HwFreeTrialQuota(),
+			"without a rate the dollar fallback applies")
+
 		t.Setenv("HW_FREE_TRIAL_QUOTA", "2")
-		assert.Equal(t, common.QuotaFromFloat(2*float64(common.QuotaPerUnit)), HwFreeTrialQuota())
+		assert.Equal(t, common.QuotaFromFloat(2*float64(common.QuotaPerUnit)), HwFreeTrialQuota(),
+			"the environment override is the fallback amount")
 		t.Setenv("HW_FREE_TRIAL_QUOTA", "9999")
-		assert.Equal(t, model.HwMaxFreeTrialQuota(), HwFreeTrialQuota(), "an absurd setting is clamped to the cap")
+		assert.Equal(t, model.HwMaxFreeTrialQuota(), HwFreeTrialQuota(), "an absurd fallback is clamped to the cap")
+
+		hwSetTryPerUsdOption(t, "40")
+		assert.Equal(t, common.QuotaFromFloat(2.5*float64(common.QuotaPerUnit)), HwFreeTrialQuota(),
+			"a published rate governs the amount; the fallback is not used")
+
+		hwSetTryPerUsdOption(t, "0.5")
+		assert.Equal(t, model.HwMaxFreeTrialQuota(), HwFreeTrialQuota(),
+			"a rate that turns 100 TL into more than the cap stops at the cap")
 	})
 }
 

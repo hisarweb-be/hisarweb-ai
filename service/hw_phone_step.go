@@ -11,16 +11,23 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+
+	"github.com/shopspring/decimal"
 )
 
-// hwFreeTrialQuotaEnv names the free trial amount in US dollars. Part D will
-// replace this with the TRY amount converted against the daily rate; until
-// then the operator sets one dollar value, which part A caps at its hard
+// hwFreeTrialQuotaEnv names a dollar override of the free trial amount, used
+// only while no daily rate is known. Part A caps whatever comes out at its hard
 // maximum anyway.
 const hwFreeTrialQuotaEnv = "HW_FREE_TRIAL_QUOTA"
 
-// hwFreeTrialDefaultDollars is the free trial default: three dollars, well
-// below part A's ten-dollar cap, so a forgotten setting stays on the safe side.
+// hwFreeTrialTry is the free trial credit the customer sees: 100 TL. The
+// ledger keeps dollars, so the amount is converted against the daily rate that
+// the price snapshot job publishes in HwTryPerUsd.
+const hwFreeTrialTry = 100
+
+// hwFreeTrialDefaultDollars is the free trial fallback while no daily rate has
+// been published yet: three dollars, well below part A's ten-dollar cap, so an
+// unknown rate stays on the safe side.
 const hwFreeTrialDefaultDollars = 3
 
 // Bounds of an accepted X-HW-Device token: long enough to be a stable signal,
@@ -37,10 +44,20 @@ var (
 	hwHexTokenRe            = regexp.MustCompile(`^[0-9a-fA-F]+$`)
 )
 
-// HwFreeTrialQuota converts the configured free trial dollars to quota units
-// and clamps the result to part A's hard cap, so no setting can hand out more
-// than the cap allows.
+// HwFreeTrialQuota converts the free trial credit to quota units and clamps the
+// result to part A's hard cap, so no setting can hand out more than the cap
+// allows.
+//
+// The credit is hwFreeTrialTry lira against the daily USD/TRY rate, the same
+// rate every other lira amount of the site is derived from. While no rate has
+// been published the dollar fallback applies, so a fresh installation still
+// hands out a trial instead of nothing.
 func HwFreeTrialQuota() int {
+	if rate, err := decimal.NewFromString(strings.TrimSpace(hwOptionValue(model.HwTryPerUsdOption))); err == nil && rate.IsPositive() {
+		dollars := decimal.NewFromInt(hwFreeTrialTry).Div(rate)
+		quota := common.QuotaFromDecimal(dollars.Mul(decimal.NewFromFloat(common.QuotaPerUnit)))
+		return min(quota, model.HwMaxFreeTrialQuota())
+	}
 	dollars := float64(hwFreeTrialDefaultDollars)
 	if raw := strings.TrimSpace(os.Getenv(hwFreeTrialQuotaEnv)); raw != "" {
 		if parsed, err := strconv.ParseFloat(raw, 64); err == nil && parsed >= 0 {
@@ -48,10 +65,7 @@ func HwFreeTrialQuota() int {
 		}
 	}
 	quota := common.QuotaFromFloat(dollars * float64(common.QuotaPerUnit))
-	if quota > model.HwMaxFreeTrialQuota() {
-		quota = model.HwMaxFreeTrialQuota()
-	}
-	return quota
+	return min(quota, model.HwMaxFreeTrialQuota())
 }
 
 // HwNormalizeDeviceToken validates the X-HW-Device header: at most 128
