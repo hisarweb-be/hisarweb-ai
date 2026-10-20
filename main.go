@@ -384,5 +384,9 @@ func InitResources() error {
 	// the master node.
 	service.StartHwPriceSnapshotJob()
 
+	// Mail the customers whose package expires in five days and whose balance
+	// fell below the warning level, once a day on the master node.
+	service.StartHwCustomerMailJob()
+
 	return nil
 }
