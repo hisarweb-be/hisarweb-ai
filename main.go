@@ -380,5 +380,9 @@ func InitResources() error {
 	model.StartHwCreditExpiryJob()
 	service.StartHwOrderExpiryJob()
 
+	// Refresh the TL price snapshot (price list + daily rate) once a day on
+	// the master node.
+	service.StartHwPriceSnapshotJob()
+
 	return nil
 }
