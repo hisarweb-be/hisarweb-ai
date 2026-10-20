@@ -19,7 +19,14 @@ For commercial licensing, please contact support@quantumnous.com
 import { api } from '@/lib/api'
 import { requireServerSuccess } from '@/lib/server-error-message'
 
-import type { HwCreditPackages, HwTopUpOrder, HwTopUpRequest } from './types'
+import type {
+  HwApiEnvelope,
+  HwCreditPackages,
+  HwPriceComparison,
+  HwQualityLatest,
+  HwTopUpOrder,
+  HwTopUpRequest,
+} from './types'
 
 /**
  * Bounds of the list value. They mirror the server options `HwMinTopUpTry` and
@@ -42,4 +49,26 @@ export async function createHwTopUpOrder(
 ): Promise<HwTopUpOrder> {
   const response = await api.post('/api/user/hw/orders', request)
   return requireServerSuccess(response.data).data as HwTopUpOrder
+}
+
+export type HwCompareRequest = {
+  model: string
+  input_tokens: number
+  output_tokens: number
+}
+
+/** Public price comparison; unknown or unsold models answer 404. */
+export async function compareHwPrices(
+  request: HwCompareRequest
+): Promise<HwApiEnvelope<HwPriceComparison>> {
+  const res = await api.get('/api/hw/pricing/compare', { params: request })
+  return requireServerSuccess(res.data as HwApiEnvelope<HwPriceComparison>)
+}
+
+/** Public quality summary of the newest measurement. */
+export async function getHwQualityLatest(): Promise<
+  HwApiEnvelope<HwQualityLatest>
+> {
+  const res = await api.get('/api/hw/quality/latest')
+  return requireServerSuccess(res.data as HwApiEnvelope<HwQualityLatest>)
 }

@@ -17,6 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { HwTextKey } from '../texts'
+import { formatDateTimeStr } from '@/lib/format'
+import { HW_COMPARE_MAX_MONTHLY_TOKENS } from '../constants'
+import type { HwMoneyText } from '../types'
 
 /**
  * Formats a lira amount. The HisarWeb AI service is priced and charged in TRY,
@@ -56,4 +59,70 @@ export function hwPackageSourceTextKey(source: string): HwTextKey | null {
     default:
       return null
   }
+}
+
+/**
+ * Reads one of the API's decimal money strings. The API never sends money as a
+ * JSON number, so a missing or malformed value stays `null` and the page shows
+ * a dash instead of an invented amount.
+ */
+export function parseHwAmount(
+  value: HwMoneyText | null | undefined
+): number | null {
+  if (value == null || value.trim() === '') return null
+  const amount = Number(value)
+  return Number.isFinite(amount) ? amount : null
+}
+
+/**
+ * Formats an amount that is already in `currency` (the API's official USD price
+ * and its TRY prices). The shared currency helpers convert quota into the
+ * admin's display currency, which is not what these amounts are, so this page
+ * formats the amount directly. Sub-unit amounts keep six decimals so a cheap
+ * request never displays as zero.
+ */
+export function formatHwMoney(
+  value: number | null,
+  currency: 'TRY' | 'USD',
+  locale?: string
+): string {
+  if (value == null || !Number.isFinite(value)) return '-'
+  const maximumFractionDigits =
+    Math.abs(value) > 0 && Math.abs(value) < 1 ? 6 : 2
+  return new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits,
+  }).format(value)
+}
+
+/** Reads a monthly token count typed by a visitor: whole, within the bound. */
+export function parseHwTokenCount(raw: string): number | null {
+  const trimmed = raw.trim()
+  if (!/^\d+$/.test(trimmed)) return null
+  const value = Number(trimmed)
+  if (!Number.isSafeInteger(value) || value > HW_COMPARE_MAX_MONTHLY_TOKENS) {
+    return null
+  }
+  return value
+}
+
+/**
+ * Formats a date the API sends either as Unix seconds (`measured_at`), as an
+ * RFC 3339 timestamp (`price_fetched_at`) or as a plain `YYYY-MM-DD` day
+ * (`fx_date`). A bare day is shown as written so a timezone shift cannot move
+ * the exchange-rate date to another day.
+ */
+export function formatHwStamp(
+  value: string | number | null | undefined
+): string {
+  if (value == null || value === '') return '-'
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+    return value.trim()
+  }
+  const date =
+    typeof value === 'number' ? new Date(value * 1000) : new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return formatDateTimeStr(date)
 }
