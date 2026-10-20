@@ -1,0 +1,87 @@
+# Uitrol: HisarWeb AI als Docker-Compose-app
+
+Deze map hoort bij het productie-image en de compose van de gateway (fork van new-api).
+Bestanden: `deploy/Dockerfile` (image), `deploy/docker-compose.yml` (app + eigen PostgreSQL),
+dit bestand (recept). De root-`Dockerfile` en root-`docker-compose.yml` van upstream blijven
+ongemoeid; die blijven voor upstream-releases en lokale ontwikkeling.
+
+## Wat de app nodig heeft
+
+| Soort | Naam | Verplicht | Betekenis |
+|---|---|---|---|
+| poort | `APP_HTTP_PORT` | nee (3000) | hostpoort die naar de containerpoort 3000 gaat |
+| app | `PORT` | nee (3000) | poort binnen de container; laat staan |
+| app | `SESSION_SECRET` | ja | souscheidsleutel voor sessies; willekeurig, minstens 32 tekens |
+| app | `CRYPTO_SECRET` | ja | versleutelt opgeslagen geheimen in de database (o.a. kanaalsleutels); nooit wijzigen na de eerste start |
+| app | `HW_SIGNAL_SALT` | ja | zout voor misbruiksignalen (telefoon, IP, kaartvingerafdruk); zonder dit weigert gratis tegoed en affiliate-beloning |
+| app | `SESSION_COOKIE_TRUSTED_URL` | ja | exacte HTTPS-origin(s), kommagescheiden, bv. `https://ai.hisarweb.com`; hoort bij `SESSION_COOKIE_SECURE=true` |
+| app | `TZ` | nee (Europe/Istanbul) | tijdzone in logs en mails |
+| app | `DEFAULT_LANGUAGE` | nee (tr) | taal van logregels en van berichten als de lezer geen taal opgeeft |
+| app | `NODE_NAME` | nee | naam van dit knooppunt in het auditlog |
+| database | `SQL_DSN` | ja (uit de vier hieronder opgebouwd) | `postgresql://<user>:<wachtwoord>@postgres:5432/<db>?sslmode=disable`; compose bouwt dit zelf uit de volgende vier |
+| database | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | ja | inloggegevens van de eigen PostgreSQL-container; de poort staat niet naar buiten open |
+| betalen | `REVOLUT_SECRET_KEY`, `REVOLUT_WEBHOOK_SECRET` | nee | Revolut Merchant; leeg = de betaalroute start geen betaling |
+| betalen | `REVOLUT_API_BASE`, `REVOLUT_API_VERSION` | nee | leeg = productie-URL en standaardversie uit de code |
+| reserve | `HW_BUREAU_USAGE_URL`, `HW_BUREAU_USAGE_TOKEN`, `HW_WINDOW_CAPACITY_USD`, `HW_RESERVE_MODE` | nee | poort op het bureaugebruik; leeg betekent: klantverkeer dicht in plaats van gokken |
+
+Alles hierboven komt uit de omgeving van Coolify. In dit bestand staan alleen namen, nooit waarden.
+
+### Geheimen die deze code niet uit de omgeving leest
+
+new-api bewaart deze in de database (sleutels versleuteld met `CRYPTO_SECRET`) en zet ze via het
+beheerpaneel, niet via een omgevingsvariabele. Ze staan daarom bewust niet in de compose: een
+variabele die niets leest, suggereert ten onrechte dat hij werkt.
+
+- Turnstile: site-sleutel en geheime sleutel (Beheer > Instellingen).
+- Telegram-login: bot-token (Beheer > Instellingen).
+- SMTP: server, account en wachtwoord voor mails (Beheer > Instellingen).
+- Kanaalsleutels, waaronder de Lumia-klantsleutel en de OpenRouter-noodsleutel (Beheer > Kanalen).
+
+Gevolg voor de uitrol: na de eerste start moeten deze eenmalig in het beheerpaneel worden gezet.
+Wil Altuner ze toch uitsluitend uit de omgeving, dan is dat een codewijziging (opstarten van de
+opties uit omgevingsvariabelen); dat valt buiten H2 en is een open punt in het verslag.
+
+## Poort en gezondheid
+
+- Poort: container `3000`, host `${APP_HTTP_PORT:-3000}`.
+- Healthcheck (in het image en in de compose): `GET http://127.0.0.1:3000/api/status` moet met
+  HTTP 200 antwoorden en `"success": true` bevatten. Coolify toont de container dan als `healthy`.
+- Geheugen en CPU: app 512 MB en 1 CPU, PostgreSQL 512 MB. De databank heeft geen gepubliceerde
+  poort; alleen de app in dit netwerk kan erbij.
+
+## Zo leest Coolify het
+
+1. Nieuwe resource in Coolify: **Docker Compose** (leeg of vanuit de repo `hisarweb-be/hisarweb-ai`).
+2. **Base Directory**: `/` (repositorywortel). **Docker Compose Location**:
+   `/deploy/docker-compose.yml`. De compose bouwt met context `..`, dus de bouwcontext is de
+   repositorywortel en `deploy/Dockerfile` vindt `web/`, `go.mod`, `relaykit/` en `tokenkit/`.
+3. Zet de variabelen uit de tabel op de pagina **Environment Variables** van de app. Verplichte
+   variabelen zonder waarde laten de compose bewust falen (`:?`-controle), dus een vergeten sleutel
+   stopt de uitrol in plaats van stil te starten.
+4. **Domains**: het publieke adres met poort `3000` (de containerpoort). Coolify zet daar zijn proxy voor.
+5. Auto Deploy blijft uit (bureau-regel sinds 1 okt 2026, `kennis/infra/coolify-uitrol.md`). Uitrollen
+   gaat via de CTO-route met een goedkeuringskaart; nooit via een push naar main.
+
+## Terugrolpunten en gegevens
+
+- `app_data` (named volume op `/data`): SQLite-bestand, uploads en logs.
+- `pg_data` (named volume op `/var/lib/postgresql/data`): de klantdatabase. Back-up blijft de
+  bestaande VPS-postgresroute; verwijder dit volume nooit zonder nagemeten terugvalkopie.
+- Terugrollen: Coolify zet de vorige commit terug en bouwt opnieuw (image `hisarweb-ai:prod`).
+  De volumes blijven staan, dus gegevens overleven een terugrol.
+
+## Lokaal controleren zonder zware bouw
+
+```bash
+# in de WSL-distro paperclip, vanuit de repositorywortel
+cd deploy
+POSTGRES_USER=x POSTGRES_PASSWORD=<verzonnen> POSTGRES_DB=newapi \
+SESSION_SECRET=<verzonnen> CRYPTO_SECRET=<verzonnen> HW_SIGNAL_SALT=<verzonnen> \
+SESSION_COOKIE_TRUSTED_URL=https://example.invalid \
+docker compose config
+```
+
+Dat controleert interpolatie, limieten, volumes en healthchecks zonder iets te bouwen of te starten.
+Het image zelf wordt alleen in GitHub Actions gebouwd en gemeten: de job `Production image build` in
+`.github/workflows/security.yml` bouwt `deploy/Dockerfile` op elke pull request en op elke push naar
+main, zonder te publiceren. Op de laptop bouwen we het niet.
