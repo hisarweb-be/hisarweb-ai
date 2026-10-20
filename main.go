@@ -379,5 +379,9 @@ func InitResources() error {
 	// Retire expired credit packages every hour on the master node.
 	model.StartHwCreditExpiryJob()
 
+	// Refresh the TL price snapshot (price list + daily rate) once a day on
+	// the master node.
+	service.StartHwPriceSnapshotJob()
+
 	return nil
 }
