@@ -87,6 +87,7 @@ type hwMaskWriter struct {
 	transform   bool
 	stream      bool
 	anthropic   bool
+	oaiChat     bool
 	apiRoute    bool
 	hijacked    bool
 	flushed     bool
@@ -123,6 +124,7 @@ func HwMask() gin.HandlerFunc {
 			ownModel:       c.GetString("original_model"),
 			requestID:      c.GetString(common.RequestIdKey),
 			anthropic:      hwAnthropicPath(c),
+			oaiChat:        hwOpenAIChatPath(c),
 			apiRoute:       hwOwnAPIRoute(c),
 		}
 		c.Writer = writer
@@ -583,7 +585,7 @@ var hwPayloadNeedles = []string{
 	"lumia", "openrouter", "litellm",
 	`"model"`, `"id"`, `"error"`, `"object"`, `"type"`, `"message`, `"response`,
 	"native_finish_reason", "is_byok", "cost_details", "system_fingerprint",
-	"provider", "generation_id", `"x_`, `"x-`, "gen-", `\u`,
+	"provider", "generation_id", `"x_`, `"x-`, "gen-", `\u`, `"usage"`,
 }
 
 // hwPayloadNeedsParsing reports whether a chunk is worth parsing at all. The
@@ -736,6 +738,9 @@ func (w *hwMaskWriter) sanitizeTree(node any) {
 			if hwDropJSONKey(key) {
 				delete(typed, key)
 				continue
+			}
+			if usage, ok := value.(map[string]any); ok && strings.EqualFold(strings.TrimSpace(key), "usage") {
+				w.filterCustomerUsage(usage)
 			}
 			if text, ok := value.(string); ok {
 				if !hwContentKeys[strings.ToLower(key)] && common.HwHasProviderTextTrace(text) {
