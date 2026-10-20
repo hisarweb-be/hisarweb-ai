@@ -1,0 +1,281 @@
+package middleware
+
+import (
+	"crypto/sha256"
+	"encoding/base64"
+	"net/url"
+	"os"
+	"regexp"
+	"slices"
+	"strings"
+	"sync"
+
+	"github.com/QuantumNous/new-api/common"
+
+	"github.com/gin-gonic/gin"
+)
+
+// Browser security headers for every response this server sends.
+//
+// The header set is fixed rather than configured per deployment: only the
+// Content-Security-Policy varies, because only the CSP depends on what the
+// served page actually loads. HSTS is emitted only for requests that arrived
+// over TLS (or that a trusted proxy marked as https), so a local http run keeps
+// working.
+const (
+	hwHstsValue = "max-age=31536000; includeSubDomains"
+
+	// Permissions-Policy: every powerful feature the dashboard does not use is
+	// denied. fullscreen stays available to the application's own origin
+	// because the console offers a full-screen log view.
+	hwPermissionsPolicy = "accelerometer=(), autoplay=(), camera=(), display-capture=(), " +
+		"encrypted-media=(), fullscreen=(self), geolocation=(), gyroscope=(), " +
+		"magnetometer=(), microphone=(), midi=(), payment=(), usb=()"
+
+	// hwTurnstileOrigin is a third party the dashboard loads while
+	// TurnstileCheckEnabled is on: its api.js script, its challenge frame and
+	// its verification requests all live on this origin.
+	hwTurnstileOrigin = "https://challenges.cloudflare.com"
+
+	// Telegram login (TelegramOAuthEnabled): telegram.org serves the widget
+	// script that draws the button, the login itself runs in a frame on
+	// oauth.telegram.org and that frame is also where the console sends its
+	// requests.
+	hwTelegramScriptOrigin = "https://telegram.org"
+	hwTelegramOAuthOrigin  = "https://oauth.telegram.org"
+
+	// Google Analytics 4: gtag.js comes from the tag manager host, the hits go
+	// to the analytics host.
+	hwGoogleTagManagerOrigin = "https://www.googletagmanager.com"
+	hwGoogleAnalyticsOrigin  = "https://www.google-analytics.com"
+
+	// hwUmamiDefaultScriptURL is where the Umami script lives when the operator
+	// sets UMAMI_WEBSITE_ID without UMAMI_SCRIPT_URL.
+	hwUmamiDefaultScriptURL = "https://analytics.umami.is/script.js"
+
+	// The HwCspExtra*Env variables widen one directive each with a comma-separated
+	// list of https origins: frame-src and connect-src for the few pages that
+	// render an administrator-configured URL in a frame (home page, about page,
+	// chat presets), img-src/style-src/font-src for a hosted logo, a style sheet
+	// or a font the console loads. Every entry must be a bare https origin;
+	// anything else is ignored instead of breaking the policy. No variable can
+	// widen script-src or replace the policy as a whole: the hashes of the
+	// inline scripts and the absence of 'unsafe-inline'/'unsafe-eval' stay the
+	// guarantee that an injected script cannot run.
+	HwCspExtraFrameSrcEnv   = "HW_CSP_EXTRA_FRAME_SRC"
+	HwCspExtraConnectSrcEnv = "HW_CSP_EXTRA_CONNECT_SRC"
+	HwCspExtraImgSrcEnv     = "HW_CSP_EXTRA_IMG_SRC"
+	HwCspExtraStyleSrcEnv   = "HW_CSP_EXTRA_STYLE_SRC"
+	HwCspExtraFontSrcEnv    = "HW_CSP_EXTRA_FONT_SRC"
+)
+
+var (
+	hwIndexScriptHashesMu sync.RWMutex
+	hwIndexScriptHashes   []string
+)
+
+// HwSetIndexPageScriptHashes records the hashes of the inline scripts of the
+// index page that is actually served. main.go calls it after it has injected
+// the optional analytics snippets, so the hashes always describe the real page.
+// Without them the theme bootstrap in web/index.html would be blocked, and the
+// page would paint in the wrong theme before React takes over.
+func HwSetIndexPageScriptHashes(hashes []string) {
+	hwIndexScriptHashesMu.Lock()
+	defer hwIndexScriptHashesMu.Unlock()
+	hwIndexScriptHashes = append([]string(nil), hashes...)
+}
+
+// HwIndexPageScriptHashes returns the CSP sha256 source expression for every
+// inline script in page. A script with a src attribute is fetched, not hashed;
+// whitespace-only bodies have nothing to execute and are skipped.
+func HwIndexPageScriptHashes(page []byte) []string {
+	matches := hwScriptTagPattern.FindAllSubmatch(page, -1)
+	hashes := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if hwScriptSrcAttributePattern.Match(match[1]) {
+			continue
+		}
+		body := match[2]
+		if len(strings.TrimSpace(string(body))) == 0 {
+			continue
+		}
+		sum := sha256.Sum256(body)
+		hashes = append(hashes, "'sha256-"+base64.StdEncoding.EncodeToString(sum[:])+"'")
+	}
+	return hashes
+}
+
+var (
+	hwScriptTagPattern          = regexp.MustCompile(`(?is)<script\b([^>]*)>(.*?)</script\s*>`)
+	hwScriptSrcAttributePattern = regexp.MustCompile(`(?i)(^|\s)src\s*=`)
+)
+
+// HwRequestIsHTTPS reports whether the browser reached this server over TLS.
+// A reverse proxy terminates TLS and forwards plain http, so the proxy's
+// X-Forwarded-Proto counts as well. The header is client-controllable when the
+// server is exposed directly, which is harmless here: browsers ignore HSTS on
+// an http response, so a forged header can never pin a scheme the operator did
+// not want.
+func HwRequestIsHTTPS(c *gin.Context) bool {
+	if c.Request.TLS != nil {
+		return true
+	}
+	proto, _, _ := strings.Cut(c.GetHeader("X-Forwarded-Proto"), ",")
+	return strings.EqualFold(strings.TrimSpace(proto), "https")
+}
+
+// HwContentSecurityPolicy builds the policy the dashboard needs. Each exception
+// is deliberate:
+//
+//   - script-src keeps the host list plus one sha256 hash per inline script of
+//     the served index page. 'unsafe-inline' is never used, so an injected
+//     inline script cannot run; 'unsafe-eval' is never used either, the React
+//     build ships plain functions.
+//   - style-src allows 'unsafe-inline' because React writes inline style
+//     attributes (progress bars, virtualized rows) and the UI library injects
+//     style elements at runtime. Styles cannot execute script, so this does not
+//     weaken script-src.
+//   - img-src allows data: and blob: because the console renders locally built
+//     icons and previews. Uploaded or remote images are not allowed: the
+//     operator can widen this through HW_CSP_EXTRA_IMG_SRC.
+//   - connect-src is the own origin plus the hosts of whichever feature is
+//     switched on: Turnstile, Telegram login, Google Analytics and Umami.
+//   - frame-src is 'none' unless a feature needs a frame. Our Turkish console
+//     configures no home page URL, about page URL or chat preset, so the only
+//     frames it can load are the Turnstile challenge, the Telegram login and
+//     whatever the operator names in HW_CSP_EXTRA_FRAME_SRC. frame-ancestors
+//     'none' keeps the console out of any frame, which is stricter than the
+//     X-Frame-Options: DENY that older browsers read.
+func HwContentSecurityPolicy() string {
+	scriptSources := append([]string{"'self'"}, hwIndexScriptSources()...)
+	connectSources := []string{"'self'"}
+	frameSources := make([]string, 0, 4)
+	styleSources := []string{"'self'", "'unsafe-inline'"}
+	imgSources := []string{"'self'", "data:", "blob:"}
+	fontSources := []string{"'self'", "data:"}
+
+	turnstile := common.TurnstileCheckEnabled
+	if turnstile {
+		frameSources = hwAddOrigins(frameSources, hwTurnstileOrigin)
+		scriptSources = hwAddOrigins(scriptSources, hwTurnstileOrigin)
+		connectSources = hwAddOrigins(connectSources, hwTurnstileOrigin)
+	}
+	if common.TelegramOAuthEnabled {
+		frameSources = hwAddOrigins(frameSources, hwTelegramOAuthOrigin)
+		scriptSources = hwAddOrigins(scriptSources, hwTelegramScriptOrigin)
+		connectSources = hwAddOrigins(connectSources, hwTelegramOAuthOrigin)
+	}
+	if os.Getenv("GOOGLE_ANALYTICS_ID") != "" {
+		scriptSources = hwAddOrigins(scriptSources, hwGoogleTagManagerOrigin)
+		connectSources = hwAddOrigins(connectSources, hwGoogleTagManagerOrigin, hwGoogleAnalyticsOrigin)
+	}
+	if os.Getenv("UMAMI_WEBSITE_ID") != "" {
+		umamiScriptURL := os.Getenv("UMAMI_SCRIPT_URL")
+		if umamiScriptURL == "" {
+			umamiScriptURL = hwUmamiDefaultScriptURL
+		}
+		if origin := hwHttpsURLOrigin(umamiScriptURL); origin != "" {
+			scriptSources = hwAddOrigins(scriptSources, origin)
+			connectSources = hwAddOrigins(connectSources, origin)
+		}
+	}
+	frameSources = hwAddOrigins(frameSources, hwCspExtraOrigins(HwCspExtraFrameSrcEnv)...)
+	connectSources = hwAddOrigins(connectSources, hwCspExtraOrigins(HwCspExtraConnectSrcEnv)...)
+	imgSources = hwAddOrigins(imgSources, hwCspExtraOrigins(HwCspExtraImgSrcEnv)...)
+	styleSources = hwAddOrigins(styleSources, hwCspExtraOrigins(HwCspExtraStyleSrcEnv)...)
+	fontSources = hwAddOrigins(fontSources, hwCspExtraOrigins(HwCspExtraFontSrcEnv)...)
+
+	directives := map[string]string{
+		"default-src":     "'self'",
+		"script-src":      strings.Join(scriptSources, " "),
+		"style-src":       strings.Join(styleSources, " "),
+		"img-src":         strings.Join(imgSources, " "),
+		"font-src":        strings.Join(fontSources, " "),
+		"connect-src":     strings.Join(connectSources, " "),
+		"frame-ancestors": "'none'",
+		"base-uri":        "'self'",
+		"form-action":     "'self'",
+		"object-src":      "'none'",
+	}
+	if len(frameSources) == 0 {
+		directives["frame-src"] = "'none'"
+	} else {
+		directives["frame-src"] = strings.Join(frameSources, " ")
+	}
+	if turnstile {
+		// Turnstile proves the challenge in a Web Worker it creates from a blob.
+		directives["worker-src"] = "'self' blob:"
+	}
+
+	order := []string{
+		"default-src", "script-src", "style-src", "img-src", "font-src", "connect-src",
+		"frame-src", "frame-ancestors", "base-uri", "form-action", "object-src", "worker-src",
+	}
+	parts := make([]string, 0, len(order))
+	for _, name := range order {
+		if value, ok := directives[name]; ok {
+			parts = append(parts, name+" "+value)
+		}
+	}
+	return strings.Join(parts, "; ")
+}
+
+func hwIndexScriptSources() []string {
+	hwIndexScriptHashesMu.RLock()
+	defer hwIndexScriptHashesMu.RUnlock()
+	return append([]string(nil), hwIndexScriptHashes...)
+}
+
+// hwAddOrigins appends the origins that the directive does not carry yet. An
+// operator list that repeats a built-in origin, or itself, must not produce the
+// same source twice in the policy.
+func hwAddOrigins(sources []string, origins ...string) []string {
+	for _, origin := range origins {
+		if origin != "" && !slices.Contains(sources, origin) {
+			sources = append(sources, origin)
+		}
+	}
+	return sources
+}
+
+// hwCspExtraOrigins reads the comma-separated list of an environment variable
+// and keeps the entries that are a bare https origin. An entry that does not
+// qualify is ignored: a typo must neither widen the policy nor break the page.
+func hwCspExtraOrigins(envName string) []string {
+	origins := make([]string, 0, 2)
+	for raw := range strings.SplitSeq(os.Getenv(envName), ",") {
+		origin, err := common.NormalizeOrigin(raw)
+		if err != nil || !strings.HasPrefix(origin, "https://") {
+			continue
+		}
+		origins = append(origins, origin)
+	}
+	return origins
+}
+
+// hwHttpsURLOrigin reduces a script URL to the origin a CSP source needs.
+func hwHttpsURLOrigin(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		return ""
+	}
+	return "https://" + parsed.Host
+}
+
+// HwSecurityHeaders applies the browser security headers to every response,
+// including 404s and relay answers: it is registered as the first middleware of
+// the server, before any route decides its own headers.
+func HwSecurityHeaders() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		header := c.Writer.Header()
+		if HwRequestIsHTTPS(c) {
+			header.Set("Strict-Transport-Security", hwHstsValue)
+		}
+		header.Set("X-Content-Type-Options", "nosniff")
+		header.Set("X-Frame-Options", "DENY")
+		header.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		header.Set("Permissions-Policy", hwPermissionsPolicy)
+		header.Set("Content-Security-Policy", HwContentSecurityPolicy())
+		c.Next()
+	}
+}

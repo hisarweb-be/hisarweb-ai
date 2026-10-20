@@ -124,6 +124,9 @@ func TestValidateRedirectURL(t *testing.T) {
 
 func resetSessionCookieSettingsAfterTest(t *testing.T) {
 	t.Helper()
+	// These cases describe a laptop run: without APP_ENV the process counts as
+	// production and the insecure default is refused on purpose elsewhere.
+	t.Setenv("APP_ENV", HwAppEnvDevelopment)
 	t.Cleanup(func() {
 		SessionCookieSecure = false
 		SessionCookieTrustedURLs = nil

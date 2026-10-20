@@ -184,6 +184,9 @@ func main() {
 		common.FatalLog(common.LogText("failed to configure trusted proxies: %s", err.Error()))
 		return
 	}
+	// Security headers come first so every answer carries them, including the
+	// panic handler's and the 404 of an unregistered route.
+	server.Use(middleware.HwSecurityHeaders())
 	server.Use(gin.CustomRecovery(func(c *gin.Context, err any) {
 		common.SysLog(common.LogText("panic detected: %v", err))
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -201,6 +204,10 @@ func main() {
 	middleware.SetUpLogger(server)
 	InjectUmamiAnalytics()
 	InjectGoogleAnalytics()
+
+	// The Content-Security-Policy hashes the inline scripts of the page we
+	// serve; compute them after the optional analytics snippets are injected.
+	middleware.HwSetIndexPageScriptHashes(middleware.HwIndexPageScriptHashes(indexPage))
 
 	// 设置路由
 	router.SetRouter(server, router.WebAssets{

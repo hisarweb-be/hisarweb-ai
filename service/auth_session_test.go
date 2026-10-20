@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -441,4 +443,66 @@ func TestUserAuthVersionInvalidatesExistingSession(t *testing.T) {
 	assert.ErrorIs(t, err, ErrLoginSessionRevoked)
 	_, err = CreateLoginSessionAtAuthVersion(user.Id, identity.UserAuthVersion, "2fa", "127.0.0.1", "test-agent")
 	assert.ErrorIs(t, err, ErrLoginSessionRevoked, "a pending 2FA flow must not survive an auth-version change")
+}
+
+// TestHwRefreshCookieAttributes pins the attributes of the refresh cookie as it
+// leaves the server. In a production deployment TLS ends at the proxy, so the
+// request arrives over plain http with X-Forwarded-Proto: https; secure cookie
+// mode is then mandatory (InitSessionCookieSettings refuses to start without
+// it). The value deliberately carries no session id, so the attributes are
+// written without any database lookup.
+func TestHwRefreshCookieAttributes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	previousSecure := common.SessionCookieSecure
+	t.Cleanup(func() { common.SessionCookieSecure = previousSecure })
+
+	write := func(scheme, forwardedProto string) *http.Cookie {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Request = httptest.NewRequest(http.MethodPost, scheme+"://dashboard.example.com/api/user/auth/refresh", nil)
+		if forwardedProto != "" {
+			c.Request.Header.Set("X-Forwarded-Proto", forwardedProto)
+		}
+		WriteRefreshCookie(c, "no-valid-session")
+		for _, cookie := range recorder.Result().Cookies() {
+			if cookie.Name == RefreshCookieName {
+				return cookie
+			}
+		}
+		t.Fatalf("no %s cookie was written", RefreshCookieName)
+		return nil
+	}
+
+	t.Run("https behind the proxy", func(t *testing.T) {
+		common.SessionCookieSecure = true
+		cookie := write("http", "https")
+		assert.True(t, cookie.Secure)
+		assert.True(t, cookie.HttpOnly)
+		assert.Equal(t, http.SameSiteStrictMode, cookie.SameSite)
+		assert.Equal(t, "/api/user/auth", cookie.Path)
+	})
+
+	t.Run("direct TLS", func(t *testing.T) {
+		common.SessionCookieSecure = true
+		cookie := write("https", "")
+		assert.True(t, cookie.Secure)
+		assert.True(t, cookie.HttpOnly)
+	})
+
+	t.Run("plain http laptop run", func(t *testing.T) {
+		common.SessionCookieSecure = false
+		cookie := write("http", "")
+		assert.False(t, cookie.Secure, "a laptop over plain http must still be able to log in")
+		assert.True(t, cookie.HttpOnly)
+		assert.Equal(t, http.SameSiteStrictMode, cookie.SameSite)
+	})
+
+	t.Run("forwarded header cannot change cookie attributes", func(t *testing.T) {
+		// X-Forwarded-Proto is set by the client too. It may never upgrade or
+		// downgrade the cookie: only the configured mode decides.
+		common.SessionCookieSecure = false
+		assert.False(t, write("http", "https").Secure)
+		common.SessionCookieSecure = true
+		assert.True(t, write("http", "http").Secure)
+	})
 }
