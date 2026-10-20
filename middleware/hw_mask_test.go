@@ -3,8 +3,11 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/QuantumNous/new-api/common"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -256,4 +259,99 @@ func TestHwMaskKeepsOwnTaskIds(t *testing.T) {
 	})
 	recorder = hwMaskDo(t, engine, http.MethodGet, "/v1/videos/y", "", nil)
 	assert.NotContains(t, recorder.Body.String(), "gen-77aa")
+}
+
+// The customer sees the token facts of the protocol it speaks. Everything the
+// relay uses to account for a request — the upstream billing snapshot, the
+// usage-semantics tags, the split cache-write counters and the supplier cost —
+// stays in our layer, and the field set is exactly the published one.
+func TestHwMaskKeepsOnlyCustomerProtocolUsage(t *testing.T) {
+	const claudeBody = `{"id":"msg_1","type":"message","role":"assistant","model":"openrouter/x",` +
+		`"content":[],"stop_reason":"end_turn","usage":{"input_tokens":11,"output_tokens":5,` +
+		`"cache_creation_input_tokens":3,"cache_read_input_tokens":2,` +
+		`"cache_creation":{"ephemeral_5m_input_tokens":3,"ephemeral_1h_input_tokens":0},` +
+		`"server_tool_use":{"web_search_requests":1,"code_execution_requests":2},` +
+		`"claude_cache_creation_5_m_tokens":3,"claude_cache_creation_1_h_tokens":0,` +
+		`"usage_semantic":"anthropic","usage_source":"claude_messages","cost":0.001,` +
+		`"billing_usage":{"source":"claude_messages","semantic":"anthropic",` +
+		`"openai_usage":{"prompt_tokens":11,"completion_tokens":5,"total_tokens":16}}}}`
+	const chatBody = `{"id":"chatcmpl-1","object":"chat.completion","model":"some-model","choices":[],` +
+		`"usage":{"prompt_tokens":11,"completion_tokens":5,"total_tokens":16,` +
+		`"prompt_tokens_details":{"cached_tokens":2,"text_tokens":11,"image_tokens":0},` +
+		`"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0},` +
+		`"billing_usage":{"source":"oai_chat","semantic":"openai","openai_usage":{"prompt_tokens":11}},` +
+		`"input_tokens":11,"output_tokens":5,"prompt_cache_hit_tokens":2,` +
+		`"usage_semantic":"openai","usage_source":"oai_chat","claude_cache_creation_5_m_tokens":0,"cost":0.001}}`
+
+	for _, tc := range []struct {
+		name, path, body, usageKey string
+		wantUsage, wantNestedKey   []string
+		nestedObject               string
+		wantNested                 []string
+	}{
+		{
+			name: "claude messages", path: "/v1/messages", body: claudeBody, usageKey: "usage",
+			wantUsage:    []string{"cache_creation", "cache_creation_input_tokens", "cache_read_input_tokens", "input_tokens", "output_tokens", "server_tool_use"},
+			nestedObject: "cache_creation", wantNested: []string{"ephemeral_1h_input_tokens", "ephemeral_5m_input_tokens"},
+		},
+		{
+			name: "chat completions", path: "/v1/chat/completions", body: chatBody, usageKey: "usage",
+			wantUsage:    []string{"completion_tokens", "completion_tokens_details", "prompt_tokens", "prompt_tokens_details", "total_tokens"},
+			nestedObject: "prompt_tokens_details", wantNested: []string{"cached_tokens"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			engine := hwMaskRoute(t, http.MethodPost, tc.path, func(c *gin.Context) {
+				c.Header("Content-Type", "application/json")
+				c.String(http.StatusOK, tc.body)
+			})
+			recorder := hwMaskDo(t, engine, http.MethodPost, tc.path, "", nil)
+			require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+			body := recorder.Body.String()
+			for _, banned := range []string{"billing_usage", "openai_usage", "usage_semantic", "usage_source",
+				"claude_cache_creation_5_m_tokens", "claude_cache_creation_1_h_tokens", "cost", "text_tokens"} {
+				assert.NotContains(t, body, banned, "the customer body must not carry %q:\n%s", banned, body)
+			}
+			var decoded map[string]any
+			require.NoError(t, common.UnmarshalJsonStr(body, &decoded))
+			usage, ok := decoded[tc.usageKey].(map[string]any)
+			require.True(t, ok, "usage object survives:\n%s", body)
+			assert.Equal(t, tc.wantUsage, hwSortedObjectKeys(usage))
+			nested, ok := usage[tc.nestedObject].(map[string]any)
+			require.True(t, ok, "%s stays:\n%s", tc.nestedObject, body)
+			assert.Equal(t, tc.wantNested, hwSortedObjectKeys(nested))
+		})
+	}
+}
+
+// The same allowlist applies to every usage object inside an SSE stream: the
+// nested message usage of message_start and the final message_delta usage.
+func TestHwMaskKeepsOnlyCustomerProtocolUsageInStream(t *testing.T) {
+	engine := hwMaskRoute(t, http.MethodPost, "/v1/messages", func(c *gin.Context) {
+		c.Header("Content-Type", "text/event-stream")
+		c.String(http.StatusOK,
+			"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\","+
+				"\"usage\":{\"input_tokens\":11,\"output_tokens\":1,\"billing_usage\":{\"openai_usage\":{\"prompt_tokens\":11}}}}}\n\n"+
+				"event: message_delta\ndata: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":5,"+
+				"\"claude_cache_creation_5_m_tokens\":0,\"usage_semantic\":\"anthropic\"}}\n\n"+
+				"event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
+	})
+	recorder := hwMaskDo(t, engine, http.MethodPost, "/v1/messages", "", nil)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	body := recorder.Body.String()
+	assert.NotContains(t, body, "billing_usage")
+	assert.NotContains(t, body, "openai_usage")
+	assert.NotContains(t, body, "usage_semantic")
+	assert.NotContains(t, body, "claude_cache_creation_5_m_tokens")
+	assert.Contains(t, body, `"input_tokens":11`)
+	assert.Contains(t, body, `"output_tokens":5`)
+}
+
+func hwSortedObjectKeys(object map[string]any) []string {
+	keys := make([]string, 0, len(object))
+	for key := range object {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
 }
