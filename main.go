@@ -384,6 +384,8 @@ func InitResources() error {
 
 	// Retire expired credit packages every hour on the master node.
 	model.StartHwCreditExpiryJob()
+	// Freeze shared-signal and signup-wave accounts for review once a day.
+	model.StartHwDailyAbuseSweepJob()
 
 	return nil
 }

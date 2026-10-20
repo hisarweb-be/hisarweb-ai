@@ -44,8 +44,12 @@ func (HwAccountFlag) TableName() string {
 // and time, so the first finding stays visible for the review. Administrators
 // and the root user are never frozen.
 func FreezeHwAccounts(userIDs []int, reason string, now int64) (int, error) {
-	if len(userIDs) == 0 || reason == "" {
+	if reason == "" {
 		return 0, ErrHwInvalidUserSignal
+	}
+	if len(userIDs) == 0 {
+		// Nothing to freeze is a normal sweep outcome, not an error.
+		return 0, nil
 	}
 	var freezable []int
 	if err := DB.Model(&User{}).
