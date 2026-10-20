@@ -158,41 +158,13 @@ export function Footer(props: FooterProps) {
   const isDemoSiteMode = Boolean(demoSiteEnabled)
   const currentYear = new Date().getFullYear()
 
+  // Only our own documentation page is offered; the upstream project's wiki is
+  // not written for our customers, so those links are gone.
   const fallbackColumns = useMemo<FooterColumnProps[]>(
     () => [
       {
-        title: t('footer.columns.about.title'),
-        links: [
-          {
-            text: t('footer.columns.about.links.aboutProject'),
-            href: 'https://docs.newapi.pro/wiki/project-introduction/',
-          },
-          {
-            text: t('footer.columns.about.links.contact'),
-            href: 'https://docs.newapi.pro/support/community-interaction/',
-          },
-          {
-            text: t('footer.columns.about.links.features'),
-            href: 'https://docs.newapi.pro/wiki/features-introduction/',
-          },
-        ],
-      },
-      {
         title: t('footer.columns.docs.title'),
-        links: [
-          {
-            text: t('footer.columns.docs.links.quickStart'),
-            href: 'https://docs.newapi.pro/getting-started/',
-          },
-          {
-            text: t('footer.columns.docs.links.installation'),
-            href: 'https://docs.newapi.pro/installation/',
-          },
-          {
-            text: t('footer.columns.docs.links.apiDocs'),
-            href: 'https://docs.newapi.pro/api/',
-          },
-        ],
+        links: [{ text: t('Docs'), href: 'https://api.hisarweb.be/docs' }],
       },
       {
         title: t('footer.columns.related.title'),

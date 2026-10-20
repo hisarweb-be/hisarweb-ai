@@ -18,6 +18,8 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/shopspring/decimal"
 )
@@ -54,26 +56,110 @@ var (
 	ErrHwNegativeUsdValue = errors.New("dollar value must not be negative")
 )
 
-// HwSoldModel links the model name we sell to its key in the open price list.
-// The name is the customer-facing own name; the price list key never appears in
-// a customer-facing answer.
+// HwSoldModel links the model name we sell to its key in the open price list
+// and to the list price we bill from. The name is the customer-facing own name;
+// the price list key never appears in a customer-facing answer.
+//
+// The prices are the official USD list prices per million tokens, in integer
+// micro-dollars ($1.75 = 1750000) — the same unit the daily snapshot stores, so
+// the seeding of the billing ratios and a price snapshot share one conversion.
 type HwSoldModel struct {
 	Name     string
 	PriceKey string
+	// InputMicroUsd and OutputMicroUsd are the prices of the LiteLLM price list
+	// of 20 Oct 2026, used only until the first snapshot is stored.
+	InputMicroUsd  int64
+	OutputMicroUsd int64
 }
 
 // hwSoldModels is the catalog of models we sell under our own names. The
 // comparator and the quality meter both read it, so a model appears on the site
 // only when it is here.
 var hwSoldModels = []HwSoldModel{
-	{Name: "claude-opus-5-5", PriceKey: "claude-opus-5-5"},
-	{Name: "claude-sonnet-5-5", PriceKey: "claude-sonnet-5-5"},
-	{Name: "claude-sonnet-5", PriceKey: "claude-sonnet-5"},
-	{Name: "claude-haiku-4-5", PriceKey: "claude-haiku-4-5"},
-	{Name: "gpt-5.2", PriceKey: "gpt-5.2"},
-	{Name: "gpt-5.4", PriceKey: "gpt-5.4"},
-	{Name: "gpt-5.4-mini", PriceKey: "gpt-5.4-mini"},
-	{Name: "gemini-3.5-flash", PriceKey: "gemini-3.5-flash"},
+	{Name: "claude-opus-5-5", PriceKey: "claude-opus-5-5", InputMicroUsd: 4_000_000, OutputMicroUsd: 20_000_000},
+	{Name: "claude-sonnet-5-5", PriceKey: "claude-sonnet-5-5", InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000},
+	{Name: "claude-sonnet-5", PriceKey: "claude-sonnet-5", InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000},
+	{Name: "claude-haiku-4-5", PriceKey: "claude-haiku-4-5", InputMicroUsd: 1_000_000, OutputMicroUsd: 5_000_000},
+	{Name: "gpt-5.2", PriceKey: "gpt-5.2", InputMicroUsd: 1_750_000, OutputMicroUsd: 14_000_000},
+	{Name: "gpt-5.4", PriceKey: "gpt-5.4", InputMicroUsd: 2_500_000, OutputMicroUsd: 15_000_000},
+	{Name: "gpt-5.4-mini", PriceKey: "gpt-5.4-mini", InputMicroUsd: 750_000, OutputMicroUsd: 4_500_000},
+	{Name: "gemini-3.5-flash", PriceKey: "gemini-3.5-flash", InputMicroUsd: 1_500_000, OutputMicroUsd: 9_000_000},
+}
+
+// hwSoldModelFallbackPrices exposes the catalog prices in the shape of a price
+// snapshot, so the startup seeding converts them exactly like the daily job.
+func hwSoldModelFallbackPrices() map[string]model.HwModelPrice {
+	prices := make(map[string]model.HwModelPrice, len(hwSoldModels))
+	for _, sold := range hwSoldModels {
+		prices[sold.Name] = model.HwModelPrice{InputMicroUsd: sold.InputMicroUsd, OutputMicroUsd: sold.OutputMicroUsd}
+	}
+	return prices
+}
+
+// hwModelRatioFromInputPrice converts an input list price (micro-dollars per
+// million tokens) into the model ratio the billing engine multiplies tokens by:
+// ratio 1 is $2 per million tokens.
+func hwModelRatioFromInputPrice(inputMicroUsd int64) float64 {
+	return decimal.New(inputMicroUsd, 0).Div(decimal.NewFromInt(2_000_000)).InexactFloat64()
+}
+
+// hwCompletionRatioFromPrice is the output price in units of the input price.
+func hwCompletionRatioFromPrice(price model.HwModelPrice) float64 {
+	if price.InputMicroUsd <= 0 {
+		return 0
+	}
+	return decimal.New(price.OutputMicroUsd, 0).Div(decimal.New(price.InputMicroUsd, 0)).InexactFloat64()
+}
+
+// hwWriteRatioOption stores a merged ratio map. The option update also replaces
+// the in-memory map, so the caller must pass the complete map it wants to keep;
+// that map is always taken from the effective ratio map, never from the option
+// text, so an empty option cannot wipe the engine's built-in ratios.
+func hwWriteRatioOption(key string, values map[string]float64) error {
+	encoded, err := common.Marshal(values)
+	if err != nil {
+		return err
+	}
+	return model.UpdateOption(key, string(encoded))
+}
+
+// HwApplySnapshotModelRatios aligns the billing ratios of the sold models with
+// the newest price snapshot, so a request is billed at the day's list price.
+// Only the entries of the sold models are touched; every other ratio the
+// operator configured stays exactly as it is.
+func HwApplySnapshotModelRatios(snapshot *model.HwPriceSnapshot) error {
+	prices, err := snapshot.HwSnapshotModelPrices()
+	if err != nil {
+		return err
+	}
+	modelRatios := ratio_setting.GetModelRatioCopy()
+	completionRatios := ratio_setting.GetCompletionRatioCopy()
+	modelChanged, completionChanged := false, false
+	for _, sold := range hwSoldModels {
+		price, ok := prices[sold.Name]
+		if !ok || price.InputMicroUsd <= 0 || price.OutputMicroUsd <= 0 {
+			continue
+		}
+		if ratio := hwModelRatioFromInputPrice(price.InputMicroUsd); modelRatios[sold.Name] != ratio {
+			modelRatios[sold.Name] = ratio
+			modelChanged = true
+		}
+		if ratio := hwCompletionRatioFromPrice(price); completionRatios[sold.Name] != ratio {
+			completionRatios[sold.Name] = ratio
+			completionChanged = true
+		}
+	}
+	if modelChanged {
+		if err := hwWriteRatioOption("ModelRatio", modelRatios); err != nil {
+			return err
+		}
+	}
+	if completionChanged {
+		if err := hwWriteRatioOption("CompletionRatio", completionRatios); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // HwSoldModelNames returns the own names of every model in the catalog.
@@ -328,6 +414,11 @@ func HwRefreshPriceSnapshot(ctx context.Context, client *http.Client, now time.T
 	if err != nil {
 		return err
 	}
+	// Billing follows the published list price: the ratios of the sold models
+	// are rewritten from this snapshot before the rate is published.
+	if err := HwApplySnapshotModelRatios(snapshot); err != nil {
+		return err
+	}
 	return hwApplyTryRateOption(rate, snapshot.FxDate)
 }
 
@@ -360,7 +451,28 @@ func hwApplyTryRateOption(rate decimal.Decimal, fxDate string) error {
 	if err := model.UpdateOption(HwOptionTryPerUsd, rate.String()); err != nil {
 		return err
 	}
+	if err := hwSyncDisplayCurrencyRate(rate); err != nil {
+		return err
+	}
 	return model.UpdateOption(HwOptionTryPerUsdDate, fxDate)
+}
+
+// HwTryCurrencySymbol is the symbol of the TL amounts the customer sees.
+const HwTryCurrencySymbol = "₺"
+
+// hwSyncDisplayCurrencyRate keeps the TL display of the console on the day's
+// rate. Only a console that already shows our currency is updated; a display
+// the operator configured with another symbol (or another type) is never
+// touched.
+func hwSyncDisplayCurrencyRate(rate decimal.Decimal) error {
+	general := operation_setting.GetGeneralSetting()
+	if general.QuotaDisplayType != operation_setting.QuotaDisplayTypeCustom {
+		return nil
+	}
+	if strings.TrimSpace(general.CustomCurrencySymbol) != HwTryCurrencySymbol {
+		return nil
+	}
+	return model.UpdateOption(hwDisplayRateOption, rate.String())
 }
 
 // hwKdvFactor is the VAT factor 1.2 (20 % KDV): every TRY price the customer

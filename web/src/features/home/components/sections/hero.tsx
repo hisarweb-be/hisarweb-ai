@@ -48,8 +48,10 @@ const MoreIcon = () => (
 export function Hero(props: HeroProps) {
   const { t } = useTranslation()
   const { status } = useStatus()
+  // Our own documentation page is the fallback; the upstream project's wiki is
+  // not written for our customers.
   const docsUrl =
-    (status?.docs_link as string | undefined) || 'https://docs.newapi.pro'
+    (status?.docs_link as string | undefined) || 'https://api.hisarweb.be/docs'
 
   const renderDocsButton = () => {
     const isExternal = docsUrl.startsWith('http')
