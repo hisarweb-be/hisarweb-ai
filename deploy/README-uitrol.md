@@ -46,7 +46,9 @@ opties uit omgevingsvariabelen); dat valt buiten H2 en is een open punt in het v
 
 ## Poort en gezondheid
 
-- Poort: container `3000`, host `${APP_HTTP_PORT:-3000}`.
+- Poort: container `3000`, op de host alleen `127.0.0.1:${APP_HTTP_PORT:-3000}`. De poort staat
+  dus niet op de publieke interface van de VPS: de proxy van het platform (Traefik) bereikt de
+  container via het compose-netwerk, niet via de hostpoort.
 - Healthcheck (in het image en in de compose): `GET http://127.0.0.1:3000/api/status` moet met
   HTTP 200 antwoorden en `"success": true` bevatten. Coolify toont de container dan als `healthy`.
 - Geheugen en CPU: app 512 MB en 1 CPU, PostgreSQL 512 MB. De databank heeft geen gepubliceerde

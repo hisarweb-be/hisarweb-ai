@@ -63,7 +63,10 @@ services:
       HW_CSP_EXTRA_STYLE_SRC: ${HW_CSP_EXTRA_STYLE_SRC:-}
       HW_CSP_EXTRA_FONT_SRC: ${HW_CSP_EXTRA_FONT_SRC:-}
     ports:
-      - "${APP_HTTP_PORT:-3000}:3000"
+      # Loopback only: the proxy of the platform reaches the container over the
+      # compose network, so the gateway never listens on the public interface
+      # of the host.
+      - "127.0.0.1:${APP_HTTP_PORT:-3000}:3000"
     volumes:
       - app_data:/data
     healthcheck:
