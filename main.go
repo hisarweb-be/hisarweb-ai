@@ -51,6 +51,12 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "plugin" {
 		os.Exit(jsplugin.RunCLI(os.Args[2:], os.Stdout, os.Stderr))
 	}
+	// Refuse an unsafe test-flag combination before any resource is opened. The
+	// message names the variables only; FatalLog exits non-zero.
+	if err := common.HwValidateEnvironment(); err != nil {
+		common.FatalLog(common.LogText("invalid environment configuration: %s", err.Error()))
+		return
+	}
 	startTime := time.Now()
 	kitutil.SetLogging(common.SysLog, func(message string) {
 		logger.LogError(nil, message)
