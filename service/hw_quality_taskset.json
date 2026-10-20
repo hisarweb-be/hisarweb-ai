@@ -1,0 +1,141 @@
+{
+  "taskset_version": "2026-10-20.1",
+  "tasks": [
+    {
+      "id": "math-tr-multiplication",
+      "language": "tr",
+      "kind": "math",
+      "prompt": "17 ile 24'ü çarp, sonucu sadece sayı olarak yaz.",
+      "expected": "408",
+      "criteria": [
+        "Sonuç tam olarak 408 olmalı",
+        "Yanıtta yalnızca sayı bulunmalı"
+      ],
+      "max_tokens": 512
+    },
+    {
+      "id": "math-tr-kdv",
+      "language": "tr",
+      "kind": "math",
+      "prompt": "Bir malın KDV hariç fiyatı 250 TL'dir. %18 KDV eklenince toplam fiyat kaç TL olur? Sadece sonucu yaz.",
+      "expected": "295",
+      "criteria": [
+        "Sonuç tam olarak 295 TL olmalı",
+        "Hesap %18 KDV üzerinden yapılmalı"
+      ],
+      "max_tokens": 512
+    },
+    {
+      "id": "math-en-remainder",
+      "language": "en",
+      "kind": "math",
+      "prompt": "What is the remainder when 2026 is divided by 7? Answer with the number only.",
+      "expected": "3",
+      "criteria": [
+        "The answer must be exactly 3",
+        "Only the number may appear in the answer"
+      ],
+      "max_tokens": 512
+    },
+    {
+      "id": "math-en-unit-conversion",
+      "language": "en",
+      "kind": "math",
+      "prompt": "A file is 2.5 GiB in size. How many MiB is that? Answer with the number only.",
+      "expected": "2560",
+      "criteria": [
+        "The answer must be exactly 2560",
+        "The conversion must use 1024 MiB per GiB"
+      ],
+      "max_tokens": 512
+    },
+    {
+      "id": "code-en-even-sum",
+      "language": "en",
+      "kind": "code",
+      "prompt": "Write a Python function `sum_even(numbers)` that returns the sum of the even numbers in the list. Return only the function.",
+      "criteria": [
+        "The function must be named sum_even and take one list argument",
+        "Even numbers must be selected with n % 2 == 0",
+        "The function must return the sum, not print it",
+        "The code must be valid Python 3"
+      ],
+      "max_tokens": 1024
+    },
+    {
+      "id": "code-tr-sql-filter",
+      "language": "tr",
+      "kind": "code",
+      "prompt": "SQL'de `orders` tablosundan (sütunlar: id, customer, amount, created_at) 2026 yılına ait ve amount değeri 1000'den büyük siparişleri amount azalan sırayla listeleyen sorguyu yaz.",
+      "criteria": [
+        "Sorgu yalnızca 2026 yılına ait kayıtları seçmeli",
+        "amount > 1000 koşulu bulunmalı",
+        "Sonuçlar amount azalan sırada sıralanmalı",
+        "Sorgu standart SQL olmalı"
+      ],
+      "max_tokens": 1024
+    },
+    {
+      "id": "code-en-bug-fix",
+      "language": "en",
+      "kind": "code",
+      "prompt": "This function should return the last element of a list but is wrong:\n\ndef last(items):\n    return items[1]\n\nReturn only the corrected function.",
+      "criteria": [
+        "The corrected function must return the final element",
+        "Indexing must not stay at 1",
+        "The function name must stay last"
+      ],
+      "max_tokens": 1024
+    },
+    {
+      "id": "summary-tr-paragraph",
+      "language": "tr",
+      "kind": "summary",
+      "prompt": "Aşağıdaki paragrafı tek bir cümleyle özetle:\n\nHisarWeb AI, Türkiye'deki müşterilerine Türk Lirası ile ödeme yapabilecekleri bir yapay zeka API hizmeti sunar. Hizmet, aylık abonelik yerine kullandıkça ödeme modeliyle çalışır ve günlük döviz kuru üzerinden fiyatlandırılır. Müşteriler, token kullanımlarını panel üzerinden anlık olarak izleyebilir.",
+      "criteria": [
+        "Özet tam olarak bir cümle olmalı",
+        "Kullandıkça ödeme modeli belirtilmeli",
+        "Türk Lirası ile ödeme vurgusu korunmalı",
+        "Özet paragrafta olmayan bilgi içermemeli"
+      ],
+      "max_tokens": 1024
+    },
+    {
+      "id": "summary-en-paragraph",
+      "language": "en",
+      "kind": "summary",
+      "prompt": "Summarize the following paragraph in one sentence:\n\nThe city library extended its opening hours on weekdays after a survey showed that most working residents could only visit after 6 pm. Since the change, evening visits have doubled, and the library reports that study rooms are fully booked within an hour of opening.",
+      "criteria": [
+        "The summary must be exactly one sentence",
+        "The extension of weekday hours must be mentioned",
+        "The rise in evening visits must be mentioned",
+        "The summary must not add facts absent from the paragraph"
+      ],
+      "max_tokens": 1024
+    },
+    {
+      "id": "translation-en-tr",
+      "language": "tr",
+      "kind": "translation",
+      "prompt": "Translate this sentence into Turkish:\n\nThe invoice will be sent to your email address at the end of each month.",
+      "criteria": [
+        "The translation must be natural Turkish",
+        "The meaning (monthly invoice by email) must be preserved",
+        "The translation must be one sentence"
+      ],
+      "max_tokens": 1024
+    },
+    {
+      "id": "translation-tr-en",
+      "language": "en",
+      "kind": "translation",
+      "prompt": "Translate this sentence into English:\n\nFaturanız her ayın sonunda e-posta adresinize gönderilecektir.",
+      "criteria": [
+        "The translation must be natural English",
+        "The meaning (monthly invoice by email) must be preserved",
+        "The translation must be one sentence"
+      ],
+      "max_tokens": 1024
+    }
+  ]
+}

@@ -159,7 +159,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	relayInfo.RetryIndex = 0
 	relayInfo.LastError = nil
 
-	for ; retryParam.GetRetry() <= common.RetryTimes; retryParam.IncreaseRetry() {
+	for ; retryParam.GetRetry() <= common.RetryTimes || service.HwRetryLoopExtends(c); retryParam.IncreaseRetry() {
 		relayInfo.StreamStatus = nil
 		relayInfo.PerformanceBusinessRejection = false
 		relayInfo.PerformanceOutputTokens = 0
@@ -200,6 +200,10 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 
 		if newAPIError == nil {
+			newAPIError = service.HwStreamCutShort(c, relayInfo)
+		}
+
+		if newAPIError == nil {
 			service.MarkRequestPolicySuccess(c, relayInfo.StreamStatus)
 			relayInfo.LastError = nil
 			return
@@ -211,6 +215,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		decision := service.DecideRelayRetry(c, newAPIError, common.RetryTimes-retryParam.GetRetry())
 		service.RecordPolicyFailure(c, channel.Id, newAPIError, decision)
 		processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError, relayInfo)
+		if hwTerminalErr := service.HwTerminalError(c, newAPIError, decision); hwTerminalErr != nil {
+			newAPIError = hwTerminalErr
+		}
 
 		if decision.Action != "retry" {
 			break
@@ -276,10 +283,25 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 			Name:    c.GetString("channel_name"),
 			AutoBan: &autoBanInt,
 		}
+		replacement, hwErr := service.HwFirstChannel(c, channel, info.UsingGroup, info.OriginModelName)
+		if hwErr != nil {
+			return nil, hwErr
+		}
+		if replacement != nil {
+			channel = replacement
+			if setupErr := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName); setupErr != nil {
+				return nil, setupErr
+			}
+		}
 		service.RequestPolicy(c).BeginAttempt(channel, info.UsingGroup)
 		return channel, nil
 	}
-	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)
+	channel, selectGroup, err := service.HwSelectChannel(c, retryParam, func() (*model.Channel, string, error) {
+		return service.CacheGetRandomSatisfiedChannel(retryParam)
+	})
+	if hwErr, ok := err.(*types.NewAPIError); ok {
+		return nil, hwErr
+	}
 	if err != nil {
 		return nil, types.NewError(errors.New(i18n.T(c, i18n.MsgRelayRetryGetChannelFailed, map[string]any{"Group": selectGroup, "Model": info.OriginModelName, "Error": err.Error()})), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}

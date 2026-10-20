@@ -387,5 +387,9 @@ func InitResources() error {
 	// Freeze shared-signal and signup-wave accounts for review once a day.
 	model.StartHwDailyAbuseSweepJob()
 
+	// Refresh the TL price snapshot (price list + daily rate) once a day on
+	// the master node.
+	service.StartHwPriceSnapshotJob()
+
 	return nil
 }

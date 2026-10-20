@@ -187,6 +187,14 @@ func InitOptionMap() {
 	common.OptionMap["AutomaticRetryStatusCodes"] = operation_setting.AutomaticRetryStatusCodesToString()
 	common.OptionMap["ExposeRatioEnabled"] = strconv.FormatBool(ratio_setting.IsExposeRatioEnabled())
 
+	// HisarWeb AI TL pricing: source URLs of the daily price snapshot (empty
+	// means the built-in URL) and the published USD/TRY rate with its validity
+	// date, written by the daily snapshot job.
+	common.OptionMap["HwPriceListURL"] = ""
+	common.OptionMap["HwFxURL"] = ""
+	common.OptionMap["HwTryPerUsd"] = ""
+	common.OptionMap["HwTryPerUsdDate"] = ""
+
 	// 自动添加所有注册的模型配置
 	modelConfigs := config.GlobalConfig.ExportAllConfigs()
 	maps.Copy(common.OptionMap, modelConfigs)

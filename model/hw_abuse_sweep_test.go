@@ -18,7 +18,7 @@ func hwAbuseSweepTestSetup(t *testing.T) {
 	hwCreditTestSetup(t)
 	require.NoError(t, DB.AutoMigrate(&HwAccountFlag{}, &HwSignupIp{}))
 	for _, table := range []string{"hw_account_flags", "hw_signup_ips", "users"} {
-		require.NoError(t, DB.Exec("DELETE FROM " + table).Error)
+		require.NoError(t, DB.Exec("DELETE FROM "+table).Error)
 	}
 	t.Cleanup(func() {
 		for _, table := range []string{"hw_account_flags", "hw_signup_ips", "users"} {

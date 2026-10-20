@@ -197,6 +197,7 @@ func GetAuditLogs(filter AuditLogFilter, start, limit, viewerRole int) ([]*Audit
 		if visibility == logOtherVisibilityUser {
 			entry.Other.AdminInfo = nil
 			entry.Other.AuditInfo = nil
+			entry.Other.Provider = nil
 		}
 	}
 	return logs, total, nil

@@ -10,6 +10,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel/claude"
 	"github.com/QuantumNous/new-api/relay/channel/gemini"
 	"github.com/QuantumNous/new-api/relay/channel/openai"
@@ -63,19 +64,21 @@ func TestResponseModelComparisonAndLog(t *testing.T) {
 			}
 			other := service.GenerateTextOtherInfo(c, info, 1, 1, 1, 0, 0, 0, 1)
 			var stored struct {
-				ResponseModel *relaycommon.ResponseModel `json:"response_model"`
+				AdminInfo struct {
+					ResponseModel *relaycommon.ResponseModel `json:"response_model"`
+				} `json:"admin_info"`
 			}
 			require.NoError(t, common.UnmarshalJsonStr(other.JSONString(), &stored))
 			if tc.returned == "" {
-				assert.Nil(t, stored.ResponseModel)
+				assert.Nil(t, stored.AdminInfo.ResponseModel)
 				return
 			}
-			require.NotNil(t, stored.ResponseModel)
+			require.NotNil(t, stored.AdminInfo.ResponseModel)
 			assert.Equal(t, &relaycommon.ResponseModel{
 				RequestedModel: "requested", UpstreamModel: "mapped", ReturnedModel: tc.returned,
-			}, stored.ResponseModel)
+			}, stored.AdminInfo.ResponseModel)
 			assert.NotContains(t, other.JSONString(), "mismatch")
-			assert.Equal(t, tc.mismatch, stored.ResponseModel.Mismatch())
+			assert.Equal(t, tc.mismatch, stored.AdminInfo.ResponseModel.Mismatch())
 			assert.Equal(t, "mapped", info.UpstreamModelName)
 		})
 	}
@@ -108,8 +111,9 @@ func TestResponseModelLogOmitsUnchangedModel(t *testing.T) {
 			require.NotNil(t, info.ResponseModel)
 			assert.Equal(t, float64(1), other.Snapshot()["model_ratio"])
 			if tc.record {
-				assert.Equal(t, *info.ResponseModel, other.Snapshot()["response_model"])
+				assert.Equal(t, *info.ResponseModel, adminResponseModel(other))
 			} else {
+				assert.Nil(t, adminResponseModel(other))
 				assert.NotContains(t, other.Snapshot(), "response_model")
 			}
 		})
@@ -232,7 +236,7 @@ func TestResponseModelHandlersCaptureBeforeConversion(t *testing.T) {
 			assert.Equal(t, &relaycommon.ResponseModel{RequestedModel: "requested", UpstreamModel: "mapped", ReturnedModel: "returned"}, info.ResponseModel)
 			assert.True(t, info.ResponseModel.Mismatch())
 			other := service.GenerateTextOtherInfo(c, info, 1, 1, 1, 0, 0, 0, 1)
-			assert.Equal(t, *info.ResponseModel, other.Snapshot()["response_model"])
+			assert.Equal(t, *info.ResponseModel, adminResponseModel(other))
 		})
 	}
 }
@@ -262,4 +266,11 @@ func TestResponseModelDoesNotRecordSynthesizedModel(t *testing.T) {
 	})
 	require.Nil(t, apiErr)
 	assert.Nil(t, info.ResponseModel)
+}
+
+// adminResponseModel returns the observation from the admin projection, the
+// only place it may live because it names the supplier-side model.
+func adminResponseModel(other *model.LogOther) any {
+	adminInfo, _ := other.Snapshot()["admin_info"].(map[string]any)
+	return adminInfo["response_model"]
 }
