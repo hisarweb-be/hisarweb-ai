@@ -237,3 +237,23 @@ func TestHwMaskAppliesHeaderPatternToHeaderNamesOnly(t *testing.T) {
 	assert.NotContains(t, recorder.Result().Header, "X-OpenRouter-Id")
 	assert.Equal(t, "the box-or-club met at noon", recorder.Body.String())
 }
+
+// The task id is the handle a customer polls with. It is issued by this gateway,
+// so the mask leaves it alone, while a supplier-issued id on the same kind of
+// object still goes.
+func TestHwMaskKeepsOwnTaskIds(t *testing.T) {
+	engine := hwMaskRoute(t, http.MethodGet, "/v1/videos/x", func(c *gin.Context) {
+		c.Header("Content-Type", "application/json")
+		c.String(http.StatusOK, `{"id":"task_own_1","object":"video","status":"completed"}`)
+	})
+	recorder := hwMaskDo(t, engine, http.MethodGet, "/v1/videos/x", "", nil)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	assert.Contains(t, recorder.Body.String(), `"id":"task_own_1"`)
+
+	engine = hwMaskRoute(t, http.MethodGet, "/v1/videos/y", func(c *gin.Context) {
+		c.Header("Content-Type", "application/json")
+		c.String(http.StatusOK, `{"id":"gen-77aa","object":"chat.completion","model":"m","choices":[]}`)
+	})
+	recorder = hwMaskDo(t, engine, http.MethodGet, "/v1/videos/y", "", nil)
+	assert.NotContains(t, recorder.Body.String(), "gen-77aa")
+}

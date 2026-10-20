@@ -700,7 +700,7 @@ func (w *hwMaskWriter) sanitizeObject(object map[string]any, status int) {
 	if hwFilterPanicHook != nil {
 		hwFilterPanicHook()
 	}
-	if id, ok := object["id"].(string); ok && hwIsIdentityObject(object) {
+	if id, ok := object["id"].(string); ok && hwIsIdentityObject(object) && !hwIsOwnTaskObject(object, id) {
 		prefix := hwIdentityPrefix(object)
 		// Ids of the stored responses API carry no supplier text when the
 		// upstream issues them plainly; rewriting those would break
@@ -1041,4 +1041,14 @@ func hwJSONValueEnd(data []byte) (int, bool) {
 		}
 	}
 	return 0, false
+}
+
+// hwIsOwnTaskObject reports whether an object is one of our own asynchronous
+// task records. Their ids are issued by this gateway and are the handle the
+// customer polls with, so rewriting them would break retrieval.
+func hwIsOwnTaskObject(object map[string]any, id string) bool {
+	if hwStringValue(object["object"]) == "video" {
+		return true
+	}
+	return strings.HasPrefix(id, "task_") && !hwIsProviderIdentity(id)
 }
