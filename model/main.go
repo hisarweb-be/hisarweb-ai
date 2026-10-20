@@ -384,6 +384,7 @@ func migrateDB() error {
 		&HwFirstPurchaseClaim{},
 		&HwFreeCreditClaim{},
 		&HwOrder{},
+		&HwMailLog{},
 		&HwAffiliateRetry{},
 		&HwPriceSnapshot{},
 		&HwQualityRun{},
