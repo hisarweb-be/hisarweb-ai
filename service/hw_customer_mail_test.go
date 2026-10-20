@@ -45,7 +45,7 @@ func hwMailTestCapture(t *testing.T) *[]hwMailTestMessage {
 // hwMailTestSetup starts a test from empty ledger tables and known options.
 func hwMailTestSetup(t *testing.T) {
 	t.Helper()
-	require.NoError(t, model.DB.AutoMigrate(&model.HwOrder{}, &model.HwCreditPackage{}, &model.HwMailLog{}))
+	require.NoError(t, model.DB.AutoMigrate(&model.HwOrder{}, &model.HwCreditPackage{}, &model.HwMailLog{}, &model.HwCreditExtension{}))
 	hwMailTestClean(t)
 	t.Cleanup(func() { hwMailTestClean(t) })
 
