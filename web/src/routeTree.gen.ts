@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as authRouteRouteImport } from './routes/(auth)/route'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as FiyatKarsilastirmaRouteImport } from './routes/fiyat-karsilastirma'
+import { Route as KaliteRouteImport } from './routes/kalite'
 import { Route as PrivacyPolicyRouteImport } from './routes/privacy-policy'
 import { Route as UserAgreementRouteImport } from './routes/user-agreement'
 import { Route as authForgotPasswordRouteImport } from './routes/(auth)/forgot-password'
@@ -27,6 +29,7 @@ import { Route as errors404RouteImport } from './routes/(errors)/404'
 import { Route as errors500RouteImport } from './routes/(errors)/500'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as AuthenticatedChat2linkRouteImport } from './routes/_authenticated/chat2link'
+import { Route as AuthenticatedSatinAlRouteImport } from './routes/_authenticated/satin-al'
 import { Route as AuthenticatedSystemSettingsRouteRouteImport } from './routes/_authenticated/system-settings/route'
 import { Route as AboutIndexRouteImport } from './routes/about/index'
 import { Route as OauthProviderRouteImport } from './routes/oauth/$provider'
@@ -84,6 +87,16 @@ const authRouteRoute = authRouteRouteImport.update({
 } as any)
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FiyatKarsilastirmaRoute = FiyatKarsilastirmaRouteImport.update({
+  id: '/fiyat-karsilastirma',
+  path: '/fiyat-karsilastirma',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KaliteRoute = KaliteRouteImport.update({
+  id: '/kalite',
+  path: '/kalite',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyPolicyRoute = PrivacyPolicyRouteImport.update({
@@ -159,6 +172,11 @@ const errors503Route = errors503RouteImport.update({
 const AuthenticatedChat2linkRoute = AuthenticatedChat2linkRouteImport.update({
   id: '/chat2link',
   path: '/chat2link',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSatinAlRoute = AuthenticatedSatinAlRouteImport.update({
+  id: '/satin-al',
+  path: '/satin-al',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedSystemSettingsRouteRoute =
@@ -424,6 +442,8 @@ const AuthenticatedSystemSettingsSiteSectionRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/fiyat-karsilastirma': typeof FiyatKarsilastirmaRoute
+  '/kalite': typeof KaliteRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/user-agreement': typeof UserAgreementRoute
   '/system-settings': typeof AuthenticatedSystemSettingsRouteRouteWithChildren
@@ -440,6 +460,7 @@ export interface FileRoutesByFullPath {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/chat2link': typeof AuthenticatedChat2linkRoute
+  '/satin-al': typeof AuthenticatedSatinAlRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
   '/pricing/': typeof PricingIndexRoute
@@ -487,6 +508,8 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/fiyat-karsilastirma': typeof FiyatKarsilastirmaRoute
+  '/kalite': typeof KaliteRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/user-agreement': typeof UserAgreementRoute
   '/forgot-password': typeof authForgotPasswordRoute
@@ -502,6 +525,7 @@ export interface FileRoutesByTo {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/chat2link': typeof AuthenticatedChat2linkRoute
+  '/satin-al': typeof AuthenticatedSatinAlRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about': typeof AboutIndexRoute
   '/pricing': typeof PricingIndexRoute
@@ -552,6 +576,8 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/(auth)': typeof authRouteRouteWithChildren
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/fiyat-karsilastirma': typeof FiyatKarsilastirmaRoute
+  '/kalite': typeof KaliteRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/user-agreement': typeof UserAgreementRoute
   '/_authenticated/system-settings': typeof AuthenticatedSystemSettingsRouteRouteWithChildren
@@ -568,6 +594,7 @@ export interface FileRoutesById {
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
   '/_authenticated/chat2link': typeof AuthenticatedChat2linkRoute
+  '/_authenticated/satin-al': typeof AuthenticatedSatinAlRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
   '/pricing/': typeof PricingIndexRoute
@@ -617,6 +644,8 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/fiyat-karsilastirma'
+    | '/kalite'
     | '/privacy-policy'
     | '/user-agreement'
     | '/system-settings'
@@ -633,6 +662,7 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/chat2link'
+    | '/satin-al'
     | '/oauth/$provider'
     | '/about/'
     | '/pricing/'
@@ -680,6 +710,8 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/fiyat-karsilastirma'
+    | '/kalite'
     | '/privacy-policy'
     | '/user-agreement'
     | '/forgot-password'
@@ -695,6 +727,7 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/chat2link'
+    | '/satin-al'
     | '/oauth/$provider'
     | '/about'
     | '/pricing'
@@ -744,6 +777,8 @@ export interface FileRouteTypes {
     | '/'
     | '/(auth)'
     | '/_authenticated'
+    | '/fiyat-karsilastirma'
+    | '/kalite'
     | '/privacy-policy'
     | '/user-agreement'
     | '/_authenticated/system-settings'
@@ -760,6 +795,7 @@ export interface FileRouteTypes {
     | '/(errors)/500'
     | '/(errors)/503'
     | '/_authenticated/chat2link'
+    | '/_authenticated/satin-al'
     | '/oauth/$provider'
     | '/about/'
     | '/pricing/'
@@ -810,6 +846,8 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   authRouteRoute: typeof authRouteRouteWithChildren
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  FiyatKarsilastirmaRoute: typeof FiyatKarsilastirmaRoute
+  KaliteRoute: typeof KaliteRoute
   PrivacyPolicyRoute: typeof PrivacyPolicyRoute
   UserAgreementRoute: typeof UserAgreementRoute
   errors401Route: typeof errors401Route
@@ -846,6 +884,20 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fiyat-karsilastirma': {
+      id: '/fiyat-karsilastirma'
+      path: '/fiyat-karsilastirma'
+      fullPath: '/fiyat-karsilastirma'
+      preLoaderRoute: typeof FiyatKarsilastirmaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/kalite': {
+      id: '/kalite'
+      path: '/kalite'
+      fullPath: '/kalite'
+      preLoaderRoute: typeof KaliteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy-policy': {
@@ -951,6 +1003,13 @@ declare module '@tanstack/react-router' {
       path: '/chat2link'
       fullPath: '/chat2link'
       preLoaderRoute: typeof AuthenticatedChat2linkRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/satin-al': {
+      id: '/_authenticated/satin-al'
+      path: '/satin-al'
+      fullPath: '/satin-al'
+      preLoaderRoute: typeof AuthenticatedSatinAlRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system-settings': {
@@ -1363,6 +1422,7 @@ const AuthenticatedSystemSettingsRouteRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemSettingsRouteRoute: typeof AuthenticatedSystemSettingsRouteRouteWithChildren
   AuthenticatedChat2linkRoute: typeof AuthenticatedChat2linkRoute
+  AuthenticatedSatinAlRoute: typeof AuthenticatedSatinAlRoute
   AuthenticatedChatChatIdRoute: typeof AuthenticatedChatChatIdRoute
   AuthenticatedDashboardSectionRoute: typeof AuthenticatedDashboardSectionRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
@@ -1389,6 +1449,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSystemSettingsRouteRoute:
     AuthenticatedSystemSettingsRouteRouteWithChildren,
   AuthenticatedChat2linkRoute: AuthenticatedChat2linkRoute,
+  AuthenticatedSatinAlRoute: AuthenticatedSatinAlRoute,
   AuthenticatedChatChatIdRoute: AuthenticatedChatChatIdRoute,
   AuthenticatedDashboardSectionRoute: AuthenticatedDashboardSectionRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
@@ -1419,6 +1480,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   authRouteRoute: authRouteRouteWithChildren,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  FiyatKarsilastirmaRoute: FiyatKarsilastirmaRoute,
+  KaliteRoute: KaliteRoute,
   PrivacyPolicyRoute: PrivacyPolicyRoute,
   UserAgreementRoute: UserAgreementRoute,
   errors401Route: errors401Route,

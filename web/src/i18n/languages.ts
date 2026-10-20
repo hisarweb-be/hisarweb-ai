@@ -16,9 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+/** Product language: every visitor starts here unless they picked another one. */
+export const DEFAULT_INTERFACE_LANGUAGE = 'tr'
+
 export const INTERFACE_LANGUAGE_OPTIONS = [
-  { code: 'zhCN', label: '简体中文' },
+  { code: 'tr', label: 'Türkçe' },
   { code: 'en', label: 'English' },
+  { code: 'zhCN', label: '简体中文' },
   { code: 'fr', label: 'Français' },
   { code: 'ru', label: 'Русский' },
   { code: 'ja', label: '日本語' },
@@ -30,7 +34,7 @@ export type InterfaceLanguageCode =
   (typeof INTERFACE_LANGUAGE_OPTIONS)[number]['code']
 
 export function normalizeInterfaceLanguage(value?: string | null): string {
-  if (!value) return 'en'
+  if (!value) return DEFAULT_INTERFACE_LANGUAGE
 
   let normalized = value.trim().replaceAll('_', '-').toLowerCase()
   if (
@@ -41,13 +45,25 @@ export function normalizeInterfaceLanguage(value?: string | null): string {
   ) {
     normalized = 'zhTW'
   }
-  if (value === 'zh-CN' || value === 'zh-Hans' || value === 'zhCN') {
+  if (
+    value === 'zh-CN' ||
+    value === 'zh-Hans' ||
+    value === 'zhCN' ||
+    value === 'zh'
+  ) {
     normalized = 'zhCN'
   }
 
-  return INTERFACE_LANGUAGE_OPTIONS.some((lang) => lang.code === normalized)
-    ? normalized
-    : 'en'
+  if (INTERFACE_LANGUAGE_OPTIONS.some((lang) => lang.code === normalized)) {
+    return normalized
+  }
+  // `en-US` / `fr-FR` / `pt-BR`: keep a supported base language instead of
+  // dropping to the product default.
+  const base = normalized.split('-')[0]
+  if (INTERFACE_LANGUAGE_OPTIONS.some((lang) => lang.code === base)) {
+    return base
+  }
+  return DEFAULT_INTERFACE_LANGUAGE
 }
 
 /**

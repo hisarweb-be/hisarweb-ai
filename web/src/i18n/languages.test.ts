@@ -18,7 +18,25 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { describe, expect, test } from 'vitest'
 
-import { convertDetectedLanguage } from './languages'
+import { convertDetectedLanguage, normalizeInterfaceLanguage } from './languages'
+
+describe('normalizeInterfaceLanguage', () => {
+  test('defaults to Turkish when no supported language is known', () => {
+    expect(normalizeInterfaceLanguage()).toBe('tr')
+    expect(normalizeInterfaceLanguage('')).toBe('tr')
+    expect(normalizeInterfaceLanguage('de-DE')).toBe('tr')
+    expect(normalizeInterfaceLanguage('zh-Hant-JP')).toBe('tr')
+  })
+
+  test('keeps a supported interface code, including region variants', () => {
+    expect(normalizeInterfaceLanguage('tr')).toBe('tr')
+    expect(normalizeInterfaceLanguage('en')).toBe('en')
+    expect(normalizeInterfaceLanguage('en-US')).toBe('en')
+    expect(normalizeInterfaceLanguage('fr_FR')).toBe('fr')
+    expect(normalizeInterfaceLanguage('zh-TW')).toBe('zhTW')
+    expect(normalizeInterfaceLanguage('zhCN')).toBe('zhCN')
+  })
+})
 
 describe('convertDetectedLanguage', () => {
   test('maps browser BCP-47 Chinese tags onto interface codes', () => {

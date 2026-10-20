@@ -129,6 +129,7 @@
     "© 2025 Your Company. All rights reserved.": "© 2025 Your Company. 全著作権所有。",
     "+{{count}} more": "他 {{count}} 件",
     "| Based on": "| に基づく",
+    "Based on New API (AGPL-3.0)": "New API (AGPL-3.0) に基づいています",
     "0 means data is kept permanently": "0 はデータを永続的に保持することを意味します",
     "0 means unlimited": "0は無制限を意味します",
     "1 Day": "1日",

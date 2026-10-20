@@ -129,6 +129,7 @@
     "© 2025 Your Company. All rights reserved.": "© 2025 Ваша Компания. Все права защищены.",
     "+{{count}} more": "ещё {{count}}",
     "| Based on": "| На основе",
+    "Based on New API (AGPL-3.0)": "На основе New API (AGPL-3.0)",
     "0 means data is kept permanently": "0 означает, что данные хранятся постоянно",
     "0 means unlimited": "0 означает без ограничений",
     "1 Day": "1 день",
