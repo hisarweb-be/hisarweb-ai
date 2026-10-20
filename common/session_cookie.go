@@ -52,6 +52,14 @@ func InitSessionCookieSettings() error {
 		if trustedURLsRaw != "" {
 			return fmt.Errorf("SESSION_COOKIE_TRUSTED_URL requires SESSION_COOKIE_SECURE=true")
 		}
+		if HwIsProduction() {
+			// The session cookies are HttpOnly and SameSite=Strict already; the
+			// Secure flag is the one attribute that cannot be guessed from the
+			// request, because TLS ends at the proxy. A production process
+			// therefore refuses to start without it instead of shipping
+			// credentials over a downgraded connection.
+			return fmt.Errorf("SESSION_COOKIE_SECURE=true and SESSION_COOKIE_TRUSTED_URL are required when APP_ENV=production")
+		}
 		return nil
 	}
 

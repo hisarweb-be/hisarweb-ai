@@ -10,7 +10,10 @@ ongemoeid; die blijven voor upstream-releases en lokale ontwikkeling.
 | Soort | Naam | Verplicht | Betekenis |
 |---|---|---|---|
 | poort | `APP_HTTP_PORT` | nee (3000) | hostpoort die naar de containerpoort 3000 gaat |
+| app | `APP_ENV` | nee (vast `production` in de compose) | productiestand. De compose zet hem vast op `production`, nooit via `${...}`: alleen `development` of `test` zet de productiecontroles uit, een lege of onbekende waarde geldt als productie |
 | app | `PORT` | nee (3000) | poort binnen de container; laat staan |
+| app | `HW_SETUP_TOKEN` | ja | eenmalig geheim dat `POST /api/setup` in productie eist, als kop `X-HW-Setup-Token`; zonder deze variabele weigert productie elke setup (403) en kan er geen beheerder ontstaan. Maak hem met `openssl rand -hex 32`; na de eerste setup mag hij leeg |
+| app | `HW_CSP_EXTRA_FRAME_SRC`, `HW_CSP_EXTRA_CONNECT_SRC`, `HW_CSP_EXTRA_IMG_SRC`, `HW_CSP_EXTRA_STYLE_SRC`, `HW_CSP_EXTRA_FONT_SRC` | nee | per CSP-richtlijn een kommagescheiden lijst van kale https-origins (logo, font, een pagina in een frame). Onze console configureert geen externe home-, over- of chatpagina, dus `frame-src` blijft `'none'` zonder deze variabele. Wat geen https-origin is, wordt genegeerd; `script-src` is niet te verruimen en houdt de hashes zonder `'unsafe-inline'` of `'unsafe-eval'` |
 | app | `SESSION_SECRET` | ja | souscheidsleutel voor sessies; willekeurig, minstens 32 tekens |
 | app | `CRYPTO_SECRET` | ja | versleutelt opgeslagen geheimen in de database (o.a. kanaalsleutels); nooit wijzigen na de eerste start |
 | app | `HW_SIGNAL_SALT` | ja | zout voor misbruiksignalen (telefoon, IP, kaartvingerafdruk); zonder dit weigert gratis tegoed en affiliate-beloning |
@@ -61,6 +64,24 @@ opties uit omgevingsvariabelen); dat valt buiten H2 en is een open punt in het v
 4. **Domains**: het publieke adres met poort `3000` (de containerpoort). Coolify zet daar zijn proxy voor.
 5. Auto Deploy blijft uit (bureau-regel sinds 1 okt 2026, `kennis/infra/coolify-uitrol.md`). Uitrollen
    gaat via de CTO-route met een goedkeuringskaart; nooit via een push naar main.
+
+## Geüpgradede database waarin de beheerder nog 123456 heeft
+
+De productiepoort weigert dat paar voortaan, ook wanneer het als e-mailadres van de beheerder wordt
+ingevoerd. Kleinste bestaande route om het eenmalig te herstellen (geen nieuwe code, geen ingreep in
+de gebruikersrij):
+
+1. Zorg dat de root-rij een bereikbaar en uniek adres heeft:
+   `SELECT id, username, email FROM users WHERE role = 100;` en zo nodig
+   `UPDATE users SET email = '<adres>' WHERE id = <id>;`.
+2. Vraag een herstelcode aan: `GET /api/reset_password?email=<adres>`. Dat werkt alleen als SMTP in
+   het beheerpaneel is ingesteld; die instelling gebruikt elke mail van de dienst.
+3. Wissel de code in: `POST /api/user/reset` met `{"email":"<adres>","token":"<code>"}`. Het antwoord
+   bevat eenmalig een nieuw wachtwoord; daarmee meld je aan en wijzig je het in het beheerpaneel. Alle
+   bestaande sessies van de beheerder worden hierbij ingetrokken.
+
+Zonder SMTP is er na de upgrade geen inlogroute voor de beheerder: stel SMTP dan eerst in (via het
+beheerpaneel van de vorige versie of de opties-tabel) vóór je uitrolt.
 
 ## Terugrolpunten en gegevens
 

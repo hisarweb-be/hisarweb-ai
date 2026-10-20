@@ -320,6 +320,67 @@ func TestSecurityLoginFactorStateDoesNotAddPasswordLoginQueries(t *testing.T) {
 	assert.Equal(t, 2, queries, "only the existing credential lookup and the replacement factor-state lookup run before the challenge")
 }
 
+// TestHwProductionRefusesDefaultAdminLogin proves the administrator pair that
+// every deployment guide of this project publishes cannot open a production
+// deployment, whichever way it is entered: by the username, or by the e-mail
+// address that ValidateAndFill resolves as well. The refusal is decided on the
+// row that was found, so an upgraded database with a renamed administrator is
+// covered too, while an ordinary user who happens to use the same password
+// keeps logging in.
+func TestHwProductionRefusesDefaultAdminLogin(t *testing.T) {
+	setupSecurityEnrollmentTest(t)
+	previousPasswordLogin := common.PasswordLoginEnabled
+	common.PasswordLoginEnabled = true
+	t.Cleanup(func() { common.PasswordLoginEnabled = previousPasswordLogin })
+
+	password, err := common.Password2Hash("123456")
+	require.NoError(t, err)
+	require.NoError(t, model.DB.Create(&model.User{
+		Username:    "root",
+		Password:    password,
+		Email:       "root@example.com",
+		Role:        common.RoleRootUser,
+		Status:      common.UserStatusEnabled,
+		Group:       "default",
+		AuthVersion: 1,
+		AffCode:     "hwdefaultadmin",
+	}).Error)
+	require.NoError(t, model.DB.Create(&model.User{
+		Username:    "hw-regular-user",
+		Password:    password,
+		Email:       "regular@example.com",
+		Role:        common.RoleCommonUser,
+		Status:      common.UserStatusEnabled,
+		Group:       "default",
+		AuthVersion: 1,
+		AffCode:     "hwregularpass",
+	}).Error)
+
+	for _, test := range []struct {
+		name        string
+		appEnv      string
+		username    string
+		wantRefused bool
+	}{
+		{name: "production refuses the default administrator pair", appEnv: common.HwAppEnvProduction, username: "root", wantRefused: true},
+		{name: "production refuses the pair entered as the e-mail address", appEnv: common.HwAppEnvProduction, username: "root@example.com", wantRefused: true},
+		{name: "production keeps an ordinary user with that password", appEnv: common.HwAppEnvProduction, username: "hw-regular-user", wantRefused: false},
+		{name: "development keeps the administrator pair", appEnv: common.HwAppEnvDevelopment, username: "root", wantRefused: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("APP_ENV", test.appEnv)
+			body := `{"username":"` + test.username + `","password":"123456"}`
+			response := securityEnrollmentRequest(http.MethodPost, "/api/user/login", body, "", service.AuthIdentity{}, Login)
+			if test.wantRefused {
+				assert.Contains(t, response.Body.String(), `"success":false`)
+				assert.Contains(t, response.Body.String(), "Username or password is incorrect", "a refusal must look like any other failed login")
+				return
+			}
+			assert.NotContains(t, response.Body.String(), "Username or password is incorrect", "the stored credentials must still be accepted")
+		})
+	}
+}
+
 type boundLoginOAuthProvider struct {
 	authFlowTestOAuthProvider
 	userID int

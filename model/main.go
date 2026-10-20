@@ -71,6 +71,14 @@ func createRootAccountIfNeed() error {
 	var user User
 	//if user.Status != common.UserStatusEnabled {
 	if err := DB.First(&user).Error; err != nil {
+		if common.HwIsProduction() {
+			// A production deployment never starts with the well-known root
+			// account: anybody could log in before the operator does. The
+			// database stays empty and the first-run setup flow creates the
+			// administrator with a password the operator chooses.
+			common.SysLog(common.LogText("APP_ENV=production: no default administrator account is created; complete the first-run setup to create one"))
+			return nil
+		}
 		common.SysLog(common.LogText("no user exists, create a root user for you: username is root, password is 123456"))
 		hashedPassword, err := common.Password2Hash("123456")
 		if err != nil {

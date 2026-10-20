@@ -85,6 +85,9 @@ var accessTokenHelperRoutes = map[string]authz.Permission{
 func newAccessTokenScopeTestEngine(t *testing.T) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
+	// The upstream payment routes are unregistered by default (they are not
+	// ours); switch them on here so their token rules stay covered.
+	t.Setenv(common.HwUpstreamPaymentsEnv, "true")
 	engine := gin.New()
 	// A permission route that is also in the static table panics here.
 	require.NotPanics(t, func() {

@@ -21,9 +21,15 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      # Fixed, never interpolated: this compose is the customer-facing
+      # deployment, and APP_ENV decides whether the production guards are on
+      # (setup token, secure cookies, no default administrator password).
+      APP_ENV: "production"
       PORT: "3000"
       TZ: ${TZ:-Europe/Istanbul}
       SQL_DSN: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}?sslmode=disable
+      # One-time secret of POST /api/setup; production refuses setup without it.
+      HW_SETUP_TOKEN: ${HW_SETUP_TOKEN:?HW_SETUP_TOKEN is required}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
       CRYPTO_SECRET: ${CRYPTO_SECRET:?CRYPTO_SECRET is required}
       HW_SIGNAL_SALT: ${HW_SIGNAL_SALT:?HW_SIGNAL_SALT is required}
@@ -48,6 +54,14 @@ services:
       HW_BUREAU_USAGE_TOKEN: ${HW_BUREAU_USAGE_TOKEN:-}
       HW_WINDOW_CAPACITY_USD: ${HW_WINDOW_CAPACITY_USD:-}
       HW_RESERVE_MODE: ${HW_RESERVE_MODE:-}
+      # Optional widening of one Content-Security-Policy directive each: a
+      # comma-separated list of bare https origins. Empty keeps the tight
+      # default (no external frame, image, style or font host).
+      HW_CSP_EXTRA_FRAME_SRC: ${HW_CSP_EXTRA_FRAME_SRC:-}
+      HW_CSP_EXTRA_CONNECT_SRC: ${HW_CSP_EXTRA_CONNECT_SRC:-}
+      HW_CSP_EXTRA_IMG_SRC: ${HW_CSP_EXTRA_IMG_SRC:-}
+      HW_CSP_EXTRA_STYLE_SRC: ${HW_CSP_EXTRA_STYLE_SRC:-}
+      HW_CSP_EXTRA_FONT_SRC: ${HW_CSP_EXTRA_FONT_SRC:-}
     ports:
       - "${APP_HTTP_PORT:-3000}:3000"
     volumes:
