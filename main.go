@@ -384,5 +384,9 @@ func InitResources() error {
 	// the master node.
 	service.StartHwPriceSnapshotJob()
 
+	// Measure the public service status once a minute on the master node and
+	// extend the credit of the packages that ran during an outage.
+	service.StartHwStatusJob()
+
 	return nil
 }
