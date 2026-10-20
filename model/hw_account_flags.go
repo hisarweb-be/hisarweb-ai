@@ -42,11 +42,13 @@ func (HwAccountFlag) TableName() string {
 // FreezeHwAccounts freezes the given common-user accounts and returns how many
 // were frozen now. Accounts that are already frozen keep their original reason
 // and time, so the first finding stays visible for the review. A thawed account
-// freezes again when the finding is newer than the thaw (unfrozen_at < now),
-// which is what keeps one objection from granting a lifetime of new findings;
-// a thaw made during the sweep itself carries a time at or after now and wins,
-// so the sweep never overrules the administrator it just read. Administrators
-// and the root user are never frozen.
+// freezes again only when a signal of it was observed after the thaw, and only
+// when that thaw lies before this sweep: the sweep compares the newest
+// observation of the account (first or last seen of any signal, so a new address
+// inside a known /64 counts too) with unfrozen_at. The same old shared number
+// therefore does not undo the administrator's decision every night. A thaw made
+// during the sweep itself carries a time at or after now and always wins.
+// Administrators and the root user are never frozen.
 func FreezeHwAccounts(userIDs []int, reason string, now int64) (int, error) {
 	if reason == "" {
 		return 0, ErrHwInvalidUserSignal
@@ -75,10 +77,27 @@ func FreezeHwAccounts(userIDs []int, reason string, now int64) (int, error) {
 			hwInvalidateFrozenCache(userID)
 			continue
 		}
-		// The row exists. A frozen account keeps its first finding; a thawed
-		// account freezes again only when this finding is newer than the thaw.
+		// The row exists. A frozen account keeps its first finding. A thawed
+		// account freezes again only when a signal of it was observed after the
+		// thaw, and only when the thaw lies before this sweep: an objection must
+		// not be waived by the same old finding, but a fresh shared signal must
+		// reopen the review.
+		var flag HwAccountFlag
+		if err := DB.Where("user_id = ?", userID).First(&flag).Error; err != nil {
+			return frozen, err
+		}
+		if flag.Frozen {
+			continue
+		}
+		newest, err := hwNewestSignalSeen(userID)
+		if err != nil {
+			return frozen, err
+		}
+		if flag.UnfrozenAt >= now || newest <= flag.UnfrozenAt {
+			continue
+		}
 		result = DB.Model(&HwAccountFlag{}).
-			Where("user_id = ? AND frozen = ? AND unfrozen_at < ?", userID, false, now).
+			Where("user_id = ? AND frozen = ?", userID, false).
 			Updates(map[string]any{"frozen": true, "reason": reason, "frozen_at": now})
 		if result.Error != nil {
 			return frozen, result.Error
@@ -89,6 +108,26 @@ func FreezeHwAccounts(userIDs []int, reason string, now int64) (int, error) {
 		}
 	}
 	return frozen, nil
+}
+
+// hwNewestSignalSeen is the newest observation of any signal of the user: the
+// later of the latest first_seen and the latest last_seen. The IP signal stores
+// the /64 hash, so a new address inside the same /64 is a new observation, just
+// like a repeated visit of a known address. No signal at all yields zero, which
+// is older than any thaw.
+func hwNewestSignalSeen(userID int) (int64, error) {
+	var row struct {
+		FirstSeen int64
+		LastSeen  int64
+	}
+	err := DB.Model(&HwUserSignal{}).
+		Select("COALESCE(MAX(first_seen), 0) AS first_seen, COALESCE(MAX(last_seen), 0) AS last_seen").
+		Where("user_id = ?", userID).
+		Scan(&row).Error
+	if err != nil {
+		return 0, err
+	}
+	return max(row.FirstSeen, row.LastSeen), nil
 }
 
 // HwUnfreezeAccount thaws one account after review and reports whether a

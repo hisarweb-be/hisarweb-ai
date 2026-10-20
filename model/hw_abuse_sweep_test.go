@@ -432,10 +432,14 @@ func TestHwUnfreezeAccount(t *testing.T) {
 		assert.False(t, unfrozen)
 	})
 
-	// M5: one objection must not grant a lifetime of new findings, while a thaw
-	// the sweep itself has to respect never gets overruled.
-	t.Run("a thawed account freezes again on a newer finding", func(t *testing.T) {
+	// M5/L4: one objection must not grant a lifetime of new findings, while a
+	// thaw the sweep itself has to respect never gets overruled. A finding is
+	// new only when a signal of the account was observed after the thaw: the
+	// same old shared number must not refreeze the account every night.
+	t.Run("a thawed account freezes again only on a newer signal", func(t *testing.T) {
 		user := hwSweepTestUser(t, now-7200)
+		require.NoError(t, UpsertHwUserSignals(user.Id, HwUserSignals{Phone: "+905557770011"}))
+		hwSweepTestSignalSeen(t, user.Id, now-7200)
 		frozen, err := FreezeHwAccounts([]int{user.Id}, HwFreezeReasonSharedPhone, now)
 		require.NoError(t, err)
 		require.Equal(t, 1, frozen)
@@ -443,16 +447,21 @@ func TestHwUnfreezeAccount(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, unfrozen)
 
-		// A finding from before the thaw does not override the administrator.
+		// A finding from before the thaw does not override the administrator,
+		// and neither does the old signal the finding rested on.
 		again, err := FreezeHwAccounts([]int{user.Id}, HwFreezeReasonSharedDevice, now+30)
 		require.NoError(t, err)
 		assert.Equal(t, 0, again)
+		again, err = FreezeHwAccounts([]int{user.Id}, HwFreezeReasonSharedCard, now+120)
+		require.NoError(t, err)
+		assert.Equal(t, 0, again, "the old observation does not count as a new finding")
 		isFrozen, err := HwAccountFrozen(user.Id)
 		require.NoError(t, err)
-		assert.False(t, isFrozen, "an unfreeze made after the finding still wins")
+		assert.False(t, isFrozen, "a thawed account stays thawed on the same old signal")
 
-		// A newer finding freezes the account again and replaces the reason.
-		again, err = FreezeHwAccounts([]int{user.Id}, HwFreezeReasonSharedCard, now+120)
+		// A fresh observation freezes the account again and replaces the reason.
+		hwSweepTestSignalSeen(t, user.Id, now+180)
+		again, err = FreezeHwAccounts([]int{user.Id}, HwFreezeReasonSharedCard, now+240)
 		require.NoError(t, err)
 		assert.Equal(t, 1, again)
 		isFrozen, err = HwAccountFrozen(user.Id)
@@ -461,15 +470,17 @@ func TestHwUnfreezeAccount(t *testing.T) {
 		flag := hwFlagOf(t, user.Id)
 		assert.True(t, flag.Frozen)
 		assert.Equal(t, HwFreezeReasonSharedCard, flag.Reason)
-		assert.Equal(t, now+120, flag.FrozenAt)
+		assert.Equal(t, now+240, flag.FrozenAt)
 		assert.Equal(t, 42, flag.UnfrozenBy, "the thaw stays in the review history")
 	})
 
-	t.Run("the sweep freezes again after a thaw", func(t *testing.T) {
+	t.Run("the sweep keeps a thawed account and refreezes it on a new signal", func(t *testing.T) {
 		first := hwSweepTestUser(t, now-10800)
 		second := hwSweepTestUser(t, now-10800)
 		require.NoError(t, UpsertHwUserSignals(first.Id, HwUserSignals{Phone: "+905559990011"}))
 		require.NoError(t, UpsertHwUserSignals(second.Id, HwUserSignals{Phone: "+905559990011"}))
+		hwSweepTestSignalSeen(t, first.Id, now-10800)
+		hwSweepTestSignalSeen(t, second.Id, now-10800)
 		report, err := HwDailyAbuseSweep(now)
 		require.NoError(t, err)
 		require.Equal(t, 2, report.SharedPhone)
@@ -480,11 +491,29 @@ func TestHwUnfreezeAccount(t *testing.T) {
 
 		report, err = HwDailyAbuseSweep(now + 120)
 		require.NoError(t, err)
-		assert.Equal(t, 1, report.SharedPhone, "the still-thawed account is frozen again by the next sweep")
+		assert.Equal(t, 0, report.SharedPhone, "the same old signal finds nothing new")
 		isFrozen, err := HwAccountFrozen(first.Id)
+		require.NoError(t, err)
+		assert.False(t, isFrozen, "the thaw holds through the next sweep")
+
+		hwSweepTestSignalSeen(t, first.Id, now+180)
+		report, err = HwDailyAbuseSweep(now + 240)
+		require.NoError(t, err)
+		assert.Equal(t, 1, report.SharedPhone, "a new observation freezes the account again")
+		isFrozen, err = HwAccountFrozen(first.Id)
 		require.NoError(t, err)
 		assert.True(t, isFrozen)
 	})
+}
+
+// hwSweepTestSignalSeen pins the observation time of every signal of a user, so
+// a test can place a finding before or after a thaw. Signals written through
+// UpsertHwUserSignals carry the real clock otherwise.
+func hwSweepTestSignalSeen(t *testing.T, userID int, seen int64) {
+	t.Helper()
+	require.NoError(t, DB.Model(&HwUserSignal{}).
+		Where("user_id = ?", userID).
+		UpdateColumns(map[string]any{"first_seen": seen, "last_seen": seen}).Error)
 }
 
 // padTwo formats a small id as a two-digit phone suffix in tests.
