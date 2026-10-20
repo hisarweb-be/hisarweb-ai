@@ -20,16 +20,18 @@ import i18n from 'i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 import { initReactI18next } from 'react-i18next'
 
-import { convertDetectedLanguage } from './languages'
+import { convertDetectedLanguage, toIntlLocale } from './languages'
 import en from './locales/en.json'
 import fr from './locales/fr.json'
 import ja from './locales/ja.json'
 import ru from './locales/ru.json'
+import tr from './locales/tr.json'
 import vi from './locales/vi.json'
 import zhTW from './locales/zh-TW.json'
 import zhCN from './locales/zh.json'
 
 export const resources = {
+  tr,
   en,
   zhCN,
   fr,
@@ -39,26 +41,48 @@ export const resources = {
   zhTW,
 } as const
 
+/**
+ * Init options of the interface languages, exported so a test can exercise them
+ * on its own i18next instance (the application singleton is shared with the
+ * whole app and is initialized elsewhere in tests).
+ */
+export const INTERFACE_I18N_OPTIONS = {
+  resources,
+  // Turkish is the product language for everyone who has not chosen
+  // otherwise, so the browser locale is not consulted (a Turkish visitor
+  // with an English browser still gets Turkish). The second entry keeps
+  // untranslated keys readable: they resolve to the English source text.
+  fallbackLng: ['tr', 'en'],
+  supportedLngs: ['tr', 'en', 'zhCN', 'fr', 'ru', 'ja', 'vi', 'zhTW'],
+  load: 'currentOnly' as const,
+  nsSeparator: false as const, // Allow literal colons in keys (e.g., URLs, labels)
+  interpolation: {
+    escapeValue: false, // not needed for react as it escapes by default
+  },
+  detection: {
+    // Only an explicit choice is remembered; without one the fallback
+    // language (Turkish) applies.
+    order: ['localStorage'],
+    caches: ['localStorage'],
+    // Browsers report `zh-CN`/`zh-TW`/`zh`; map them onto our `zhCN`/`zhTW`
+    // codes (non-Chinese codes pass through for normal supportedLngs matching).
+    convertDetectedLanguage,
+  },
+}
+
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
-  .init({
-    resources,
-    fallbackLng: 'en',
-    supportedLngs: ['en', 'zhCN', 'fr', 'ru', 'ja', 'vi', 'zhTW'],
-    load: 'currentOnly',
-    nsSeparator: false, // Allow literal colons in keys (e.g., URLs, labels)
-    debug: import.meta.env.DEV,
-    interpolation: {
-      escapeValue: false, // not needed for react as it escapes by default
-    },
-    detection: {
-      order: ['localStorage', 'navigator'],
-      caches: ['localStorage'],
-      // Browsers report `zh-CN`/`zh-TW`/`zh`; map them onto our `zhCN`/`zhTW`
-      // codes (non-Chinese codes pass through for normal supportedLngs matching).
-      convertDetectedLanguage,
-    },
-  })
+  .init({ ...INTERFACE_I18N_OPTIONS, debug: import.meta.env.DEV })
+
+/** Keep `<html lang>` in step with the interface language (a11y, hyphenation). */
+export function applyDocumentLanguage(language?: string | null): void {
+  if (typeof document === 'undefined') return
+  const locale = toIntlLocale(language)
+  if (locale) document.documentElement.lang = locale
+}
+
+i18n.on('languageChanged', applyDocumentLanguage)
+applyDocumentLanguage(i18n.resolvedLanguage ?? i18n.language)
 
 export default i18n
