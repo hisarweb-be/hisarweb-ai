@@ -6,24 +6,58 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/i18n"
+	"github.com/QuantumNous/new-api/model"
 
 	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
-// hwFreeGroupTestRouter serves a request as one user in one group, so the rate
-// limiter sees the group and the id that TokenAuth would normally set.
+// hwFreeGroupTestDB gives the limiter an empty flag table, because the frozen
+// check runs on the same path. Every account id in these tests has no flag row,
+// so no account is frozen.
+func hwFreeGroupTestDB(t *testing.T) {
+	t.Helper()
+	if model.DB != nil {
+		return
+	}
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
+	require.NoError(t, db.AutoMigrate(&model.HwAccountFlag{}))
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = nil
+		_ = sqlDB.Close()
+	})
+}
+
+// hwFreeGroupTestRouter serves a request as one user in one account group, with
+// the token group and the request group set the way TokenAuth and a playground
+// body would set them, so a test can prove which of the three the limiter reads.
 func hwFreeGroupTestRouter(t *testing.T) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	require.NoError(t, i18n.Init())
+	hwFreeGroupTestDB(t)
 	router := gin.New()
 	router.POST("/v1/chat/completions", func(c *gin.Context) {
 		c.Set("id", hwFreeGroupTestUserID(c))
-		c.Set(string(constant.ContextKeyTokenGroup), c.Query("group"))
+		userGroup := c.Query("usergroup")
+		common.SetContextKey(c, constant.ContextKeyUserGroup, userGroup)
+		common.SetContextKey(c, constant.ContextKeyTokenGroup, c.Query("group"))
+		requestGroup := common.GetContextKeyString(c, constant.ContextKeyTokenGroup)
+		if requestGroup == "" {
+			requestGroup = userGroup
+		}
+		common.SetContextKey(c, constant.ContextKeyUsingGroup, requestGroup)
 	}, HwFreeGroupRateLimit(), func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -42,19 +76,42 @@ func TestHwFreeGroupRateLimitCapsFreeAccounts(t *testing.T) {
 	t.Setenv("HW_FREE_GROUP_PER_DAY", "10")
 	router := hwFreeGroupTestRouter(t)
 
-	call := func(group string, userID int) int {
+	call := func(userGroup, tokenGroup string, userID int) int {
 		recorder := httptest.NewRecorder()
-		request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions?user="+strconv.Itoa(userID)+"&group="+group, nil)
+		request := httptest.NewRequest(http.MethodPost,
+			"/v1/chat/completions?user="+strconv.Itoa(userID)+"&usergroup="+userGroup+"&group="+tokenGroup, nil)
 		router.ServeHTTP(recorder, request)
 		return recorder.Code
 	}
 
-	assert.Equal(t, http.StatusOK, call("free", 4101))
-	assert.Equal(t, http.StatusOK, call("free", 4101))
-	assert.Equal(t, http.StatusTooManyRequests, call("free", 4101), "the third request in a minute is refused")
-	assert.Equal(t, http.StatusOK, call("free", 4102), "another account has its own budget")
+	assert.Equal(t, http.StatusOK, call("free", "free", 4101))
+	assert.Equal(t, http.StatusOK, call("free", "free", 4101))
+	assert.Equal(t, http.StatusTooManyRequests, call("free", "free", 4101), "the third request in a minute is refused")
+	assert.Equal(t, http.StatusOK, call("free", "free", 4102), "another account has its own budget")
 	for range 3 {
-		assert.Equal(t, http.StatusOK, call("paid", 4101), "a paid account is not capped here")
+		assert.Equal(t, http.StatusOK, call("paid", "paid", 4101), "a paid account is not capped here")
+	}
+}
+
+// A free account that holds a token in default, vip or auto, or whose request
+// names one of those groups, keeps the budget of the free account.
+func TestHwFreeGroupRateLimitReadsTheAccountGroup(t *testing.T) {
+	t.Setenv("HW_FREE_GROUP_PER_MINUTE", "1")
+	t.Setenv("HW_FREE_GROUP_PER_DAY", "10")
+	router := hwFreeGroupTestRouter(t)
+
+	call := func(userID int, tokenGroup string) int {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPost,
+			"/v1/chat/completions?user="+strconv.Itoa(userID)+"&usergroup=free&group="+tokenGroup, nil)
+		router.ServeHTTP(recorder, request)
+		return recorder.Code
+	}
+	for index, tokenGroup := range []string{"default", "vip", "auto", "free"} {
+		userID := 4301 + index
+		assert.Equal(t, http.StatusOK, call(userID, tokenGroup), "the first request of %s passes", tokenGroup)
+		assert.Equal(t, http.StatusTooManyRequests, call(userID, tokenGroup),
+			"a token group %s does not lift the free budget", tokenGroup)
 	}
 }
 
@@ -64,9 +121,9 @@ func TestHwFreeGroupRateLimitCapsTheDay(t *testing.T) {
 	router := hwFreeGroupTestRouter(t)
 
 	first := httptest.NewRecorder()
-	router.ServeHTTP(first, httptest.NewRequest(http.MethodPost, "/v1/chat/completions?user=4201&group=free", nil))
+	router.ServeHTTP(first, httptest.NewRequest(http.MethodPost, "/v1/chat/completions?user=4201&usergroup=free&group=free", nil))
 	second := httptest.NewRecorder()
-	router.ServeHTTP(second, httptest.NewRequest(http.MethodPost, "/v1/chat/completions?user=4201&group=free", nil))
+	router.ServeHTTP(second, httptest.NewRequest(http.MethodPost, "/v1/chat/completions?user=4201&usergroup=free&group=free", nil))
 
 	assert.Equal(t, http.StatusOK, first.Code)
 	assert.Equal(t, http.StatusTooManyRequests, second.Code, "the daily budget ends the day")

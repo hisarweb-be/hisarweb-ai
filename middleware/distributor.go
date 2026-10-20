@@ -96,8 +96,10 @@ func Distribute() func(c *gin.Context) {
 					}
 				}
 				// A free trial account may only reach the model class its
-				// credit is meant for, whatever channel the group has.
-				if !HwFreeGroupModelAllowed(common.GetContextKeyString(c, constant.ContextKeyUsingGroup), modelRequest.Model) {
+				// credit is meant for, whatever channel the group has. The
+				// account group decides, not the group the request runs as: a
+				// free token in default, vip or auto stays a free request.
+				if !HwFreeGroupModelAllowed(hwUserGroup(c), modelRequest.Model) {
 					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorGroupAccessDenied))
 					return
 				}

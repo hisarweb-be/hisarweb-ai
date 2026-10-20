@@ -16,6 +16,7 @@ import (
 const (
 	HwErrorCodeServiceBusy       types.ErrorCode = "service_busy"
 	HwErrorCodeStreamInterrupted types.ErrorCode = "stream_interrupted"
+	HwErrorCodeAccountFrozen     types.ErrorCode = "account_frozen"
 )
 
 // HwIsOwnErrorCode reports whether code belongs to an error this fork generated
@@ -26,7 +27,7 @@ const (
 // upstream quota variant "insufficient_quota") and is still replaced.
 func HwIsOwnErrorCode(code string) bool {
 	switch code {
-	case string(HwErrorCodeServiceBusy), string(HwErrorCodeStreamInterrupted),
+	case string(HwErrorCodeServiceBusy), string(HwErrorCodeStreamInterrupted), string(HwErrorCodeAccountFrozen),
 		string(types.ErrorCodeInsufficientUserQuota), string(types.ErrorCodePreConsumeTokenQuotaFailed),
 		string(types.ErrorCodeInvalidRequest), string(types.ErrorCodeAccessDenied),
 		string(types.ErrorCodeSensitiveWordsDetected):
@@ -106,6 +107,16 @@ func HwGenericErrorMessage(c *gin.Context, status int) string {
 		return "İstek şu anda işlenemedi."
 	}
 	return "The request could not be processed right now."
+}
+
+// HwAccountFrozenMessage is the customer-facing text of a frozen account. The
+// Turkish first sentence is the one a Turkish customer reads; the text names
+// no supplier and no review detail, so it says nothing an attacker could use.
+func HwAccountFrozenMessage(c *gin.Context) string {
+	if HwPrefersTurkish(c) {
+		return "Hesabınız inceleme nedeniyle geçici olarak durduruldu, ücretsiz deneme kredisi şu anda kullanılamıyor. Ödenmiş bakiyeniz kullanılabilir."
+	}
+	return "This account is under review, so the free trial credit cannot be used right now. Paid credit still works."
 }
 
 // HwServiceBusyError is the terminal error for an exhausted supplier route.
