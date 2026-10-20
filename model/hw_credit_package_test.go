@@ -17,7 +17,9 @@ import (
 func hwCreditTestSetup(t *testing.T) {
 	t.Helper()
 	t.Setenv(hwSignalSaltEnv, hwTestSignalSalt)
-	require.NoError(t, DB.AutoMigrate(&HwCreditPackage{}, &HwUserSignal{}, &HwFirstPurchaseClaim{}, &HwFreeCreditClaim{}))
+	// The extension table belongs to the same fixture: the derived fill of a
+	// package reads it, so every package path needs it migrated.
+	require.NoError(t, DB.AutoMigrate(&HwCreditPackage{}, &HwUserSignal{}, &HwFirstPurchaseClaim{}, &HwFreeCreditClaim{}, &HwCreditExtension{}))
 	require.NoError(t, DB.Exec("DELETE FROM hw_credit_packages").Error)
 	require.NoError(t, DB.Exec("DELETE FROM hw_user_signals").Error)
 	require.NoError(t, DB.Exec("DELETE FROM hw_first_purchase_claims").Error)
