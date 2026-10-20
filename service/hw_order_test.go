@@ -45,7 +45,7 @@ type hwFakeProviderOrder struct {
 	State     string
 }
 
-// hwFakeProvider mimics the two Revolut Merchant endpoints the integration uses.
+// hwFakeProvider mimics the Revolut Merchant endpoints the integration uses.
 // It decodes the request with its own field names, so a renamed field in the
 // production types makes a test fail instead of silently sending nothing.
 type hwFakeProvider struct {
@@ -57,12 +57,16 @@ type hwFakeProvider struct {
 	sequence    int
 	created     int
 	fetched     int
+	cancelled   int
 
-	state       string
-	amountDelta int64
-	currency    string
-	fingerprint string
-	failCreate  bool
+	state             string
+	amountDelta       int64
+	currency          string
+	fingerprint       string
+	failCreate        bool
+	failCancel        bool
+	reportedReference string
+	reportedID        string
 }
 
 func hwNewFakeProvider(t *testing.T) *hwFakeProvider {
@@ -90,6 +94,8 @@ func (fake *hwFakeProvider) handle(w http.ResponseWriter, r *http.Request) {
 		fake.create(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/orders/"):
 		fake.get(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/orders/") && strings.HasSuffix(r.URL.Path, "/cancel"):
+		fake.cancel(w, r)
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
@@ -169,20 +175,52 @@ func (fake *hwFakeProvider) get(w http.ResponseWriter, r *http.Request) {
 	if fake.currency != "" {
 		currency = fake.currency
 	}
+	reportedID := order.Id
+	if fake.reportedID != "" {
+		reportedID = fake.reportedID
+	}
+	reportedReference := order.Reference
+	if fake.reportedReference != "" {
+		reportedReference = fake.reportedReference
+	}
 	payload := hwFakeOrderPayload{
-		Id:          order.Id,
+		Id:          reportedID,
 		State:       state,
 		CheckoutURL: fake.Server.URL + "/checkout/" + order.Id,
 		Amount:      order.Amount + fake.amountDelta,
 		Currency:    currency,
 		MerchantOrderData: struct {
 			Reference string `json:"reference"`
-		}{Reference: order.Reference},
+		}{Reference: reportedReference},
 	}
 	if fake.fingerprint != "" {
 		payload.Payments = []hwFakePayment{{PaymentMethod: hwFakePaymentMethod{Fingerprint: fake.fingerprint}}}
 	}
 	hwWriteJSON(w, http.StatusOK, payload)
+}
+
+// cancel answers the provider's cancel endpoint: an order that was already paid
+// cannot be cancelled there, everything else is closed.
+func (fake *hwFakeProvider) cancel(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/orders/"), "/cancel")
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.cancelled++
+	if fake.failCancel {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	order, ok := fake.orders[id]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if order.State == "completed" {
+		w.WriteHeader(http.StatusConflict)
+		return
+	}
+	order.State = "cancelled"
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // hwFakeOrderPayload is the test double's own view of the provider response. It
@@ -270,6 +308,36 @@ func (fake *hwFakeProvider) setFailCreate(fail bool) {
 	fake.failCreate = fail
 }
 
+func (fake *hwFakeProvider) setFailCancel(fail bool) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.failCancel = fail
+}
+
+func (fake *hwFakeProvider) setState(state string) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.state = state
+}
+
+func (fake *hwFakeProvider) setReportedReference(reference string) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.reportedReference = reference
+}
+
+func (fake *hwFakeProvider) setReportedID(id string) {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	fake.reportedID = id
+}
+
+func (fake *hwFakeProvider) cancelCount() int {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	return fake.cancelled
+}
+
 var hwOrderTestColumnsOnce sync.Once
 
 // hwOrderTestSetup starts a test from an empty top-up ledger and points the
@@ -288,11 +356,15 @@ func hwOrderTestSetup(t *testing.T) *hwFakeProvider {
 		&model.HwCreditPackage{},
 		&model.HwUserSignal{},
 		&model.HwFirstPurchaseClaim{},
+		&model.HwAffiliateRetry{},
 	))
 	hwOrderTestCleanTables(t)
 	t.Cleanup(func() { hwOrderTestCleanTables(t) })
 
 	fake := hwNewFakeProvider(t)
+	// The test double serves plain http on the loopback; the integration only
+	// accepts that through its explicit test-only hook.
+	HwRevolutPermitLoopbackHTTPForTest()
 	t.Setenv(HwRevolutSecretKeyEnv, hwOrderTestProviderSecret)
 	t.Setenv(HwRevolutWebhookSecretEnv, hwOrderTestWebhookSecret)
 	t.Setenv(HwRevolutAPIBaseEnv, fake.Server.URL)
@@ -332,7 +404,7 @@ func hwOrderTestSetup(t *testing.T) *hwFakeProvider {
 
 func hwOrderTestCleanTables(t *testing.T) {
 	t.Helper()
-	for _, table := range []string{"hw_orders", "hw_credit_packages", "hw_user_signals", "hw_first_purchase_claims"} {
+	for _, table := range []string{"hw_orders", "hw_credit_packages", "hw_user_signals", "hw_first_purchase_claims", "hw_affiliate_retries"} {
 		require.NoError(t, model.DB.Exec("DELETE FROM "+table).Error)
 	}
 }
@@ -465,7 +537,10 @@ func hwOrderTestCaptureLog(t *testing.T) *hwOrderTestLogCapture {
 func TestHwRevolutWebhookSignature(t *testing.T) {
 	hwOrderTestSetup(t)
 	at := time.Now()
-	body := hwOrderTestEventBody(t, "ORDER_COMPLETED", "unknown-provider-order", "hw-unknown")
+	// No provider order id in the body: an event that matches no order and
+	// names no id is answered 200, so the signature cases below only see the
+	// signature verdict.
+	body := hwOrderTestEventBody(t, "ORDER_COMPLETED", "", "hw-unknown")
 	timestamp, signature := hwOrderTestSign(body, hwOrderTestWebhookSecret, at)
 	staleTimestamp, staleSignature := hwOrderTestSign(body, hwOrderTestWebhookSecret, at.Add(-6*time.Minute))
 	futureTimestamp, futureSignature := hwOrderTestSign(body, hwOrderTestWebhookSecret, at.Add(6*time.Minute))
@@ -653,6 +728,18 @@ func TestHwTopUpRefusesAMismatchedProviderReport(t *testing.T) {
 	assert.Zero(t, hwOrderTestQuota(t, buyer.Id), "another currency must not credit the order")
 
 	fake.setCurrency("")
+
+	// A report that answers with another provider order id, or carries another
+	// order's reference, is not this order's payment.
+	fake.setReportedID("another-provider-order")
+	require.Equal(t, HwWebhookIgnored, hwOrderTestPaidWebhook(t, fake, order.MerchantRef, now))
+	assert.Zero(t, hwOrderTestQuota(t, buyer.Id), "a report answering another order id must not credit the order")
+	fake.setReportedID("")
+	fake.setReportedReference("hw-not-this-order")
+	require.Equal(t, HwWebhookIgnored, hwOrderTestPaidWebhook(t, fake, order.MerchantRef, now))
+	assert.Zero(t, hwOrderTestQuota(t, buyer.Id), "a report carrying another reference must not credit the order")
+
+	fake.setReportedReference("")
 	require.Equal(t, HwWebhookAccepted, hwOrderTestPaidWebhook(t, fake, order.MerchantRef, now))
 	assert.Equal(t, hwOrderTestListQuota(t, 600), hwOrderTestQuota(t, buyer.Id))
 }
@@ -711,7 +798,9 @@ func TestHwFirstPurchaseDiscountIsClaimedOnce(t *testing.T) {
 		model.HwDiscountReturning:     51000,
 	}, discounts, "exactly one of two concurrent orders gets the first-purchase price")
 
-	// Cancelling the discounted order gives the discount back.
+	// Cancelling the discounted order gives the discount back: the provider
+	// order is cancelled there first, only then does the local close release
+	// the claim.
 	var discounted model.HwOrder
 	require.NoError(t, model.DB.Where("user_id = ? AND discount_kind = ?", buyer.Id, model.HwDiscountFirstPurchase).First(&discounted).Error)
 	require.Equal(t, HwWebhookAccepted, hwOrderTestWebhook(t, "ORDER_CANCELLED", fake.providerOrderID(discounted.MerchantRef), discounted.MerchantRef, now))
@@ -722,11 +811,12 @@ func TestHwFirstPurchaseDiscountIsClaimedOnce(t *testing.T) {
 	assert.Equal(t, model.HwDiscountFirstPurchase, retriedOrder.DiscountKind)
 	assert.EqualValues(t, 30000, retriedOrder.PayableTryMinor)
 
-	// An expired first order also gives the discount back.
+	// An expired first order also gives the discount back, again only after the
+	// provider confirmed the cancellation.
 	require.NoError(t, model.DB.Model(&model.HwOrder{}).Where("merchant_ref = ?", retried.MerchantRef).Update("created_at", now.Unix()-25*3600).Error)
-	closed, err := model.HwExpirePendingOrders(now.Unix())
+	run, err := HwReconcileExpiredOrders(context.Background(), now)
 	require.NoError(t, err)
-	assert.EqualValues(t, 1, closed)
+	assert.Equal(t, 1, run.Closed)
 	var expiredOrder model.HwOrder
 	require.NoError(t, model.DB.Where("merchant_ref = ?", retried.MerchantRef).First(&expiredOrder).Error)
 	assert.Equal(t, model.HwOrderStatusExpired, expiredOrder.Status)
@@ -763,41 +853,243 @@ func TestHwTopUpClosedOrdersNeverCredit(t *testing.T) {
 	assert.Zero(t, packages)
 	assert.Zero(t, claims, "a cancelled order gives the first-purchase claim back")
 
+	// A refused payment is one attempt: the order stays open and payable, and
+	// it keeps its first-purchase claim, so a later payment cannot spend the
+	// discount a second time.
 	declined := hwOrderTestCreate(t, buyer.Id, 600)
 	require.Equal(t, HwWebhookAccepted, hwOrderTestWebhook(t, "ORDER_PAYMENT_DECLINED", fake.providerOrderID(declined.MerchantRef), declined.MerchantRef, now))
 	var declinedOrder model.HwOrder
 	require.NoError(t, model.DB.Where("merchant_ref = ?", declined.MerchantRef).First(&declinedOrder).Error)
-	assert.Equal(t, model.HwOrderStatusFailed, declinedOrder.Status)
+	assert.Equal(t, model.HwOrderStatusPending, declinedOrder.Status, "a refused payment keeps the order open")
 	assert.Zero(t, hwOrderTestQuota(t, buyer.Id))
 	require.NoError(t, model.DB.Model(&model.HwFirstPurchaseClaim{}).Where("user_id = ?", buyer.Id).Count(&claims).Error)
-	assert.Zero(t, claims)
+	assert.EqualValues(t, 1, claims, "the open order keeps holding the first-purchase claim")
+
+	// The customer retries with another card and the same order settles with
+	// its discount.
+	require.Equal(t, HwWebhookAccepted, hwOrderTestPaidWebhook(t, fake, declined.MerchantRef, now))
+	assert.Equal(t, hwOrderTestListQuota(t, 600), hwOrderTestQuota(t, buyer.Id))
+}
+
+func TestHwTopUpLatePaymentNeverSpendsTheDiscountTwice(t *testing.T) {
+	fake := hwOrderTestSetup(t)
+	now := time.Now()
+	buyer := hwOrderTestUser(t, 0)
+	hwOrderTestIdentify(t, buyer.Id, "late")
+
+	// The first order is cancelled after the provider confirmed, which releases
+	// its first-purchase claim; a second order picks the claim up.
+	first := hwOrderTestCreate(t, buyer.Id, 600)
+	require.Equal(t, HwWebhookAccepted, hwOrderTestWebhook(t, "ORDER_CANCELLED", fake.providerOrderID(first.MerchantRef), first.MerchantRef, now))
+	second := hwOrderTestCreate(t, buyer.Id, 600)
+	var secondOrder model.HwOrder
+	require.NoError(t, model.DB.Where("merchant_ref = ?", second.MerchantRef).First(&secondOrder).Error)
+	assert.Equal(t, model.HwDiscountFirstPurchase, secondOrder.DiscountKind)
+
+	// A late payment for the cancelled first order still delivers what was
+	// paid, at face value: the released discount is not spent a second time.
+	fake.setFingerprint("card-late-payment")
+	require.Equal(t, HwWebhookAccepted, hwOrderTestPaidWebhook(t, fake, first.MerchantRef, now))
+	var latePackage model.HwCreditPackage
+	require.NoError(t, model.DB.Where("source = ? AND order_ref = ?", model.HwSourcePurchase, first.MerchantRef).First(&latePackage).Error)
+	assert.Positive(t, latePackage.GrantedQuota)
+	assert.Less(t, latePackage.GrantedQuota, hwOrderTestListQuota(t, 600), "a payment after the claim was released is credited at face value")
+	assert.Equal(t, latePackage.GrantedQuota, hwOrderTestQuota(t, buyer.Id))
+	var paidLate model.HwOrder
+	require.NoError(t, model.DB.Where("merchant_ref = ?", first.MerchantRef).First(&paidLate).Error)
+	assert.Equal(t, model.HwOrderStatusPaid, paidLate.Status)
+	assert.Equal(t, model.HwDiscountReturning, paidLate.DiscountKind, "the order no longer counts as the discounted first purchase")
+	assert.NotEmpty(t, paidLate.AdminNote, "the reason is recorded for the admin")
+
+	// The card signal of the late payment is recorded even without the
+	// discount, so the shared-card checks of later orders keep working.
+	var cardSignal model.HwUserSignal
+	require.NoError(t, model.DB.Where("user_id = ? AND kind = ?", buyer.Id, model.HwSignalKindCard).First(&cardSignal).Error)
+	assert.NotEmpty(t, cardSignal.Hash)
+
+	// The claim stayed with the second order, which still settles with its
+	// discount: one first purchase, one discount.
+	require.Equal(t, HwWebhookAccepted, hwOrderTestPaidWebhook(t, fake, second.MerchantRef, now))
+	assert.Equal(t, latePackage.GrantedQuota+hwOrderTestListQuota(t, 600), hwOrderTestQuota(t, buyer.Id))
+}
+
+func TestHwRevolutWebhookAnswersUnavailableWhileIncomplete(t *testing.T) {
+	fake := hwOrderTestSetup(t)
+	now := time.Now()
+	buyer := hwOrderTestUser(t, 0)
+	hwOrderTestIdentify(t, buyer.Id, "incomplete")
+	order := hwOrderTestCreate(t, buyer.Id, 600)
+
+	// The provider knows the order but has not finished it: answer 503 so the
+	// event is delivered again once the payment completes.
+	fake.setState("pending")
+	outcome := hwOrderTestPaidWebhook(t, fake, order.MerchantRef, now)
+	require.Equal(t, HwWebhookUnavailable, outcome)
+	assert.Equal(t, http.StatusServiceUnavailable, outcome.HTTPStatus())
+	assert.Zero(t, hwOrderTestQuota(t, buyer.Id))
+	var open model.HwOrder
+	require.NoError(t, model.DB.Where("merchant_ref = ?", order.MerchantRef).First(&open).Error)
+	assert.Equal(t, model.HwOrderStatusPending, open.Status)
+
+	// An event that names a provider order we cannot match yet is retried too;
+	// one that names no order at all is answered 200.
+	require.Equal(t, HwWebhookUnavailable, hwOrderTestWebhook(t, "ORDER_COMPLETED", "unknown-provider-order", "hw-unknown", now))
+	require.Equal(t, HwWebhookIgnored, hwOrderTestWebhook(t, "ORDER_COMPLETED", "", "hw-unknown", now))
+
+	fake.setState("")
+	require.Equal(t, HwWebhookAccepted, hwOrderTestPaidWebhook(t, fake, order.MerchantRef, now))
+	assert.Equal(t, hwOrderTestListQuota(t, 600), hwOrderTestQuota(t, buyer.Id))
+}
+
+func TestHwRevolutClientRefusesInsecureTransports(t *testing.T) {
+	hwOrderTestSetup(t)
+	t.Setenv(HwRevolutSecretKeyEnv, hwOrderTestProviderSecret)
+
+	// Plain http outside the loopback exception is refused before any request.
+	t.Setenv(HwRevolutAPIBaseEnv, "http://merchant.revolut.com")
+	_, err := HwRevolutConfigFromEnv()
+	assert.ErrorIs(t, err, ErrHwRevolutInsecureBaseURL)
+
+	// https is accepted as a base URL...
+	t.Setenv(HwRevolutAPIBaseEnv, "https://merchant.revolut.com")
+	_, err = HwRevolutConfigFromEnv()
+	assert.NoError(t, err)
+
+	// ...but the dedicated client verifies the certificate: the self-signed
+	// certificate of a test double is not trusted, whatever the process-wide
+	// TLS settings allow elsewhere.
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hwWriteJSON(w, http.StatusOK, hwFakeOrderPayload{})
+	}))
+	t.Cleanup(upstream.Close)
+	config := HwRevolutConfig{BaseURL: upstream.URL, SecretKey: hwOrderTestProviderSecret, APIVersion: hwRevolutDefaultAPIVersion}
+	_, err = config.GetOrder(context.Background(), "any-order")
+	require.Error(t, err)
+	var apiErr *HwRevolutAPIError
+	require.ErrorAs(t, err, &apiErr)
+	assert.True(t, apiErr.Transport, "an untrusted certificate must fail in the transport, not slip through")
+}
+
+func TestHwAffiliateRetryQueuePicksUpFailedRewards(t *testing.T) {
+	hwOrderTestSetup(t)
+	now := time.Now()
+	inviter := hwOrderTestUser(t, 0)
+	hwOrderTestIdentify(t, inviter.Id, "retry-inviter")
+	buyer := hwOrderTestUser(t, inviter.Id)
+	hwOrderTestIdentify(t, buyer.Id, "retry-buyer")
+	listQuota := hwOrderTestListQuota(t, 600)
+
+	// The purchase settled, its reward grant failed afterwards: the queue holds
+	// exactly one row per purchase reference.
+	_, err := model.GrantCreditPackage(model.DB, buyer.Id, listQuota, model.HwSourcePurchase, "hw-retry-purchase", now.Unix())
+	require.NoError(t, err)
+	created, err := model.HwEnqueueAffiliateRetry(buyer.Id, listQuota, "hw-retry-purchase", now.Unix())
+	require.NoError(t, err)
+	require.True(t, created)
+	created, err = model.HwEnqueueAffiliateRetry(buyer.Id, listQuota, "hw-retry-purchase", now.Unix())
+	require.NoError(t, err)
+	assert.False(t, created, "a second enqueue for the same purchase is a no-op")
+
+	// The round grants the queued reward exactly like a direct grant would.
+	before := hwOrderTestQuota(t, inviter.Id)
+	granted, dropped, err := model.HwRetryPendingAffiliateRewards(now.Unix())
+	require.NoError(t, err)
+	assert.Equal(t, 1, granted)
+	assert.Zero(t, dropped)
+	afterRetry := hwOrderTestQuota(t, inviter.Id)
+	_, err = model.GrantCreditPackage(model.DB, buyer.Id, listQuota, model.HwSourcePurchase, "hw-direct-purchase", now.Unix())
+	require.NoError(t, err)
+	ok, reason, err := model.HwGrantAffiliateReward(buyer.Id, listQuota, "hw-direct-purchase", now.Unix())
+	require.NoError(t, err)
+	require.True(t, ok, reason)
+	afterDirect := hwOrderTestQuota(t, inviter.Id)
+	assert.Equal(t, afterRetry-before, afterDirect-afterRetry, "the retried reward is exactly one reward")
+	var rows int64
+	require.NoError(t, model.DB.Model(&model.HwAffiliateRetry{}).Count(&rows).Error)
+	assert.Zero(t, rows, "a granted reward leaves the queue")
+
+	// A purchase whose package is gone (a refund took it back) is a permanent
+	// refusal: the row is dropped without a grant.
+	_, err = model.HwEnqueueAffiliateRetry(buyer.Id, listQuota, "hw-refunded-purchase", now.Unix())
+	require.NoError(t, err)
+	granted, dropped, err = model.HwRetryPendingAffiliateRewards(now.Unix())
+	require.NoError(t, err)
+	assert.Zero(t, granted)
+	assert.Zero(t, dropped)
+	require.NoError(t, model.DB.Model(&model.HwAffiliateRetry{}).Count(&rows).Error)
+	assert.Zero(t, rows)
+
+	// A reward that keeps failing is retried a bounded number of times before
+	// the loss is dropped with an error log; below the bound the row stays.
+	require.NoError(t, model.DB.Create(&model.HwAffiliateRetry{OrderRef: "hw-broken-reward", ListQuota: listQuota, Attempts: 1 << 20}).Error)
+	granted, dropped, err = model.HwRetryPendingAffiliateRewards(now.Unix())
+	require.NoError(t, err)
+	assert.Zero(t, granted)
+	assert.Equal(t, 1, dropped)
+	require.NoError(t, model.DB.Create(&model.HwAffiliateRetry{OrderRef: "hw-broken-reward-2", ListQuota: listQuota}).Error)
+	granted, dropped, err = model.HwRetryPendingAffiliateRewards(now.Unix())
+	require.NoError(t, err)
+	assert.Zero(t, granted)
+	assert.Zero(t, dropped)
+	require.NoError(t, model.DB.Model(&model.HwAffiliateRetry{}).Where("order_ref = ?", "hw-broken-reward-2").Count(&rows).Error)
+	assert.EqualValues(t, 1, rows, "a row below the attempt bound waits for the next round")
 }
 
 func TestHwTopUpExpiresUnpaidOrders(t *testing.T) {
-	hwOrderTestSetup(t)
+	fake := hwOrderTestSetup(t)
 	now := time.Now()
 	buyer := hwOrderTestUser(t, 0)
 	hwOrderTestIdentify(t, buyer.Id, "expiry")
-	order := hwOrderTestCreate(t, buyer.Id, 600)
 
-	closed, err := model.HwExpirePendingOrders(now.Unix())
+	fresh := hwOrderTestCreate(t, buyer.Id, 600)
+	run, err := HwReconcileExpiredOrders(context.Background(), now)
 	require.NoError(t, err)
-	assert.Zero(t, closed, "an order younger than the pending window stays open")
+	assert.Equal(t, HwExpiryRun{}, run, "an order younger than the pending window stays open")
+	var freshOrder model.HwOrder
+	require.NoError(t, model.DB.Where("merchant_ref = ?", fresh.MerchantRef).First(&freshOrder).Error)
+	assert.Equal(t, model.HwOrderStatusPending, freshOrder.Status)
 
-	require.NoError(t, model.DB.Model(&model.HwOrder{}).Where("merchant_ref = ?", order.MerchantRef).Update("created_at", now.Unix()-25*3600).Error)
-	closed, err = model.HwExpirePendingOrders(now.Unix())
+	// Past the window the round asks the provider first: the order is cancelled
+	// there, and only then does the local close release the claim.
+	stale := hwOrderTestCreate(t, buyer.Id, 600)
+	require.NoError(t, model.DB.Model(&model.HwOrder{}).Where("merchant_ref = ?", stale.MerchantRef).Update("created_at", now.Unix()-25*3600).Error)
+	run, err = HwReconcileExpiredOrders(context.Background(), now)
 	require.NoError(t, err)
-	assert.EqualValues(t, 1, closed)
-
+	assert.Equal(t, 1, run.Closed)
+	assert.Equal(t, 1, fake.cancelCount(), "the provider cancelled the order before the local close")
 	var expired model.HwOrder
-	require.NoError(t, model.DB.Where("merchant_ref = ?", order.MerchantRef).First(&expired).Error)
+	require.NoError(t, model.DB.Where("merchant_ref = ?", stale.MerchantRef).First(&expired).Error)
 	assert.Equal(t, model.HwOrderStatusExpired, expired.Status)
 	var claims int64
 	require.NoError(t, model.DB.Model(&model.HwFirstPurchaseClaim{}).Where("user_id = ?", buyer.Id).Count(&claims).Error)
 	assert.Zero(t, claims)
+
+	// A provider that cannot be reached, or refuses the cancel, leaves the
+	// order open and the claim held; the next round tries again.
+	fake.setFailCancel(true)
+	stuck := hwOrderTestCreate(t, buyer.Id, 600)
+	require.NoError(t, model.DB.Model(&model.HwOrder{}).Where("merchant_ref = ?", stuck.MerchantRef).Update("created_at", now.Unix()-25*3600).Error)
+	run, err = HwReconcileExpiredOrders(context.Background(), now)
+	require.NoError(t, err)
+	assert.Equal(t, 1, run.Retried)
+	assert.Equal(t, 2, fake.cancelCount(), "the round attempted the cancel and will try again")
+	var stuckOrder model.HwOrder
+	require.NoError(t, model.DB.Where("merchant_ref = ?", stuck.MerchantRef).First(&stuckOrder).Error)
+	assert.Equal(t, model.HwOrderStatusPending, stuckOrder.Status)
+	fake.setFailCancel(false)
+
+	// An order the provider reports completed is settled as paid instead of
+	// expired away.
+	paidLate := hwOrderTestCreate(t, buyer.Id, 600)
+	fake.pay(paidLate.MerchantRef)
+	require.NoError(t, model.DB.Model(&model.HwOrder{}).Where("merchant_ref = ?", paidLate.MerchantRef).Update("created_at", now.Unix()-25*3600).Error)
+	run, err = HwReconcileExpiredOrders(context.Background(), now)
+	require.NoError(t, err)
+	assert.Equal(t, 1, run.Settled)
+	assert.Equal(t, hwOrderTestListQuota(t, 600), hwOrderTestQuota(t, buyer.Id))
 }
 
-func TestHwTopUpRefundRevokesCreditAndReward(t *testing.T) {
+func TestHwAdminRefundTakesBackCreditAndReward(t *testing.T) {
 	fake := hwOrderTestSetup(t)
 	now := time.Now()
 	expectedQuota := hwOrderTestListQuota(t, 600)
@@ -809,14 +1101,46 @@ func TestHwTopUpRefundRevokesCreditAndReward(t *testing.T) {
 	order := hwOrderTestCreate(t, buyer.Id, 600)
 	require.Equal(t, HwWebhookAccepted, hwOrderTestPaidWebhook(t, fake, order.MerchantRef, now))
 	require.Equal(t, expectedQuota, hwOrderTestQuota(t, buyer.Id))
+	reward := hwOrderTestQuota(t, inviter.Id)
+	require.NotZero(t, reward)
 
-	require.Equal(t, HwWebhookAccepted, hwOrderTestWebhook(t, "ORDER_REFUNDED", fake.providerOrderID(order.MerchantRef), order.MerchantRef, now.Add(time.Minute)))
+	// Refund and dispute event names are unconfirmed, so those events are
+	// logged by type and answered 200 without acting on them.
+	require.Equal(t, HwWebhookIgnored, hwOrderTestWebhook(t, "ORDER_REFUNDED", fake.providerOrderID(order.MerchantRef), order.MerchantRef, now.Add(time.Minute)))
+	require.Equal(t, HwWebhookIgnored, hwOrderTestWebhook(t, "DISPUTE_CREATED", fake.providerOrderID(order.MerchantRef), order.MerchantRef, now.Add(time.Minute)))
+	assert.Equal(t, expectedQuota, hwOrderTestQuota(t, buyer.Id), "an unconfirmed event type must not take credit back")
+	assert.Equal(t, reward, hwOrderTestQuota(t, inviter.Id))
+
+	// Half of the credit is already spent: the refund returns only the rest,
+	// never below zero, and records the spent part as owed on the order.
+	spent := expectedQuota / 2
+	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", buyer.Id).Update("quota", spent).Error)
+	result, err := HwAdminRefundOrder(order.MerchantRef, now.Add(2*time.Minute))
+	require.NoError(t, err)
+	require.True(t, result.Refunded)
+	assert.Equal(t, expectedQuota, result.GrantedQuota)
+	assert.Equal(t, spent, result.ReturnedQuota)
+	assert.Equal(t, spent, result.SpentQuota)
 	assert.Zero(t, hwOrderTestQuota(t, buyer.Id), "the unspent credit is taken back")
 	assert.Zero(t, hwOrderTestQuota(t, inviter.Id), "the affiliate reward is taken back")
+	var refunded model.HwOrder
+	require.NoError(t, model.DB.Where("merchant_ref = ?", order.MerchantRef).First(&refunded).Error)
+	assert.Equal(t, model.HwOrderStatusRefunded, refunded.Status)
+	assert.Contains(t, refunded.AdminNote, "stays owed")
 
-	// A second refund changes nothing.
-	require.Equal(t, HwWebhookAccepted, hwOrderTestWebhook(t, "ORDER_REFUNDED", fake.providerOrderID(order.MerchantRef), order.MerchantRef, now.Add(2*time.Minute)))
+	// A second refund changes nothing and keeps the recorded note.
+	again, err := HwAdminRefundOrder(order.MerchantRef, now.Add(3*time.Minute))
+	require.NoError(t, err)
+	assert.False(t, again.Refunded)
+	assert.Equal(t, refunded.AdminNote, again.Note)
 	assert.Zero(t, hwOrderTestQuota(t, buyer.Id))
+
+	// Only a paid order is refundable; an unknown reference is not found.
+	open := hwOrderTestCreate(t, buyer.Id, 600)
+	_, err = HwAdminRefundOrder(open.MerchantRef, now.Add(3*time.Minute))
+	assert.ErrorIs(t, err, ErrHwOrderNotRefundable)
+	_, err = HwAdminRefundOrder("hw-does-not-exist", now.Add(3*time.Minute))
+	assert.ErrorIs(t, err, ErrHwOrderNotFound)
 }
 
 func TestHwTopUpLogsNoSecrets(t *testing.T) {

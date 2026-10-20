@@ -4,10 +4,12 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
@@ -75,4 +77,40 @@ func HwRevolutWebhook(c *gin.Context) {
 		time.Now(),
 	)
 	c.Status(outcome.HTTPStatus())
+}
+
+// HwAdminRefundOrder is the admin route that takes back the credit of one paid
+// order (see service.HwAdminRefundOrder). Refund and dispute webhook events are
+// not acted on automatically — their event names are unconfirmed — so this route
+// is the one deliberate path that reverses a purchase.
+func HwAdminRefundOrder(c *gin.Context) {
+	var request struct {
+		MerchantRef string `json:"merchant_ref"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil || strings.TrimSpace(request.MerchantRef) == "" {
+		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid request"))
+		return
+	}
+	result, err := service.HwAdminRefundOrder(request.MerchantRef, time.Now())
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrHwOrderNotFound):
+			common.ApiErrorStatus(c, http.StatusNotFound, common.NewMessage("Order not found"))
+		case errors.Is(err, service.ErrHwOrderNotRefundable), errors.Is(err, model.ErrHwInvalidOrder):
+			common.ApiErrorStatus(c, http.StatusConflict, common.NewMessage("Order is not in a refundable state"))
+		default:
+			logger.LogError(c.Request.Context(), common.LogText("admin refund failed"))
+			common.ApiError(c, common.NewMessage("Failed to refund the order"))
+		}
+		return
+	}
+	common.ApiSuccess(c, gin.H{
+		"merchant_ref":   request.MerchantRef,
+		"found":          result.Found,
+		"refunded":       result.Refunded,
+		"granted_quota":  result.GrantedQuota,
+		"returned_quota": result.ReturnedQuota,
+		"spent_quota":    result.SpentQuota,
+		"note":           result.Note,
+	})
 }

@@ -3,11 +3,10 @@ package model
 import (
 	"errors"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -16,6 +15,9 @@ import (
 const HwOrderCurrency = "TRY"
 
 // Order statuses. Only paid writes credit; everything else closes the order.
+// refunded is a post-payment status set by the admin refund route: the credit
+// of the order was taken back, so the order is treated like a paid one by every
+// close path.
 const (
 	HwOrderStatusCreated   = "created"
 	HwOrderStatusPending   = "pending"
@@ -23,6 +25,7 @@ const (
 	HwOrderStatusCancelled = "cancelled"
 	HwOrderStatusFailed    = "failed"
 	HwOrderStatusExpired   = "expired"
+	HwOrderStatusRefunded  = "refunded"
 )
 
 // Discount kinds recorded on an order.
@@ -43,9 +46,9 @@ const (
 
 const (
 	// hwOrderPendingTTLSeconds is how long an unpaid order may stay open. The
-	// expiry job closes it afterwards and releases a first-purchase claim.
+	// reconciliation round in the service layer closes it afterwards and
+	// releases a first-purchase claim once the provider order is cancelled.
 	hwOrderPendingTTLSeconds = 24 * 3600
-	hwOrderExpiryJobInterval = 10 * time.Minute
 )
 
 // ErrHwInvalidOrder rejects an order write that breaks the order invariants.
@@ -71,6 +74,11 @@ type HwOrder struct {
 	Status            string  `json:"status" gorm:"type:varchar(16);not null;index"`
 	CreatedAt         int64   `json:"created_at" gorm:"not null;default:0"`
 	PaidAt            int64   `json:"paid_at" gorm:"not null;default:0"`
+	// AdminNote records why an order was settled outside the normal rules (a
+	// late payment without its discount, a provider report that disagreed) or
+	// what a refund left owed. It is operational text for the admin only; the
+	// user-facing API never returns it.
+	AdminNote string `json:"admin_note" gorm:"type:varchar(512);not null;default:''"`
 }
 
 func (HwOrder) TableName() string {
@@ -162,6 +170,37 @@ type HwOrderSettlement struct {
 	UserId  int
 	// ListQuota is the full list value of the purchase in quota units.
 	ListQuota int
+	// GrantedQuota is the quota this call actually issued; it is ListQuota when
+	// the discount was applied and the face value of the paid amount when it
+	// was not.
+	GrantedQuota int
+	// DiscountApplied is true when the first-purchase discount was still held
+	// by this order when the payment was settled.
+	DiscountApplied bool
+	// AdminNote is the admin-visible reason recorded on the order when the
+	// discount was not applied; empty when it was.
+	AdminNote string
+}
+
+// hwStandardCreditQuota converts what the customer actually paid into quota at
+// face value: no discount, never more than the paid amount is worth. It is used
+// when a discounted order is paid after its first-purchase claim was released,
+// so the same discount can never be spent twice.
+func hwStandardCreditQuota(order *HwOrder) (int, error) {
+	if order.ListValueTryMinor <= 0 || order.PayableTryMinor <= 0 || order.ListQuota <= 0 {
+		return 0, ErrHwInvalidOrder
+	}
+	credit := decimal.NewFromInt(order.PayableTryMinor).
+		Mul(decimal.NewFromInt(int64(order.ListQuota))).
+		Div(decimal.NewFromInt(order.ListValueTryMinor))
+	quota, err := common.WalletQuotaFromDecimalStrict(credit)
+	if err != nil {
+		return 0, err
+	}
+	if quota <= 0 {
+		return 0, ErrHwInvalidOrder
+	}
+	return quota, nil
 }
 
 // HwSettleOrderPayment marks an order paid and issues its credit package in one
@@ -170,6 +209,12 @@ type HwOrderSettlement struct {
 // duplicated webhook harmless. A payment that arrives after the order was closed
 // locally (cancelled, failed or expired) is still credited: the customer paid,
 // and refusing the credit would take money without delivering it.
+//
+// A discounted order only keeps its discount when, inside this same transaction,
+// the first-purchase claim still belongs to this order and no other discounted
+// purchase of the user was paid before it. Otherwise the discount was already
+// spent elsewhere and only the face value of the paid amount is credited; the
+// order records that decision in its admin note.
 //
 // cardFingerprint is the provider's card fingerprint of the paying card, not a
 // card number. It is recorded on the first-purchase claim of this order and
@@ -187,14 +232,53 @@ func HwSettleOrderPayment(merchantRef, revolutOrderID, cardFingerprint string, n
 		}
 		settlement.UserId = order.UserId
 		settlement.ListQuota = order.ListQuota
-		if order.Status == HwOrderStatusPaid || order.Currency != HwOrderCurrency {
+		if order.Status == HwOrderStatusPaid || order.Status == HwOrderStatusRefunded || order.Currency != HwOrderCurrency {
 			return nil
 		}
-		granted, err := GrantCreditPackage(tx, order.UserId, order.ListQuota, HwSourcePurchase, order.MerchantRef, now)
+		creditQuota := order.ListQuota
+		if order.DiscountKind == HwDiscountFirstPurchase {
+			claimHeld := false
+			var claim HwFirstPurchaseClaim
+			err := tx.Where("user_id = ?", order.UserId).First(&claim).Error
+			switch {
+			case err == nil:
+				claimHeld = claim.OrderRef == order.MerchantRef
+			case errors.Is(err, gorm.ErrRecordNotFound):
+			default:
+				return err
+			}
+			var discountedPurchases int64
+			if err := tx.Model(&HwOrder{}).
+				Where("user_id = ? AND status = ? AND discount_kind = ? AND id <> ?",
+					order.UserId, HwOrderStatusPaid, HwDiscountFirstPurchase, order.Id).
+				Count(&discountedPurchases).Error; err != nil {
+				return err
+			}
+			if !claimHeld || discountedPurchases > 0 {
+				// The discount of this order was released (or spent on another
+				// order) before the payment arrived. Credit only what was paid
+				// at face value and record why, so the discount is never given
+				// twice for one first purchase.
+				quota, err := hwStandardCreditQuota(&order)
+				if err != nil {
+					return err
+				}
+				creditQuota = quota
+				settlement.AdminNote = "first-purchase discount was no longer held by this order; credited the paid amount at face value"
+			} else {
+				settlement.DiscountApplied = true
+			}
+		}
+		granted, err := GrantCreditPackage(tx, order.UserId, creditQuota, HwSourcePurchase, order.MerchantRef, now)
 		if err != nil {
 			return err
 		}
-		updates := map[string]any{"status": HwOrderStatusPaid, "paid_at": now}
+		updates := map[string]any{"status": HwOrderStatusPaid, "paid_at": now, "admin_note": settlement.AdminNote}
+		if !settlement.DiscountApplied && order.DiscountKind == HwDiscountFirstPurchase {
+			// A paid first-purchase order means the discount was really spent;
+			// this one was not, and the kind must say so for later checks.
+			updates["discount_kind"] = HwDiscountReturning
+		}
 		if id := strings.TrimSpace(revolutOrderID); id != "" && (order.RevolutOrderId == nil || *order.RevolutOrderId == "") {
 			updates["revolut_order_id"] = id
 		}
@@ -203,7 +287,8 @@ func HwSettleOrderPayment(merchantRef, revolutOrderID, cardFingerprint string, n
 		}
 		settlement.Paid = true
 		settlement.Granted = granted
-		if order.DiscountKind == HwDiscountFirstPurchase && strings.TrimSpace(cardFingerprint) != "" {
+		settlement.GrantedQuota = creditQuota
+		if settlement.DiscountApplied && strings.TrimSpace(cardFingerprint) != "" {
 			if err := HwRecordFirstPurchaseCard(tx, order.UserId, order.MerchantRef, cardFingerprint); err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 				common.SysError(common.LogText("could not record the paying card of first-purchase order %s (class %s); the credit itself is unaffected", order.MerchantRef, hwErrorClass(err)))
 			}
@@ -214,8 +299,8 @@ func HwSettleOrderPayment(merchantRef, revolutOrderID, cardFingerprint string, n
 }
 
 // HwMarkOrderNotPaid closes an unpaid order as cancelled, failed or expired and
-// releases a first-purchase claim it holds. An order that is already paid is
-// left alone. A second call for the same status changes nothing.
+// releases a first-purchase claim it holds. An order that is already paid or
+// refunded is left alone. A second call for the same status changes nothing.
 func HwMarkOrderNotPaid(merchantRef, status string, now int64) (bool, error) {
 	merchantRef = strings.TrimSpace(merchantRef)
 	if merchantRef == "" || now <= 0 || !hwOrderCloseStatus(status) {
@@ -231,7 +316,7 @@ func HwMarkOrderNotPaid(merchantRef, status string, now int64) (bool, error) {
 		if err != nil {
 			return err
 		}
-		if order.Status == HwOrderStatusPaid {
+		if order.Status == HwOrderStatusPaid || order.Status == HwOrderStatusRefunded {
 			return nil
 		}
 		if order.Status == status {
@@ -247,77 +332,73 @@ func HwMarkOrderNotPaid(merchantRef, status string, now int64) (bool, error) {
 	return changed, err
 }
 
-// HwExpirePendingOrders closes every unpaid order older than the pending TTL and
-// releases the first-purchase claims those orders hold. It returns how many
-// orders it closed; a second run changes nothing.
-func HwExpirePendingOrders(now int64) (int, error) {
+// HwOpenOrdersPastTTL lists the unpaid orders older than the pending TTL, in id
+// order. The caller (the reconciliation round in the service layer) checks each
+// of them with the payment provider before closing it, so a paid order is never
+// expired away and a claim is only released after the provider order was
+// cancelled. Orders that already carry an admin note were flagged by an earlier
+// round for an admin decision and are left out until that note is cleared.
+func HwOpenOrdersPastTTL(now int64) ([]HwOrder, error) {
 	if now <= 0 {
-		return 0, ErrHwInvalidOrder
+		return nil, ErrHwInvalidOrder
 	}
-	var ids []int
-	err := DB.Model(&HwOrder{}).
-		Where("status IN ? AND created_at <= ?", []string{HwOrderStatusCreated, HwOrderStatusPending}, now-hwOrderPendingTTLSeconds).
-		Pluck("id", &ids).Error
+	var orders []HwOrder
+	err := DB.Where("status IN ? AND created_at <= ? AND admin_note = ''",
+		[]string{HwOrderStatusCreated, HwOrderStatusPending}, now-hwOrderPendingTTLSeconds).
+		Order("id").Find(&orders).Error
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	closed := 0
-	for _, id := range ids {
-		changed, err := hwExpireOrder(id, now)
-		if err != nil {
-			common.SysError(common.LogText("expiring top-up order %d failed (class %s); continuing with the next order", id, hwErrorClass(err)))
-			continue
-		}
-		if changed {
-			closed++
-		}
-	}
-	return closed, nil
+	return orders, nil
 }
 
-func hwExpireOrder(orderID int, now int64) (bool, error) {
-	changed := false
-	err := DB.Transaction(func(tx *gorm.DB) error {
-		var order HwOrder
-		err := lockForUpdate(tx).Where("id = ?", orderID).First(&order).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if !hwOrderIsOpen(order.Status) || order.CreatedAt > now-hwOrderPendingTTLSeconds {
-			return nil
-		}
-		if err := tx.Model(&HwOrder{}).Where("id = ?", order.Id).UpdateColumns(map[string]any{"status": HwOrderStatusExpired}).Error; err != nil {
-			return err
-		}
-		changed = true
-		return HwReleaseFirstPurchaseClaim(tx, order.UserId, order.MerchantRef)
-	})
-	return changed, err
+// HwNoteOrder records an admin-visible note on an unpaid order and leaves the
+// order open, so neither the reconciliation round nor a close path touches it
+// until an admin has looked at it.
+func HwNoteOrder(merchantRef, note string) error {
+	merchantRef = strings.TrimSpace(merchantRef)
+	if merchantRef == "" || strings.TrimSpace(note) == "" {
+		return ErrHwInvalidOrder
+	}
+	return DB.Model(&HwOrder{}).
+		Where("merchant_ref = ? AND status IN ?", merchantRef, []string{HwOrderStatusCreated, HwOrderStatusPending}).
+		Update("admin_note", note).Error
 }
 
-// HwRevokeOrderCredit takes back the credit package of one paid order, for a
-// refund or a chargeback. Only what the package still holds is subtracted from
+// HwOrderRevocation reports what taking back an order's credit did.
+type HwOrderRevocation struct {
+	// Retired is true when this call retired the purchase package.
+	Retired bool
+	// GrantedQuota is what the purchase package originally issued.
+	GrantedQuota int
+	// RemainingQuota is what the package still held and what was subtracted
+	// from the balance; the difference to GrantedQuota was already spent.
+	RemainingQuota int
+}
+
+// HwRevokeOrderCredit takes back the credit package of one paid order, for the
+// admin refund route. Only what the package still holds is subtracted from
 // users.quota (never below zero); the package is retired with that remainder, so
-// a second call changes nothing. Balance the customer already spent is not
-// recovered from other packages.
-func HwRevokeOrderCredit(merchantRef string, now int64) error {
+// a second call changes nothing and reports Retired false. Balance the customer
+// already spent is not recovered from other packages; the caller records it as
+// the owed part of the refund.
+func HwRevokeOrderCredit(merchantRef string, now int64) (HwOrderRevocation, error) {
 	merchantRef = strings.TrimSpace(merchantRef)
 	if merchantRef == "" || now <= 0 {
-		return ErrHwInvalidOrder
+		return HwOrderRevocation{}, ErrHwInvalidOrder
 	}
 	var pkg HwCreditPackage
 	err := DB.Where("source = ? AND order_ref = ?", HwSourcePurchase, merchantRef).First(&pkg).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil
+		return HwOrderRevocation{}, nil
 	}
 	if err != nil {
-		return err
+		return HwOrderRevocation{}, err
 	}
+	revocation := HwOrderRevocation{GrantedQuota: pkg.GrantedQuota}
 	if pkg.RetiredAt != 0 {
-		return nil
+		revocation.RemainingQuota = pkg.RetiredRemaining
+		return revocation, nil
 	}
 	decrease := 0
 	revoked := false
@@ -346,6 +427,8 @@ func HwRevokeOrderCredit(merchantRef string, now int64) error {
 		if result.RowsAffected == 0 {
 			return nil
 		}
+		revocation.Retired = true
+		revocation.RemainingQuota = remaining
 		decrease = min(remaining, max(user.Quota, 0))
 		if decrease == 0 {
 			return nil
@@ -357,50 +440,46 @@ func HwRevokeOrderCredit(merchantRef string, now int64) error {
 		return nil
 	})
 	if err != nil {
-		return err
+		return HwOrderRevocation{}, err
 	}
 	if revoked {
 		if err := cacheDecrUserQuota(pkg.UserId, int64(decrease)); err != nil {
 			common.SysError(common.LogText("failed to decrease user quota cache after order revocation: %s", err.Error()))
 		}
 	}
-	return nil
+	return revocation, nil
 }
 
-var hwOrderExpiryOnce sync.Once
-
-// StartHwOrderExpiryJob starts the job that expires unpaid orders. It runs once
-// per process and only on the master node; HwExpirePendingOrders re-checks each
-// order inside its own transaction, so several masters are harmless.
-func StartHwOrderExpiryJob() {
-	hwOrderExpiryOnce.Do(func() {
-		if !common.IsMasterNode {
-			return
+// HwMarkOrderRefunded moves a paid order to refunded and stores the admin note of
+// the refund. Only a paid order can be refunded; a second call changes nothing.
+func HwMarkOrderRefunded(merchantRef, note string, now int64) (bool, error) {
+	merchantRef = strings.TrimSpace(merchantRef)
+	if merchantRef == "" || now <= 0 {
+		return false, ErrHwInvalidOrder
+	}
+	changed := false
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var order HwOrder
+		err := lockForUpdate(tx).Where("merchant_ref = ?", merchantRef).First(&order).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
 		}
-		go func() {
-			common.SysLog(common.LogText("top-up order expiry job started: interval=%s", hwOrderExpiryJobInterval))
-			runHwOrderExpiryOnceSafely()
-			ticker := time.NewTicker(hwOrderExpiryJobInterval)
-			defer ticker.Stop()
-			for range ticker.C {
-				runHwOrderExpiryOnceSafely()
-			}
-		}()
+		if err != nil {
+			return err
+		}
+		if order.Status != HwOrderStatusPaid {
+			return nil
+		}
+		if err := tx.Model(&HwOrder{}).Where("id = ?", order.Id).
+			UpdateColumns(map[string]any{"status": HwOrderStatusRefunded, "admin_note": note, "paid_at": order.PaidAt}).Error; err != nil {
+			return err
+		}
+		changed = true
+		return nil
 	})
+	return changed, err
 }
 
-func runHwOrderExpiryOnceSafely() {
-	defer func() {
-		if r := recover(); r != nil {
-			common.SysError(common.LogText("top-up order expiry job panicked: %v", r))
-		}
-	}()
-	closed, err := HwExpirePendingOrders(common.GetTimestamp())
-	if err != nil {
-		common.SysError(common.LogText("top-up order expiry failed (class %s)", hwErrorClass(err)))
-		return
-	}
-	if closed > 0 {
-		common.SysLog(common.LogText("top-up order expiry closed %d unpaid orders", closed))
-	}
-}
+// The expiry job itself lives in the service layer (service.StartHwOrderExpiryJob):
+// closing an unpaid order must be reconciled with the payment provider first,
+// and the provider client is not visible from the model layer.

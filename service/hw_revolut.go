@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -30,12 +32,14 @@ const (
 	hwRevolutDefaultAPIVersion  = "2024-09-01"
 	hwRevolutMaxResponseBytes   = 1 << 20
 	hwRevolutWebhookMaxClockGap = 5 * time.Minute
+	hwRevolutRequestTimeout    = 30 * time.Second
 )
 
 // Errors of the Revolut integration. Only these are returned to callers; an
 // error text never carries a secret, a body or a header.
 var (
 	ErrHwRevolutNotConfigured            = errors.New("revolut merchant api is not configured")
+	ErrHwRevolutInsecureBaseURL          = errors.New("revolut api base url must use https")
 	ErrHwRevolutWebhookSecretMissing     = errors.New("revolut webhook secret is not configured")
 	ErrHwRevolutWebhookTimestampRejected = errors.New("revolut webhook timestamp is invalid or outside the accepted window")
 	ErrHwRevolutWebhookSignatureRejected = errors.New("revolut webhook signature does not match")
@@ -65,8 +69,37 @@ type HwRevolutConfig struct {
 	APIVersion string
 }
 
+// hwRevolutAllowLoopbackHTTP permits an http:// base URL on a loopback host. It
+// is a test-only hook: the httptest doubles of the test suite run on
+// 127.0.0.1 without TLS, and nothing else may downgrade the provider transport.
+// Production code never sets it.
+var hwRevolutAllowLoopbackHTTP bool
+
+// HwRevolutPermitLoopbackHTTPForTest enables the loopback exception above. It
+// exists for the test suite only.
+func HwRevolutPermitLoopbackHTTPForTest() {
+	hwRevolutAllowLoopbackHTTP = true
+}
+
+// hwRevolutHostIsLoopback reports whether a URL host is a loopback address.
+func hwRevolutHostIsLoopback(host string) bool {
+	hostname := host
+	if strings.Contains(hostname, ":") {
+		hostname, _, _ = strings.Cut(hostname, "]")
+		hostname = strings.TrimPrefix(hostname, "[")
+	}
+	switch hostname {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	}
+	return false
+}
+
 // HwRevolutConfigFromEnv resolves the provider configuration. Without a secret
-// key nothing is attempted.
+// key nothing is attempted. The base URL must be https: card-payment traffic is
+// never sent over plain http, regardless of any process-wide TLS setting. The
+// one exception is a loopback host with the test-only hook enabled, so the
+// httptest double can serve the integration.
 func HwRevolutConfigFromEnv() (HwRevolutConfig, error) {
 	secretKey := strings.TrimSpace(os.Getenv(HwRevolutSecretKeyEnv))
 	if secretKey == "" {
@@ -79,6 +112,9 @@ func HwRevolutConfigFromEnv() (HwRevolutConfig, error) {
 	parsed, err := url.Parse(baseURL)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return HwRevolutConfig{}, ErrHwRevolutNotConfigured
+	}
+	if parsed.Scheme != "https" && !(parsed.Scheme == "http" && hwRevolutAllowLoopbackHTTP && hwRevolutHostIsLoopback(parsed.Host)) {
+		return HwRevolutConfig{}, ErrHwRevolutInsecureBaseURL
 	}
 	apiVersion := strings.TrimSpace(os.Getenv(HwRevolutAPIVersionEnv))
 	if apiVersion == "" {
@@ -138,18 +174,23 @@ type hwRevolutWebhookEvent struct {
 	MerchantOrderExtRef string `json:"merchant_order_ext_ref"`
 }
 
-// Webhook event names. The completed, cancelled and payment-failed events are
-// documented; ORDER_REFUNDED and ORDER_CHARGEBACK are the names this integration
-// expects for money being taken back, and have to be confirmed with sandbox keys
-// like the rest of the provider contract.
+// Webhook event names. The completed, cancelled, declined and failed events are
+// handled below. Refund and dispute events are NOT acted on automatically: their
+// names (ORDER_REFUNDED, DISPUTE_*) are unconfirmed assumptions, so every event
+// type not listed here is only logged (the type, never the payload) and answered
+// with 200; taking credit back is an explicit admin action through the refund
+// route.
 const (
 	hwRevolutEventOrderCompleted  = "ORDER_COMPLETED"
 	hwRevolutEventOrderCancelled  = "ORDER_CANCELLED"
 	hwRevolutEventPaymentDeclined = "ORDER_PAYMENT_DECLINED"
 	hwRevolutEventPaymentFailed   = "ORDER_PAYMENT_FAILED"
-	hwRevolutEventOrderRefunded   = "ORDER_REFUNDED"
-	hwRevolutEventChargeback      = "ORDER_CHARGEBACK"
 )
+
+// hwRevolutStateCancelled is the provider order state that means the order was
+// closed without payment. Like every provider name here it is an assumption to
+// be measured with sandbox keys.
+const hwRevolutStateCancelled = "cancelled"
 
 // HwVerifyRevolutWebhook checks the timestamp and the signature of a webhook.
 //
@@ -212,6 +253,38 @@ func (config HwRevolutConfig) GetOrder(ctx context.Context, orderID string) (hwR
 	return config.doOrderRequest(ctx, http.MethodGet, "/api/orders/"+url.PathEscape(strings.TrimSpace(orderID)), nil)
 }
 
+// CancelOrder asks the provider to close an order so it can no longer be paid.
+// It runs before a local close releases a first-purchase claim, so a discount
+// that was given back can never be spent on an order that is still payable.
+//
+// ASSUMPTION, to be measured with sandbox keys: the endpoint is
+// POST /api/orders/{id}/cancel and a 2xx answer means the order is closed there.
+// Until that is confirmed against the sandbox, a wrong endpoint surfaces as a
+// provider-status error: the close is then retried on the next reconciliation
+// round and the claim stays held, which fails safe.
+func (config HwRevolutConfig) CancelOrder(ctx context.Context, orderID string) error {
+	orderID = strings.TrimSpace(orderID)
+	if orderID == "" {
+		return ErrHwRevolutUnusableResponse
+	}
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, config.BaseURL+"/api/orders/"+url.PathEscape(orderID)+"/cancel", nil)
+	if err != nil {
+		return ErrHwRevolutNotConfigured
+	}
+	httpRequest.Header.Set("Authorization", "Bearer "+config.SecretKey)
+	httpRequest.Header.Set("Revolut-Api-Version", config.APIVersion)
+	response, err := hwRevolutHTTPClient().Do(httpRequest)
+	if err != nil {
+		return &HwRevolutAPIError{Transport: true}
+	}
+	defer response.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, hwRevolutMaxResponseBytes))
+	if response.StatusCode < http.StatusOK || response.StatusCode > 299 {
+		return &HwRevolutAPIError{StatusCode: response.StatusCode}
+	}
+	return nil
+}
+
 func (config HwRevolutConfig) doOrderRequest(ctx context.Context, method, path string, request *hwRevolutOrderRequest) (hwRevolutOrderResponse, error) {
 	var body io.Reader
 	if request != nil {
@@ -249,14 +322,27 @@ func (config HwRevolutConfig) doOrderRequest(ctx context.Context, method, path s
 	return order, nil
 }
 
-// hwRevolutHTTPClient returns the shared outbound client. It falls back to a
-// plain client with a timeout in a process where InitHttpClient has not run (for
-// example a unit test), instead of dereferencing nil.
+// hwRevolutHTTPClient returns the dedicated outbound client of this
+// integration. It is deliberately not the process-wide client: that one can be
+// configured to skip certificate verification (TLS_INSECURE_SKIP_VERIFY or an
+// injected CA bundle), and card-payment traffic must always verify the
+// provider's certificate. The client has a fixed 30 s timeout and its own
+// transport with TLS verification pinned on.
+var (
+	hwRevolutClientOnce sync.Once
+	hwRevolutClient     *http.Client
+)
+
 func hwRevolutHTTPClient() *http.Client {
-	if client := GetHttpClient(); client != nil {
-		return client
-	}
-	return &http.Client{Timeout: 30 * time.Second}
+	hwRevolutClientOnce.Do(func() {
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		// InsecureSkipVerify is explicitly false: this integration never
+		// downgrades certificate verification, whatever the process-wide
+		// transport allows elsewhere.
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: false}
+		hwRevolutClient = &http.Client{Timeout: hwRevolutRequestTimeout, Transport: transport}
+	})
+	return hwRevolutClient
 }
 
 // hwRevolutCardFingerprint returns the provider's fingerprint of the paying

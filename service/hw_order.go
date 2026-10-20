@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -269,8 +271,8 @@ func (outcome HwWebhookOutcome) HTTPStatus() int {
 //
 // The raw body is the signed input; it is never re-serialised. The body, the
 // headers and the secrets are never logged, and credit is only written when the
-// provider itself reports a completed payment whose amount and currency match
-// our own order.
+// provider itself reports a completed payment whose reference, id, amount and
+// currency match our own order.
 func HwHandleRevolutWebhook(ctx context.Context, rawBody []byte, timestampHeader, signatureHeader string, now time.Time) HwWebhookOutcome {
 	if err := HwVerifyRevolutWebhook(rawBody, timestampHeader, signatureHeader, os.Getenv(HwRevolutWebhookSecretEnv), now); err != nil {
 		if errors.Is(err, ErrHwRevolutWebhookSecretMissing) {
@@ -291,24 +293,51 @@ func HwHandleRevolutWebhook(ctx context.Context, rawBody []byte, timestampHeader
 		return HwWebhookUnavailable
 	}
 	if !found {
+		if strings.TrimSpace(event.OrderId) != "" {
+			// The event names a provider order we cannot match yet. Answering
+			// 503 makes the provider deliver it again instead of losing it; the
+			// reconciliation round is the backstop that settles or closes the
+			// order either way. The answer names no order, so it leaks nothing.
+			common.SysLog(common.LogText("revolut webhook could not match an order by reference or provider id; answered unavailable so the event is retried"))
+			return HwWebhookUnavailable
+		}
 		return HwWebhookIgnored
 	}
 	switch event.Event {
 	case hwRevolutEventOrderCompleted:
 		return hwCompleteRevolutOrder(ctx, order, event, now)
 	case hwRevolutEventOrderCancelled:
-		return hwCloseRevolutOrder(order, model.HwOrderStatusCancelled, now)
+		config, err := HwRevolutConfigFromEnv()
+		if err != nil {
+			common.SysError(common.LogText("revolut webhook cannot reconcile order %s (class %s)", order.MerchantRef, hwPaymentErrorClass(err)))
+			return HwWebhookUnavailable
+		}
+		outcome, action := hwReconcileOrderBeforeClose(ctx, config, order, model.HwOrderStatusCancelled, now)
+		if outcome == HwWebhookAccepted && action != hwReconcileNone {
+			common.SysLog(common.LogText("revolut webhook %s order %s while handling a cancellation event", action, order.MerchantRef))
+		}
+		return outcome
 	case hwRevolutEventPaymentDeclined, hwRevolutEventPaymentFailed:
-		return hwCloseRevolutOrder(order, model.HwOrderStatusFailed, now)
-	case hwRevolutEventOrderRefunded, hwRevolutEventChargeback:
-		return hwRevokeRevolutOrder(order, now)
+		// A refused or failed payment is one attempt, not the end of the order:
+		// the customer can still pay it with another card. Closing here would
+		// release the first-purchase claim while the order stays payable, and a
+		// later payment would spend the discount a second time. The order stays
+		// open and is settled or closed by a later event or by the
+		// reconciliation round.
+		common.SysLog(common.LogText("revolut webhook keeps order %s open after a refused or failed payment", order.MerchantRef))
+		return HwWebhookAccepted
 	default:
+		// Unknown event types are logged by type only and accepted. Refund and
+		// dispute events land here on purpose: their exact names are unconfirmed
+		// (they must be measured with sandbox keys), and taking credit back is
+		// the explicit job of the admin refund route.
+		common.SysLog(common.LogText("revolut webhook accepted an unhandled event of type %s", event.Event))
 		return HwWebhookIgnored
 	}
 }
 
 func hwCompleteRevolutOrder(ctx context.Context, order *model.HwOrder, event hwRevolutWebhookEvent, now time.Time) HwWebhookOutcome {
-	if order.Status == model.HwOrderStatusPaid {
+	if order.Status == model.HwOrderStatusPaid || order.Status == model.HwOrderStatusRefunded {
 		return HwWebhookAccepted
 	}
 	providerOrderID := strings.TrimSpace(event.OrderId)
@@ -316,7 +345,8 @@ func hwCompleteRevolutOrder(ctx context.Context, order *model.HwOrder, event hwR
 		providerOrderID = strings.TrimSpace(*order.RevolutOrderId)
 	}
 	if providerOrderID == "" {
-		return HwWebhookIgnored
+		common.SysLog(common.LogText("revolut webhook cannot confirm order %s: no provider order id is known; answered unavailable so the event is retried", order.MerchantRef))
+		return HwWebhookUnavailable
 	}
 	config, err := HwRevolutConfigFromEnv()
 	if err != nil {
@@ -329,18 +359,43 @@ func hwCompleteRevolutOrder(ctx context.Context, order *model.HwOrder, event hwR
 		return HwWebhookUnavailable
 	}
 	if providerOrder.State != hwRevolutStateCompleted {
-		common.SysLog(common.LogText("revolut webhook left order %s unpaid: the provider does not report a completed payment", order.MerchantRef))
+		// Not finished yet: answer 503 so the provider delivers the event
+		// again once the payment is, and let the reconciliation round close the
+		// order if it never completes.
+		common.SysLog(common.LogText("revolut webhook left order %s unsettled: the provider reports state %s; answered unavailable so the event is retried", order.MerchantRef, providerOrder.State))
+		return HwWebhookUnavailable
+	}
+	return hwSettleConfirmedOrder(order, providerOrder, providerOrderID, now)
+}
+
+// hwSettleConfirmedOrder credits an order from a provider report that says
+// completed, after the report has been matched to the order it belongs to. It is
+// shared by the completed-event path and the reconciliation round.
+func hwSettleConfirmedOrder(order *model.HwOrder, providerOrder hwRevolutOrderResponse, requestedOrderID string, now time.Time) HwWebhookOutcome {
+	if order.Status == model.HwOrderStatusPaid || order.Status == model.HwOrderStatusRefunded {
+		return HwWebhookAccepted
+	}
+	reportedReference := ""
+	if providerOrder.MerchantOrderData != nil {
+		reportedReference = strings.TrimSpace(providerOrder.MerchantOrderData.Reference)
+	}
+	if reportedReference != order.MerchantRef {
+		common.SysError(common.LogText("revolut refused credit for order %s: the provider report carries a different order reference", order.MerchantRef))
+		return HwWebhookIgnored
+	}
+	if strings.TrimSpace(providerOrder.Id) != requestedOrderID {
+		common.SysError(common.LogText("revolut refused credit for order %s: the provider report answers a different order id", order.MerchantRef))
 		return HwWebhookIgnored
 	}
 	if providerOrder.Amount != order.PayableTryMinor || !strings.EqualFold(strings.TrimSpace(providerOrder.Currency), order.Currency) {
 		// The amount and the currency come from our own order; a provider report
 		// that disagrees is a reason not to credit, never a reason to credit what
 		// the provider says.
-		common.SysError(common.LogText("revolut webhook refused credit for order %s: the confirmed amount or currency differs from our order", order.MerchantRef))
+		common.SysError(common.LogText("revolut refused credit for order %s: the confirmed amount or currency differs from our order", order.MerchantRef))
 		return HwWebhookIgnored
 	}
 	fingerprint := hwRevolutCardFingerprint(providerOrder)
-	settlement, err := model.HwSettleOrderPayment(order.MerchantRef, providerOrderID, fingerprint, now.Unix())
+	settlement, err := model.HwSettleOrderPayment(order.MerchantRef, requestedOrderID, fingerprint, now.Unix())
 	if err != nil {
 		common.SysError(common.LogText("revolut webhook could not settle order %s (class %s)", order.MerchantRef, hwPaymentErrorClass(err)))
 		return HwWebhookUnavailable
@@ -349,47 +404,276 @@ func hwCompleteRevolutOrder(ctx context.Context, order *model.HwOrder, event hwR
 		return HwWebhookAccepted
 	}
 	if settlement.Granted {
-		model.HwSyncCachesAfterGrant(settlement.UserId, settlement.ListQuota, model.HwSourcePurchase)
+		model.HwSyncCachesAfterGrant(settlement.UserId, settlement.GrantedQuota, model.HwSourcePurchase)
 	}
+	// Re-record the card signal of every paid discounted order, so the
+	// shared-card checks of later orders keep working even when the payment
+	// arrived after other events had already moved the order around.
 	if fingerprint != "" {
 		if err := model.UpsertHwUserSignals(settlement.UserId, model.HwUserSignals{CardFingerprint: fingerprint}); err != nil {
 			common.SysError(common.LogText("could not record the paying card signal of order %s (class %s)", order.MerchantRef, hwPaymentErrorClass(err)))
 		}
 	}
-	granted, reason, err := model.HwGrantAffiliateReward(settlement.UserId, settlement.ListQuota, order.MerchantRef, now.Unix())
-	switch {
-	case err != nil:
-		common.SysError(common.LogText("affiliate reward of order %s failed (class %s)", order.MerchantRef, hwPaymentErrorClass(err)))
-	case !granted:
-		common.SysLog(common.LogText("no affiliate reward for order %s: %s", order.MerchantRef, reason))
+	if settlement.AdminNote != "" {
+		common.SysError(common.LogText("order %s was settled without its first-purchase discount; the reason is recorded on the order for the admin", order.MerchantRef))
 	}
+	hwGrantAffiliateAfterPayment(settlement, order.MerchantRef, now)
 	common.SysLog(common.LogText("revolut webhook credited the top-up of order %s", order.MerchantRef))
 	return HwWebhookAccepted
 }
 
+// hwGrantAffiliateAfterPayment grants the affiliate reward of a settled payment
+// and puts a failed grant in the retry queue instead of losing it. Only classes
+// and counts are logged.
+func hwGrantAffiliateAfterPayment(settlement model.HwOrderSettlement, merchantRef string, now time.Time) {
+	granted, reason, err := model.HwGrantAffiliateReward(settlement.UserId, settlement.GrantedQuota, merchantRef, now.Unix())
+	switch {
+	case err != nil:
+		common.SysError(common.LogText("affiliate reward of order %s failed (class %s); queueing it for retry", merchantRef, hwPaymentErrorClass(err)))
+		if _, enqueueErr := model.HwEnqueueAffiliateRetry(settlement.UserId, settlement.GrantedQuota, merchantRef, now.Unix()); enqueueErr != nil {
+			common.SysError(common.LogText("could not queue the affiliate reward of order %s for retry (class %s)", merchantRef, hwPaymentErrorClass(enqueueErr)))
+		}
+	case !granted:
+		common.SysLog(common.LogText("no affiliate reward for order %s: %s", merchantRef, reason))
+	}
+}
+
+// What a reconciliation did to one order, for the round's log lines.
+const (
+	hwReconcileSettled = "settled"
+	hwReconcileClosed  = "closed"
+	hwReconcileNone    = "left"
+)
+
+// hwCloseRevolutOrder closes an order locally and releases its first-purchase
+// claim. Only call it once the provider side of the order is settled.
 func hwCloseRevolutOrder(order *model.HwOrder, status string, now time.Time) HwWebhookOutcome {
 	changed, err := model.HwMarkOrderNotPaid(order.MerchantRef, status, now.Unix())
 	if err != nil {
-		common.SysError(common.LogText("revolut webhook could not close order %s (class %s)", order.MerchantRef, hwPaymentErrorClass(err)))
+		common.SysError(common.LogText("could not close order %s as %s (class %s)", order.MerchantRef, status, hwPaymentErrorClass(err)))
 		return HwWebhookUnavailable
 	}
 	if changed {
-		common.SysLog(common.LogText("revolut webhook closed order %s as %s", order.MerchantRef, status))
+		common.SysLog(common.LogText("order %s closed as %s", order.MerchantRef, status))
 	}
 	return HwWebhookAccepted
 }
 
-func hwRevokeRevolutOrder(order *model.HwOrder, now time.Time) HwWebhookOutcome {
-	if err := model.HwRevokeOrderCredit(order.MerchantRef, now.Unix()); err != nil {
-		common.SysError(common.LogText("revolut webhook could not revoke the credit of order %s (class %s)", order.MerchantRef, hwPaymentErrorClass(err)))
-		return HwWebhookUnavailable
+// hwReconcileOrderBeforeClose is the gate every local close passes through. The
+// order is read back from the provider: a completed payment is settled as a
+// payment, an order already cancelled there is closed, and anything else is
+// cancelled at the provider first. Only a close the provider confirmed (or an
+// order the provider never knew) releases the first-purchase claim, so a
+// discount that was given back can never be spent on an order that is still
+// payable. The returned action names what happened, for the round's log.
+func hwReconcileOrderBeforeClose(ctx context.Context, config HwRevolutConfig, order *model.HwOrder, closeStatus string, now time.Time) (HwWebhookOutcome, string) {
+	if order.Status == model.HwOrderStatusPaid || order.Status == model.HwOrderStatusRefunded {
+		return HwWebhookAccepted, hwReconcileNone
 	}
-	if err := model.HwRevokeAffiliateReward(order.MerchantRef, now.Unix()); err != nil {
-		common.SysError(common.LogText("revolut webhook could not revoke the affiliate reward of order %s (class %s)", order.MerchantRef, hwPaymentErrorClass(err)))
-		return HwWebhookUnavailable
+	providerOrderID := ""
+	if order.RevolutOrderId != nil {
+		providerOrderID = strings.TrimSpace(*order.RevolutOrderId)
 	}
-	common.SysLog(common.LogText("revolut webhook revoked the credit of order %s", order.MerchantRef))
-	return HwWebhookAccepted
+	if providerOrderID == "" {
+		// No provider order id was ever recorded, so there is nothing to
+		// reconcile with. A late payment event for such an order is still
+		// settled safely: HwSettleOrderPayment credits it without the discount
+		// once the claim is gone.
+		return hwCloseRevolutOrder(order, closeStatus, now), hwReconcileClosed
+	}
+	providerOrder, err := config.GetOrder(ctx, providerOrderID)
+	if err != nil {
+		common.SysError(common.LogText("could not read order %s back from the provider (class %s); the order stays open and its claim stays held", order.MerchantRef, hwPaymentErrorClass(err)))
+		return HwWebhookUnavailable, hwReconcileNone
+	}
+	if providerOrder.State == hwRevolutStateCompleted {
+		outcome := hwSettleConfirmedOrder(order, providerOrder, providerOrderID, now)
+		if outcome == HwWebhookIgnored {
+			// The provider says completed, but the report does not match our
+			// order: money may have moved wrongly. Flag the order for an admin
+			// instead of crediting it or releasing its claim, and leave it out
+			// of later rounds until the note is cleared.
+			if err := model.HwNoteOrder(order.MerchantRef, "provider reports this order completed with a different reference, id, amount or currency; not credited, kept open for admin review"); err != nil {
+				common.SysError(common.LogText("could not flag order %s for admin review (class %s)", order.MerchantRef, hwPaymentErrorClass(err)))
+			}
+		}
+		if outcome == HwWebhookAccepted {
+			return outcome, hwReconcileSettled
+		}
+		return outcome, hwReconcileNone
+	}
+	if providerOrder.State != hwRevolutStateCancelled {
+		if err := config.CancelOrder(ctx, providerOrderID); err != nil {
+			common.SysError(common.LogText("could not cancel order %s at the provider (class %s); the order stays open and its claim stays held", order.MerchantRef, hwPaymentErrorClass(err)))
+			return HwWebhookUnavailable, hwReconcileNone
+		}
+	}
+	return hwCloseRevolutOrder(order, closeStatus, now), hwReconcileClosed
+}
+
+// HwExpiryRun counts what one reconciliation round did.
+type HwExpiryRun struct {
+	// Settled is how many orders the round settled as paid.
+	Settled int
+	// Closed is how many orders the round closed after the provider confirmed.
+	Closed int
+	// Retried is how many orders stayed open because the provider could not be
+	// reached or refused the cancel; the next round tries them again.
+	Retried int
+}
+
+const hwOrderExpiryJobInterval = 10 * time.Minute
+
+// HwReconcileExpiredOrders works off the unpaid orders past the pending TTL.
+// Every one of them is reconciled with the provider first: a paid order is
+// settled as paid, everything else is cancelled at the provider before the
+// local close releases the first-purchase claim.
+func HwReconcileExpiredOrders(ctx context.Context, now time.Time) (HwExpiryRun, error) {
+	var run HwExpiryRun
+	orders, err := model.HwOpenOrdersPastTTL(now.Unix())
+	if err != nil {
+		return run, err
+	}
+	if len(orders) == 0 {
+		return run, nil
+	}
+	config, err := HwRevolutConfigFromEnv()
+	if err != nil {
+		common.SysError(common.LogText("order reconciliation round cannot reach the provider (class %s); %d orders stay open", hwPaymentErrorClass(err), len(orders)))
+		run.Retried = len(orders)
+		return run, err
+	}
+	for index := range orders {
+		order := orders[index]
+		outcome, action := hwReconcileOrderBeforeClose(ctx, config, &order, model.HwOrderStatusExpired, now)
+		switch {
+		case outcome == HwWebhookAccepted && action == hwReconcileSettled:
+			run.Settled++
+		case outcome == HwWebhookAccepted && action == hwReconcileClosed:
+			run.Closed++
+		default:
+			run.Retried++
+		}
+	}
+	return run, nil
+}
+
+var hwOrderExpiryOnce sync.Once
+
+// StartHwOrderExpiryJob starts the reconciliation round that expires unpaid
+// orders and works the affiliate retry queue. It runs once per process and only
+// on the master node; every step is idempotent, so several masters are
+// harmless.
+func StartHwOrderExpiryJob() {
+	hwOrderExpiryOnce.Do(func() {
+		if !common.IsMasterNode {
+			return
+		}
+		go func() {
+			common.SysLog(common.LogText("top-up order reconciliation job started: interval=%s", hwOrderExpiryJobInterval))
+			runHwOrderReconcileOnceSafely()
+			ticker := time.NewTicker(hwOrderExpiryJobInterval)
+			defer ticker.Stop()
+			for range ticker.C {
+				runHwOrderReconcileOnceSafely()
+			}
+		}()
+	})
+}
+
+func runHwOrderReconcileOnceSafely() {
+	defer func() {
+		if r := recover(); r != nil {
+			common.SysError(common.LogText("top-up order reconciliation job panicked: %v", r))
+		}
+	}()
+	run, err := HwReconcileExpiredOrders(context.Background(), time.Now())
+	if err != nil {
+		common.SysError(common.LogText("top-up order reconciliation round failed (class %s)", hwPaymentErrorClass(err)))
+	}
+	if run.Settled+run.Closed+run.Retried > 0 {
+		common.SysLog(common.LogText("top-up order reconciliation round: %d settled, %d closed, %d left for the next round", run.Settled, run.Closed, run.Retried))
+	}
+	granted, dropped, err := model.HwRetryPendingAffiliateRewards(common.GetTimestamp())
+	if err != nil {
+		common.SysError(common.LogText("affiliate reward retry round failed (class %s)", hwPaymentErrorClass(err)))
+	}
+	if granted > 0 || dropped > 0 {
+		common.SysLog(common.LogText("affiliate reward retry round: %d granted, %d dropped after too many attempts", granted, dropped))
+	}
+}
+
+// Errors of the admin refund route, answered with their own status by the
+// controller.
+var (
+	ErrHwOrderNotFound      = errors.New("top-up order not found")
+	ErrHwOrderNotRefundable = errors.New("top-up order is not in a refundable state")
+)
+
+// HwAdminRefundResult reports what the admin refund route did to an order.
+type HwAdminRefundResult struct {
+	// Found is false when no order carries the reference.
+	Found bool
+	// Refunded is true when this call moved the order to refunded.
+	Refunded bool
+	// GrantedQuota is what the purchase originally issued.
+	GrantedQuota int
+	// ReturnedQuota is what was subtracted from the balance.
+	ReturnedQuota int
+	// SpentQuota is what the customer had already spent; it stays recorded as
+	// owed and is not recovered from other packages.
+	SpentQuota int
+	// Note is the admin note stored on the order.
+	Note string
+}
+
+// HwAdminRefundOrder takes back the credit of one paid order: the purchase
+// package is retired with its remaining value, the balance is lowered by that
+// remainder (never below zero), the affiliate reward of the purchase is revoked,
+// and the order moves to refunded with an admin note naming what stayed owed.
+// Calling it again for the same order changes nothing.
+func HwAdminRefundOrder(merchantRef string, now time.Time) (HwAdminRefundResult, error) {
+	merchantRef = strings.TrimSpace(merchantRef)
+	if merchantRef == "" {
+		return HwAdminRefundResult{}, model.ErrHwInvalidOrder
+	}
+	var result HwAdminRefundResult
+	order, found, err := model.HwFindOrderForWebhook(merchantRef, "")
+	if err != nil {
+		return result, err
+	}
+	if !found {
+		return result, ErrHwOrderNotFound
+	}
+	result.Found = true
+	alreadyRefunded := order.Status == model.HwOrderStatusRefunded
+	if !alreadyRefunded && order.Status != model.HwOrderStatusPaid {
+		return result, ErrHwOrderNotRefundable
+	}
+	revocation, err := model.HwRevokeOrderCredit(merchantRef, now.Unix())
+	if err != nil {
+		return result, err
+	}
+	result.GrantedQuota = revocation.GrantedQuota
+	result.ReturnedQuota = revocation.RemainingQuota
+	result.SpentQuota = max(revocation.GrantedQuota-revocation.RemainingQuota, 0)
+	if alreadyRefunded {
+		result.Note = order.AdminNote
+		return result, nil
+	}
+	if err := model.HwRevokeAffiliateReward(merchantRef, now.Unix()); err != nil {
+		common.SysError(common.LogText("could not revoke the affiliate reward of order %s (class %s)", merchantRef, hwPaymentErrorClass(err)))
+		return result, err
+	}
+	result.Note = fmt.Sprintf("refund: granted %d quota, returned %d quota, %d quota already spent stays owed",
+		result.GrantedQuota, result.ReturnedQuota, result.SpentQuota)
+	changed, err := model.HwMarkOrderRefunded(merchantRef, result.Note, now.Unix())
+	if err != nil {
+		return result, err
+	}
+	result.Refunded = changed
+	common.SysLog(common.LogText("admin refund took back order %s: %d of %d quota returned", merchantRef, result.ReturnedQuota, result.GrantedQuota))
+	return result, nil
 }
 
 // hwPaymentErrorClass reduces an error to a log-safe class. Log lines carry the

@@ -384,6 +384,7 @@ func migrateDB() error {
 		&HwFirstPurchaseClaim{},
 		&HwFreeCreditClaim{},
 		&HwOrder{},
+		&HwAffiliateRetry{},
 	)
 	if err != nil {
 		return err
