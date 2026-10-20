@@ -42,6 +42,8 @@ const tr = {
     'HisarWeb AI, yapay zekâ uygulamanız için tek bir API anahtarı sunar. Aylık abonelik yok; yalnızca yüklediğiniz bakiyeyi kullanırsınız.',
   landingCtaPrimary: 'Ücretsiz hesap aç',
   landingCtaSecondary: 'Fiyatları karşılaştır',
+  landingCatalogNote:
+    'Claude, GPT ve Gemini ailelerinden seçilmiş modeller tek katalogda; her modelin güncel fiyatı karşılaştırma sayfasında yazar.',
 
   benefitTitle: 'Neden HisarWeb AI?',
   benefitPaymentTitle: 'TL ile ödeyin',
@@ -73,18 +75,24 @@ const tr = {
   compareTeaserBody:
     'Aylık token hacminizi girin; resmî liste fiyatını, HisarWeb AI fiyatını ve tasarrufunuzu görün. Her sonuçta fiyatın kaynağı, fiyat tarihi ve kur tarihi yazar.',
   compareTeaserCta: 'Fiyat karşılaştırmasına git',
+  qualityTeaserLink: 'Kalite ölçümlerini görün',
 
   faqTitle: 'Sık sorulan sorular',
   faq1Q: 'API anahtarı nedir?',
-  faq1A: 'Uygulamanızın HisarWeb AI modellerine bağlanmasını sağlayan gizli bir metindir. Anahtarı yalnızca kendi sunucunuzda saklayın.',
+  faq1A:
+    'Uygulamanızın HisarWeb AI modellerine bağlanmasını sağlayan gizli bir metindir. Anahtarı yalnızca kendi sunucunuzda saklayın.',
   faq2Q: 'Nasıl ödeme yapabilirim?',
-  faq2A: 'Kredi kartı veya Revolut ile TL olarak ödeyebilirsiniz. Ödeme sayfası sipariş sırasında açılır.',
+  faq2A:
+    'Kredi kartı veya Revolut ile TL olarak ödeyebilirsiniz. Ödeme sayfası sipariş sırasında açılır.',
   faq3Q: 'Bakiyem ne kadar süre geçerli?',
-  faq3A: 'Satın aldığınız bakiye 30 gün, ücretsiz deneme bakiyesi 14 gün geçerlidir. Süresi dolan bakiye kullanılamaz.',
+  faq3A:
+    'Satın aldığınız bakiye 30 gün, ücretsiz deneme bakiyesi 14 gün geçerlidir. Süresi dolan bakiye kullanılamaz.',
   faq4Q: 'Abonelik var mı?',
-  faq4A: 'Hayır. Aylık ücret yok; yalnızca yüklediğiniz bakiyeyi kullanırsınız.',
+  faq4A:
+    'Hayır. Aylık ücret yok; yalnızca yüklediğiniz bakiyeyi kullanırsınız.',
   faq5Q: 'Hangi modelleri kullanabilirim?',
-  faq5A: 'Modellerin listesi ve güncel fiyatları fiyat karşılaştırma sayfasında yazar.',
+  faq5A:
+    'Modellerin listesi ve güncel fiyatları fiyat karşılaştırma sayfasında yazar.',
 
   finalCtaTitle: 'Bugün başlayın',
   finalCtaBody:
@@ -182,6 +190,8 @@ const en: Record<HwTextKey, string> = {
     'HisarWeb AI gives your application one API key. No monthly subscription; you only spend the balance you top up.',
   landingCtaPrimary: 'Create a free account',
   landingCtaSecondary: 'Compare prices',
+  landingCatalogNote:
+    'Selected models from the Claude, GPT and Gemini families in one catalog; every current price is on the comparison page.',
 
   benefitTitle: 'Why HisarWeb AI?',
   benefitPaymentTitle: 'Pay in TRY',
@@ -213,18 +223,23 @@ const en: Record<HwTextKey, string> = {
   compareTeaserBody:
     'Enter your monthly token volume and see the official list price, the HisarWeb AI price and your saving. Every result names the source, the price date and the rate date.',
   compareTeaserCta: 'Open the price comparison',
+  qualityTeaserLink: 'See the quality results',
 
   faqTitle: 'Frequently asked questions',
   faq1Q: 'What is an API key?',
-  faq1A: 'A secret string that lets your application reach the HisarWeb AI models. Keep it on your own server only.',
+  faq1A:
+    'A secret string that lets your application reach the HisarWeb AI models. Keep it on your own server only.',
   faq2Q: 'How can I pay?',
-  faq2A: 'With a card or Revolut, in Turkish lira. The payment page opens while you order.',
+  faq2A:
+    'With a card or Revolut, in Turkish lira. The payment page opens while you order.',
   faq3Q: 'How long is my balance valid?',
-  faq3A: 'Balance you buy is valid for 30 days; trial credit for 14 days. Expired balance cannot be used.',
+  faq3A:
+    'Balance you buy is valid for 30 days; trial credit for 14 days. Expired balance cannot be used.',
   faq4Q: 'Is there a subscription?',
   faq4A: 'No. There is no monthly fee; you only spend the balance you top up.',
   faq5Q: 'Which models can I use?',
-  faq5A: 'The list of models and their current prices is on the price comparison page.',
+  faq5A:
+    'The list of models and their current prices is on the price comparison page.',
 
   finalCtaTitle: 'Start today',
   finalCtaBody:
@@ -333,6 +348,7 @@ export function fillHwText(text: string, vars?: HwTextVars): string {
 /** Returns the text of the active interface language, Turkish by default. */
 export function useHwText(): (key: HwTextKey, vars?: HwTextVars) => string {
   const { i18n } = useTranslation()
-  const dictionary = hwTexts[pickHwLanguage(i18n.resolvedLanguage ?? i18n.language)]
+  const dictionary =
+    hwTexts[pickHwLanguage(i18n.resolvedLanguage ?? i18n.language)]
   return (key, vars) => fillHwText(dictionary[key], vars)
 }
