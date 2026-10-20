@@ -292,10 +292,11 @@ func HwExtendCreditPackagesAfterIncident(incidentID int, now int64) (int, error)
 			minutes = 0
 		}
 		if minutes > 0 {
-			// Every package that still held credit when the outage started is
-			// extended, whatever its source except the free trial credit.
+			// Every package that was running when the outage started is extended,
+			// whatever its source except the free trial credit. A package bought
+			// during the outage did not lose time at the start of it.
 			var packages []HwCreditPackage
-			if err := tx.Where("retired_at = 0 AND created_at <= ?", incident.EndedAt).
+			if err := tx.Where("retired_at = 0 AND created_at <= ?", incident.StartedAt).
 				Find(&packages).Error; err != nil {
 				return err
 			}
