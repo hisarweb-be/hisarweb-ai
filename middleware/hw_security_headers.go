@@ -3,6 +3,7 @@ package middleware
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -30,10 +31,34 @@ const (
 		"encrypted-media=(), fullscreen=(self), geolocation=(), gyroscope=(), " +
 		"magnetometer=(), microphone=(), midi=(), payment=(), usb=()"
 
-	// hwTurnstileOrigin is the only third party the dashboard loads, and only
-	// while TurnstileCheckEnabled is on: its api.js script, its challenge frame
-	// and its verification requests all live on this origin.
+	// hwTurnstileOrigin is a third party the dashboard loads while
+	// TurnstileCheckEnabled is on: its api.js script, its challenge frame and
+	// its verification requests all live on this origin.
 	hwTurnstileOrigin = "https://challenges.cloudflare.com"
+
+	// Telegram login (TelegramOAuthEnabled): telegram.org serves the widget
+	// script that draws the button, the login itself runs in a frame on
+	// oauth.telegram.org and that frame is also where the console sends its
+	// requests.
+	hwTelegramScriptOrigin = "https://telegram.org"
+	hwTelegramOAuthOrigin  = "https://oauth.telegram.org"
+
+	// Google Analytics 4: gtag.js comes from the tag manager host, the hits go
+	// to the analytics host.
+	hwGoogleTagManagerOrigin = "https://www.googletagmanager.com"
+	hwGoogleAnalyticsOrigin  = "https://www.google-analytics.com"
+
+	// hwUmamiDefaultScriptURL is where the Umami script lives when the operator
+	// sets UMAMI_WEBSITE_ID without UMAMI_SCRIPT_URL.
+	hwUmamiDefaultScriptURL = "https://analytics.umami.is/script.js"
+
+	// HwCspExtraFrameSrcEnv and HwCspExtraConnectSrcEnv widen frame-src and
+	// connect-src with a comma-separated list of https origins, for the few
+	// pages that render an administrator-configured URL in a frame (home page,
+	// about page, chat presets). Entries that are not a bare https origin are
+	// ignored instead of breaking the policy.
+	HwCspExtraFrameSrcEnv   = "HW_CSP_EXTRA_FRAME_SRC"
+	HwCspExtraConnectSrcEnv = "HW_CSP_EXTRA_CONNECT_SRC"
 
 	// HwCspPolicyEnv replaces the built policy with a full operator-supplied
 	// one, for a deployment that adds a host we cannot know here (for example a
@@ -109,36 +134,70 @@ func HwRequestIsHTTPS(c *gin.Context) bool {
 //     weaken script-src.
 //   - img-src allows data: and blob: because the console renders locally built
 //     icons and previews. Uploaded or remote images are not allowed: the
-//     operator can widen this through HW_CSP_POLICY.
-//   - connect-src is the own origin only; the dashboard talks to nothing else
-//     except Turnstile while it is enabled.
-//   - frame-src is 'none' unless Turnstile is enabled; frame-ancestors 'none'
-//     keeps the console out of any frame, which is stricter than the
+//     operator can widen this through HW_CSP_EXTRA_IMG_SRC.
+//   - connect-src is the own origin plus the hosts of whichever feature is
+//     switched on: Turnstile, Telegram login, Google Analytics and Umami.
+//   - frame-src is 'none' unless a feature needs a frame. Our Turkish console
+//     configures no home page URL, about page URL or chat preset, so the only
+//     frames it can load are the Turnstile challenge, the Telegram login and
+//     whatever the operator names in HW_CSP_EXTRA_FRAME_SRC. frame-ancestors
+//     'none' keeps the console out of any frame, which is stricter than the
 //     X-Frame-Options: DENY that older browsers read.
 func HwContentSecurityPolicy() string {
 	if override := strings.TrimSpace(os.Getenv(HwCspPolicyEnv)); override != "" {
 		return override
 	}
 
-	turnstile := common.TurnstileCheckEnabled
+	scriptSources := append([]string{"'self'"}, hwIndexScriptSources()...)
+	connectSources := []string{"'self'"}
+	frameSources := make([]string, 0, 4)
 
 	directives := map[string]string{
 		"default-src":     "'self'",
-		"script-src":      "'self'" + hwIndexScriptSources() + hwOptionalOrigin(turnstile),
 		"style-src":       "'self' 'unsafe-inline'",
 		"img-src":         "'self' data: blob:",
 		"font-src":        "'self' data:",
-		"connect-src":     "'self'" + hwOptionalOrigin(turnstile),
-		"frame-src":       "'none'",
 		"frame-ancestors": "'none'",
 		"base-uri":        "'self'",
 		"form-action":     "'self'",
 		"object-src":      "'none'",
 	}
-	if turnstile {
-		directives["frame-src"] = hwTurnstileOrigin
+
+	if common.TurnstileCheckEnabled {
+		frameSources = append(frameSources, hwTurnstileOrigin)
+		scriptSources = append(scriptSources, hwTurnstileOrigin)
+		connectSources = append(connectSources, hwTurnstileOrigin)
 		// Turnstile proves the challenge in a Web Worker it creates from a blob.
 		directives["worker-src"] = "'self' blob:"
+	}
+	if common.TelegramOAuthEnabled {
+		frameSources = append(frameSources, hwTelegramOAuthOrigin)
+		scriptSources = append(scriptSources, hwTelegramScriptOrigin)
+		connectSources = append(connectSources, hwTelegramOAuthOrigin)
+	}
+	if os.Getenv("GOOGLE_ANALYTICS_ID") != "" {
+		scriptSources = append(scriptSources, hwGoogleTagManagerOrigin)
+		connectSources = append(connectSources, hwGoogleTagManagerOrigin, hwGoogleAnalyticsOrigin)
+	}
+	if os.Getenv("UMAMI_WEBSITE_ID") != "" {
+		umamiScriptURL := os.Getenv("UMAMI_SCRIPT_URL")
+		if umamiScriptURL == "" {
+			umamiScriptURL = hwUmamiDefaultScriptURL
+		}
+		if origin := hwHttpsURLOrigin(umamiScriptURL); origin != "" {
+			scriptSources = append(scriptSources, origin)
+			connectSources = append(connectSources, origin)
+		}
+	}
+	frameSources = append(frameSources, hwCspExtraOrigins(HwCspExtraFrameSrcEnv)...)
+	connectSources = append(connectSources, hwCspExtraOrigins(HwCspExtraConnectSrcEnv)...)
+
+	directives["script-src"] = strings.Join(scriptSources, " ")
+	directives["connect-src"] = strings.Join(connectSources, " ")
+	if len(frameSources) == 0 {
+		directives["frame-src"] = "'none'"
+	} else {
+		directives["frame-src"] = strings.Join(frameSources, " ")
 	}
 
 	order := []string{
@@ -154,20 +213,34 @@ func HwContentSecurityPolicy() string {
 	return strings.Join(parts, "; ")
 }
 
-func hwIndexScriptSources() string {
+func hwIndexScriptSources() []string {
 	hwIndexScriptHashesMu.RLock()
 	defer hwIndexScriptHashesMu.RUnlock()
-	if len(hwIndexScriptHashes) == 0 {
-		return ""
-	}
-	return " " + strings.Join(hwIndexScriptHashes, " ")
+	return append([]string(nil), hwIndexScriptHashes...)
 }
 
-func hwOptionalOrigin(enabled bool) string {
-	if !enabled {
+// hwCspExtraOrigins reads the comma-separated list of an environment variable
+// and keeps the entries that are a bare https origin. An entry that does not
+// qualify is ignored: a typo must neither widen the policy nor break the page.
+func hwCspExtraOrigins(envName string) []string {
+	origins := make([]string, 0, 2)
+	for raw := range strings.SplitSeq(os.Getenv(envName), ",") {
+		origin, err := common.NormalizeOrigin(raw)
+		if err != nil || !strings.HasPrefix(origin, "https://") {
+			continue
+		}
+		origins = append(origins, origin)
+	}
+	return origins
+}
+
+// hwHttpsURLOrigin reduces a script URL to the origin a CSP source needs.
+func hwHttpsURLOrigin(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
 		return ""
 	}
-	return " " + hwTurnstileOrigin
+	return "https://" + parsed.Host
 }
 
 // HwSecurityHeaders applies the browser security headers to every response,

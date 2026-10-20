@@ -152,6 +152,130 @@ func TestHwContentSecurityPolicyFitsTheDashboard(t *testing.T) {
 	assert.Equal(t, "default-src 'none'", HwContentSecurityPolicy(), "the operator override wins")
 }
 
+// TestHwContentSecurityPolicyFollowsEnabledFeatures proves the policy only
+// names the third parties that are actually switched on: the Telegram login
+// frames and scripts, and the two analytics scripts, appear solely when their
+// feature is enabled.
+func TestHwContentSecurityPolicyFollowsEnabledFeatures(t *testing.T) {
+	previousTurnstile, previousTelegram := common.TurnstileCheckEnabled, common.TelegramOAuthEnabled
+	t.Cleanup(func() {
+		common.TurnstileCheckEnabled, common.TelegramOAuthEnabled = previousTurnstile, previousTelegram
+		HwSetIndexPageScriptHashes(nil)
+	})
+	HwSetIndexPageScriptHashes(nil)
+	common.TurnstileCheckEnabled, common.TelegramOAuthEnabled = false, false
+	t.Setenv("GOOGLE_ANALYTICS_ID", "")
+	t.Setenv("UMAMI_WEBSITE_ID", "")
+	t.Setenv("UMAMI_SCRIPT_URL", "")
+	t.Setenv(HwCspExtraFrameSrcEnv, "")
+	t.Setenv(HwCspExtraConnectSrcEnv, "")
+
+	base := HwContentSecurityPolicy()
+	assert.Equal(t, "'none'", hwCspDirective(base, "frame-src"), "no feature, no frame")
+	assert.NotContains(t, base, "telegram")
+	assert.NotContains(t, base, "google")
+
+	common.TelegramOAuthEnabled = true
+	telegram := HwContentSecurityPolicy()
+	assert.Contains(t, hwCspDirective(telegram, "script-src"), "https://telegram.org")
+	assert.Contains(t, hwCspDirective(telegram, "connect-src"), "https://oauth.telegram.org")
+	assert.Equal(t, "https://oauth.telegram.org", hwCspDirective(telegram, "frame-src"))
+	common.TelegramOAuthEnabled = false
+
+	t.Setenv("GOOGLE_ANALYTICS_ID", "G-TEST123")
+	analytics := HwContentSecurityPolicy()
+	assert.Contains(t, hwCspDirective(analytics, "script-src"), "https://www.googletagmanager.com")
+	assert.Contains(t, hwCspDirective(analytics, "connect-src"), "https://www.google-analytics.com")
+	assert.Equal(t, "'none'", hwCspDirective(analytics, "frame-src"), "analytics loads no frame")
+
+	t.Setenv("GOOGLE_ANALYTICS_ID", "")
+	t.Setenv("UMAMI_WEBSITE_ID", "test-site")
+	umami := HwContentSecurityPolicy()
+	assert.Contains(t, hwCspDirective(umami, "script-src"), "https://analytics.umami.is")
+	assert.Contains(t, hwCspDirective(umami, "connect-src"), "https://analytics.umami.is")
+}
+
+// TestHwContentSecurityPolicyExtraSourcesAreValidated proves the two operator
+// lists can only widen frame-src and connect-src with bare https origins: a
+// typo, a wildcard or a non-https scheme is dropped instead of reaching the
+// browser, and script-src never grows from them.
+func TestHwContentSecurityPolicyExtraSourcesAreValidated(t *testing.T) {
+	previousTurnstile, previousTelegram := common.TurnstileCheckEnabled, common.TelegramOAuthEnabled
+	t.Cleanup(func() {
+		common.TurnstileCheckEnabled, common.TelegramOAuthEnabled = previousTurnstile, previousTelegram
+		HwSetIndexPageScriptHashes(nil)
+	})
+	HwSetIndexPageScriptHashes(nil)
+	common.TurnstileCheckEnabled, common.TelegramOAuthEnabled = false, false
+	t.Setenv("GOOGLE_ANALYTICS_ID", "")
+	t.Setenv("UMAMI_WEBSITE_ID", "")
+	t.Setenv(HwCspExtraFrameSrcEnv, "https://frames.example, ftp://files.example, https://*.wild.example, https://frames.example:8443/path")
+	t.Setenv(HwCspExtraConnectSrcEnv, "https://api.example, javascript:alert(1)")
+
+	policy := HwContentSecurityPolicy()
+	assert.Equal(t, "https://frames.example", hwCspDirective(policy, "frame-src"))
+	assert.Equal(t, "'self' https://api.example", hwCspDirective(policy, "connect-src"))
+	assert.NotContains(t, policy, "javascript:")
+	assert.NotContains(t, policy, "*.wild")
+	assert.NotContains(t, hwCspDirective(policy, "script-src"), "frames.example", "the operator lists cannot widen script-src")
+}
+
+// TestHwContentSecurityPolicyFollowsEnabledIntegrations pins the third parties
+// the policy admits: Telegram only while its login is enabled, analytics only
+// when the operator injected the matching snippet, and the operator's own
+// origins only while they are bare https origins.
+func TestHwContentSecurityPolicyFollowsEnabledIntegrations(t *testing.T) {
+	previousTurnstile, previousTelegram := common.TurnstileCheckEnabled, common.TelegramOAuthEnabled
+	t.Cleanup(func() {
+		common.TurnstileCheckEnabled, common.TelegramOAuthEnabled = previousTurnstile, previousTelegram
+		HwSetIndexPageScriptHashes(nil)
+	})
+	common.TurnstileCheckEnabled = false
+	common.TelegramOAuthEnabled = false
+	t.Setenv(HwCspPolicyEnv, "")
+	t.Setenv("GOOGLE_ANALYTICS_ID", "")
+	t.Setenv("UMAMI_WEBSITE_ID", "")
+	t.Setenv("UMAMI_SCRIPT_URL", "")
+	t.Setenv(HwCspExtraFrameSrcEnv, "")
+	t.Setenv(HwCspExtraConnectSrcEnv, "")
+
+	plain := HwContentSecurityPolicy()
+	assert.Equal(t, "'none'", hwCspDirective(plain, "frame-src"), "nothing is framed without an enabled integration")
+	for _, host := range []string{"telegram.org", "googletagmanager.com", "google-analytics.com", "analytics.umami.is"} {
+		assert.NotContains(t, plain, host, "no third party without its integration")
+	}
+
+	common.TelegramOAuthEnabled = true
+	withTelegram := HwContentSecurityPolicy()
+	assert.Contains(t, hwCspDirective(withTelegram, "script-src"), " https://telegram.org", "the login widget is a script")
+	assert.Contains(t, hwCspDirective(withTelegram, "frame-src"), "https://oauth.telegram.org", "the login frame belongs to the oauth origin")
+	assert.Contains(t, hwCspDirective(withTelegram, "connect-src"), "https://oauth.telegram.org")
+	assert.NotContains(t, hwCspDirective(withTelegram, "frame-src"), "https://telegram.org ", "the widget script origin is not framed")
+	common.TelegramOAuthEnabled = false
+
+	t.Setenv(HwCspExtraFrameSrcEnv, " https://pay.example.com ,http://insecure.example.com,https://path.example.com/frame,junk")
+	t.Setenv(HwCspExtraConnectSrcEnv, "https://api.example.com, https://api.example.com ")
+	withExtras := HwContentSecurityPolicy()
+	assert.Equal(t, "https://pay.example.com", hwCspDirective(withExtras, "frame-src"), "only a bare https origin widens frame-src")
+	assert.Equal(t, "'self' https://api.example.com", hwCspDirective(withExtras, "connect-src"), "a listed origin is added once")
+	t.Setenv(HwCspExtraFrameSrcEnv, "")
+	t.Setenv(HwCspExtraConnectSrcEnv, "")
+
+	t.Setenv("GOOGLE_ANALYTICS_ID", "G-HWTEST")
+	withGoogle := HwContentSecurityPolicy()
+	assert.Contains(t, hwCspDirective(withGoogle, "script-src"), "https://www.googletagmanager.com")
+	assert.Contains(t, hwCspDirective(withGoogle, "connect-src"), "https://www.google-analytics.com")
+	t.Setenv("GOOGLE_ANALYTICS_ID", "")
+
+	t.Setenv("UMAMI_WEBSITE_ID", "hw-site")
+	assert.Contains(t, hwCspDirective(HwContentSecurityPolicy(), "script-src"), "https://analytics.umami.is", "the default script host follows the snippet")
+	t.Setenv("UMAMI_SCRIPT_URL", "https://stats.example.com/script.js")
+	withUmami := HwContentSecurityPolicy()
+	assert.Contains(t, hwCspDirective(withUmami, "script-src"), "https://stats.example.com")
+	assert.Contains(t, hwCspDirective(withUmami, "connect-src"), "https://stats.example.com")
+	assert.NotContains(t, withUmami, "analytics.umami.is", "the configured script host replaces the default")
+}
+
 // TestHwSecurityHeadersSurviveTheMaskedRelayPath proves that the supplier
 // masking of customer routes does not drop the security headers: they belong to
 // the answer, not to the supplier.
