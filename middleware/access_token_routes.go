@@ -42,12 +42,16 @@ func accessTokenScopeRule(scope string) accessTokenRouteRule {
 // DeclareAccessTokenPermissionRoute when they are registered.
 var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	// router/api-router.go: top level
-	"GET /api/models":                     accessTokenScopeRule("profile:read"),
-	"GET /api/status/test":                accessTokenScopeRule("log:read"),
-	"GET /api/pricing":                    accessTokenAnyRule,
-	"GET /api/perf-metrics/summary":       accessTokenAnyRule,
-	"GET /api/perf-metrics":               accessTokenAnyRule,
-	"GET /api/rankings":                   accessTokenAnyRule,
+	"GET /api/models":               accessTokenScopeRule("profile:read"),
+	"GET /api/status/test":          accessTokenScopeRule("log:read"),
+	"GET /api/pricing":              accessTokenAnyRule,
+	"GET /api/perf-metrics/summary": accessTokenAnyRule,
+	"GET /api/perf-metrics":         accessTokenAnyRule,
+	"GET /api/rankings":             accessTokenAnyRule,
+	// router/hw_pricing.go: public HisarWeb AI price comparator and quality meter
+	"GET /api/hw/pricing/compare":         accessTokenAnyRule,
+	"GET /api/hw/quality/latest":          accessTokenAnyRule,
+	"POST /api/hw/quality/run":            accessTokenSessionRule,
 	"POST /api/oauth/state":               accessTokenSessionRule,
 	"POST /api/oauth/email/bind/start":    accessTokenScopeRule("account_security:write"),
 	"POST /api/oauth/email/bind/resend":   accessTokenScopeRule("account_security:write"),
