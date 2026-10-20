@@ -99,7 +99,6 @@ func TestHwUpstreamPaymentWebhooksStayUnregistered(t *testing.T) {
 		"GET /api/user/epay/notify",
 		"POST /api/subscription/epay/notify",
 		"POST /api/subscription/epay/return",
-		"POST /api/user/topup",
 		"POST /api/user/stripe/pay",
 		"POST /api/user/creem/pay",
 		"POST /api/user/waffo/pay",
@@ -120,6 +119,7 @@ func TestHwUpstreamPaymentWebhooksStayUnregistered(t *testing.T) {
 		assert.False(t, off[route], route)
 	}
 	assert.True(t, off["POST /api/hw/revolut/webhook"], "the Revolut webhook must stay registered")
+	assert.True(t, off["POST /api/user/topup"], "redeeming a top-up code is not a payment provider and must stay reachable")
 
 	recorder := httptest.NewRecorder()
 	engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/stripe/webhook", nil))

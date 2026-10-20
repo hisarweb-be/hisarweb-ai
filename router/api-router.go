@@ -134,10 +134,13 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/aff", controller.GetAffCode)
 				selfRoute.GET("/topup/info", controller.GetTopUpInfo)
 				selfRoute.GET("/topup/self", controller.GetUserTopUps)
-				// Upstream top-up and payment routes, off unless this deployment
-				// asks for them (see common.HwUpstreamPaymentsEnabled).
+				// Redeeming a top-up code is not a payment provider: it moves quota
+				// the customer already paid for, so it stays reachable also while
+				// every upstream payment route is off.
+				selfRoute.POST("/topup", middleware.CriticalRateLimit(), controller.TopUp)
+				// Upstream payment routes, off unless this deployment asks for them
+				// (see common.HwUpstreamPaymentsEnabled).
 				if common.HwUpstreamPaymentsEnabled() {
-					selfRoute.POST("/topup", middleware.CriticalRateLimit(), controller.TopUp)
 					selfRoute.POST("/pay", middleware.CriticalRateLimit(), controller.RequestEpay)
 					selfRoute.POST("/amount", controller.RequestAmount)
 					selfRoute.POST("/stripe/pay", middleware.CriticalRateLimit(), controller.RequestStripePay)
