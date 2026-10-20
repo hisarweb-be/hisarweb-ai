@@ -101,12 +101,18 @@ func TestHwFreeAccountWithPaidTokenNeverReachesEmergencySupplier(t *testing.T) {
 // (here: the OpenRouter channel type, no tag) must not serve a free group. The
 // group has no tagged supplier for the model, so before the fix the request was
 // relayed to the emergency channel untouched.
+//
+// The request uses the Haiku class on purpose: the free-group model gate refuses
+// the Sonnet class before any channel is looked at, so the Sonnet class never
+// reaches the supplier route this test protects. The Haiku class is the model
+// class a free account really may call, and it must still never land on the
+// untagged emergency channel.
 func TestHwUntaggedEmergencyChannelNeverServesFreeGroup(t *testing.T) {
 	env := hwNewEnv(t, "free", 1_000_000)
 	openrouter := env.fake("openrouter")
-	env.addUntaggedChannel("tagless-emergency", "free", constant.ChannelTypeOpenRouter, 0, openrouter)
+	env.addUntaggedChannel("tagless-emergency", "free", constant.ChannelTypeOpenRouter, "claude-haiku-4-5", 0, openrouter)
 
-	recorder := env.post("/v1/chat/completions", hwChatRequest(hwTestModel, false))
+	recorder := env.post("/v1/chat/completions", hwChatRequest("claude-haiku-4-5", false))
 
 	require.Equal(t, http.StatusServiceUnavailable, recorder.Code, recorder.Body.String())
 	assert.Contains(t, recorder.Body.String(), "service_busy")
