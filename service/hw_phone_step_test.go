@@ -1,11 +1,14 @@
 package service
 
 import (
+	"bytes"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +31,7 @@ func hwPhoneStepTestSetup(t *testing.T) {
 		"hw_credit_packages", "hw_user_signals", "hw_first_purchase_claims",
 		"hw_free_credit_claims", "hw_account_flags", "hw_signup_ips", "users",
 	} {
-		require.NoError(t, model.DB.Exec("DELETE FROM " + table).Error)
+		require.NoError(t, model.DB.Exec("DELETE FROM "+table).Error)
 	}
 	t.Cleanup(func() {
 		for _, table := range []string{
@@ -235,4 +238,53 @@ func TestHwNormalizeDeviceToken(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, token)
 	})
+}
+
+// TestHwAbusePathsKeepSignalValuesOutOfLogs runs the abuse paths that log and
+// checks the whole log buffer: a device token, an address, a Telegram identity,
+// an email address and every keyed hash stay out of it, while the paths still
+// produce their count and user-id lines.
+func TestHwAbusePathsKeepSignalValuesOutOfLogs(t *testing.T) {
+	hwPhoneStepTestSetup(t)
+	var buffer bytes.Buffer
+	originalOut, originalErr := gin.DefaultWriter, gin.DefaultErrorWriter
+	gin.DefaultWriter, gin.DefaultErrorWriter = &buffer, &buffer
+	t.Cleanup(func() {
+		gin.DefaultWriter, gin.DefaultErrorWriter = originalOut, originalErr
+	})
+
+	const (
+		deviceToken = "abcdef0123456789abcdef0123456789"
+		clientIp    = "203.0.113.77"
+		telegramID  = "telegram-identity-778899"
+		firstEmail  = "hmsignal@example.com"
+		secondEmail = "hmsignal2@example.com"
+	)
+	now := common.GetTimestamp()
+
+	first := hwPhoneStepTestUser(t, firstEmail)
+	require.NoError(t, model.UpsertHwUserSignals(first.Id, model.HwUserSignals{DeviceToken: deviceToken, Ip: clientIp}))
+	granted, reason, err := HwCompleteTelegramPhoneStep(first.Id, telegramID)
+	require.NoError(t, err)
+	require.True(t, granted, "first account gets the credit, reason %q", reason)
+
+	second := hwPhoneStepTestUser(t, secondEmail)
+	require.NoError(t, model.UpsertHwUserSignals(second.Id, model.HwUserSignals{DeviceToken: deviceToken, Ip: clientIp}))
+	granted, _, err = HwCompleteTelegramPhoneStep(second.Id, telegramID)
+	require.NoError(t, err)
+	assert.False(t, granted, "the second account on the same Telegram identity is refused")
+
+	_, err = model.HwDailyAbuseSweep(now)
+	require.NoError(t, err)
+	for range model.HwSignupIpDailyLimit + 1 {
+		_, err = model.HwReserveSignupSlot(clientIp, now, model.HwSignupIpDailyLimit)
+		require.NoError(t, err)
+	}
+
+	logs := buffer.String()
+	require.NotEmpty(t, logs, "the abuse paths do write their outcome")
+	for _, raw := range []string{deviceToken, clientIp, telegramID, firstEmail, secondEmail} {
+		assert.NotContains(t, logs, raw)
+	}
+	assert.NotRegexp(t, regexp.MustCompile(`[0-9a-f]{64}`), logs, "no keyed hash reaches a log line")
 }
