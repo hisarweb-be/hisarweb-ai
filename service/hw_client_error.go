@@ -14,9 +14,10 @@ import (
 // routing problems, so masking can keep our wording and replace everything the
 // upstream produced.
 const (
-	HwErrorCodeServiceBusy       types.ErrorCode = "service_busy"
-	HwErrorCodeStreamInterrupted types.ErrorCode = "stream_interrupted"
-	HwErrorCodeAccountFrozen     types.ErrorCode = "account_frozen"
+	HwErrorCodeServiceBusy        types.ErrorCode = "service_busy"
+	HwErrorCodeStreamInterrupted  types.ErrorCode = "stream_interrupted"
+	HwErrorCodeAccountFrozen      types.ErrorCode = "account_frozen"
+	HwErrorCodeWindowLimitReached types.ErrorCode = "window_limit_reached"
 )
 
 // HwIsOwnErrorCode reports whether code belongs to an error this fork generated
@@ -28,6 +29,7 @@ const (
 func HwIsOwnErrorCode(code string) bool {
 	switch code {
 	case string(HwErrorCodeServiceBusy), string(HwErrorCodeStreamInterrupted), string(HwErrorCodeAccountFrozen),
+		string(HwErrorCodeWindowLimitReached),
 		string(types.ErrorCodeInsufficientUserQuota), string(types.ErrorCodePreConsumeTokenQuotaFailed),
 		string(types.ErrorCodeInvalidRequest), string(types.ErrorCodeAccessDenied),
 		string(types.ErrorCodeSensitiveWordsDetected):

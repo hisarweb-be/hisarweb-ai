@@ -32,6 +32,7 @@ import {
   ServerCog,
   Settings,
   ShieldCheck,
+  ShoppingCart,
   Ticket,
   User,
   Users,
@@ -40,6 +41,7 @@ import {
 import { useTranslation } from 'react-i18next'
 
 import type { SidebarData } from '@/components/layout/types'
+import { useHwText } from '@/features/hw/texts'
 import { ROLE } from '@/lib/roles'
 
 /**
@@ -50,6 +52,7 @@ import { ROLE } from '@/lib/roles'
  */
 export function useSidebarData(): SidebarData {
   const { t } = useTranslation()
+  const hw = useHwText()
 
   return {
     navGroups: [
@@ -111,6 +114,11 @@ export function useSidebarData(): SidebarData {
         id: 'personal',
         title: t('Personal'),
         items: [
+          {
+            title: hw('navBuy'),
+            url: '/satin-al',
+            icon: ShoppingCart,
+          },
           {
             title: t('Wallet'),
             url: '/wallet',

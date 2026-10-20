@@ -50,12 +50,15 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/rankings":             accessTokenAnyRule,
 	// router/hw-revolut.go: card top-up orders and admin refunds (session only)
 	"POST /api/user/hw/orders":         accessTokenSessionRule,
+	"GET /api/user/hw/packages":        accessTokenSessionRule,
 	"POST /api/hw/admin/orders/refund": accessTokenSessionRule,
 	"POST /api/hw/admin/unfreeze":      accessTokenSessionRule,
 	// router/hw_pricing.go: public HisarWeb AI price comparator and quality meter
-	"GET /api/hw/pricing/compare":         accessTokenAnyRule,
-	"GET /api/hw/quality/latest":          accessTokenAnyRule,
-	"POST /api/hw/quality/run":            accessTokenSessionRule,
+	"GET /api/hw/pricing/compare": accessTokenAnyRule,
+	"GET /api/hw/quality/latest":  accessTokenAnyRule,
+	"POST /api/hw/quality/run":    accessTokenSessionRule,
+	// router/hw_pricing.go: the bureau reserve of the current window (read-only admin view)
+	"GET /api/hw/admin/reserve":           accessTokenSessionRule,
 	"POST /api/oauth/state":               accessTokenSessionRule,
 	"POST /api/oauth/email/bind/start":    accessTokenScopeRule("account_security:write"),
 	"POST /api/oauth/email/bind/resend":   accessTokenScopeRule("account_security:write"),

@@ -35,7 +35,25 @@ import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
-export function LanguageSwitcher() {
+/**
+ * The two languages the product is offered in. `tr` is the default; `en` is the
+ * fallback for keys that are not translated yet.
+ */
+const TOGGLE_LANGUAGE_OPTIONS = [
+  { code: 'tr', short: 'TR', label: 'Türkçe' },
+  { code: 'en', short: 'EN', label: 'English' },
+] as const
+
+export interface LanguageSwitcherProps {
+  /**
+   * - `menu` (default): icon button opening the full language list.
+   * - `toggle`: always-visible TR/EN segmented control, used in the headers so
+   *   the language choice is one click away on every page.
+   */
+  variant?: 'menu' | 'toggle'
+}
+
+export function LanguageSwitcher(props: LanguageSwitcherProps = {}) {
   const { i18n, t } = useTranslation()
   const user = useAuthStore((s) => s.auth.user)
   const currentLanguage = normalizeInterfaceLanguage(i18n.language)
@@ -52,6 +70,35 @@ export function LanguageSwitcher() {
     },
     [i18n, user]
   )
+
+  if (props.variant === 'toggle') {
+    return (
+      <div
+        role='group'
+        aria-label={t('Change language')}
+        className='border-border/60 inline-flex items-center gap-0.5 rounded-lg border p-0.5'
+      >
+        {TOGGLE_LANGUAGE_OPTIONS.map((lang) => {
+          const isActive = currentLanguage === lang.code
+          return (
+            <Button
+              key={lang.code}
+              type='button'
+              size='sm'
+              variant={isActive ? 'secondary' : 'ghost'}
+              aria-pressed={isActive}
+              title={lang.label}
+              onClick={() => handleChangeLanguage(lang.code)}
+              className='h-7 rounded-md px-2 text-xs font-semibold'
+            >
+              {lang.short}
+              <span className='sr-only'> — {lang.label}</span>
+            </Button>
+          )
+        })}
+      </div>
+    )
+  }
 
   return (
     <DropdownMenu modal={false}>

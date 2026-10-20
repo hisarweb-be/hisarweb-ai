@@ -29,7 +29,7 @@ import userEvent from '@testing-library/user-event'
 import { Toaster, toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { api } from '@/lib/api'
+import { api, type ApiRequestConfig } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 
 import type {
@@ -130,7 +130,7 @@ beforeEach(() => {
   list = { items: [], legacy: null }
   listFailure = null
   catalogGate = Promise.resolve()
-  vi.spyOn(api, 'get').mockImplementation(async (url, config) => {
+  vi.spyOn(api, 'get').mockImplementation(async (url, config?: ApiRequestConfig) => {
     if (url === '/api/audit/self') {
       return { data: { success: true, data: { items: [], total: 0 } } }
     }
