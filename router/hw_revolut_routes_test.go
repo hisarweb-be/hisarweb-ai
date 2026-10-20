@@ -83,3 +83,51 @@ func TestHwWebhookRouteKeepsAcceptingBursts(t *testing.T) {
 	assert.Equal(t, 100, answers[http.StatusOK], "every correctly signed event is answered 200, also in a burst: %v", answers)
 	assert.NotContains(t, answers, http.StatusTooManyRequests)
 }
+
+// TestHwUpstreamPaymentWebhooksStayUnregistered proves the payment webhooks of
+// the upstream project exist only when the deployment switches them on, and
+// that the Revolut webhook HisarWeb AI does use is untouched by that switch.
+// Registration alone is inspected; no handler behind these routes runs.
+func TestHwUpstreamPaymentWebhooksStayUnregistered(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	upstreamRoutes := []string{
+		"POST /api/stripe/webhook",
+		"POST /api/creem/webhook",
+		"POST /api/waffo/webhook",
+		"POST /api/waffo-pancake/webhook/:env",
+		"POST /api/user/epay/notify",
+		"GET /api/user/epay/notify",
+		"POST /api/subscription/epay/notify",
+		"POST /api/subscription/epay/return",
+		"POST /api/user/topup",
+		"POST /api/user/stripe/pay",
+		"POST /api/user/creem/pay",
+		"POST /api/user/waffo/pay",
+	}
+	register := func(enabled string) (*gin.Engine, map[string]bool) {
+		t.Setenv(common.HwUpstreamPaymentsEnv, enabled)
+		engine := gin.New()
+		SetApiRouter(engine)
+		registered := make(map[string]bool, len(engine.Routes()))
+		for _, route := range engine.Routes() {
+			registered[route.Method+" "+route.Path] = true
+		}
+		return engine, registered
+	}
+
+	engine, off := register("false")
+	for _, route := range upstreamRoutes {
+		assert.False(t, off[route], route)
+	}
+	assert.True(t, off["POST /api/hw/revolut/webhook"], "the Revolut webhook must stay registered")
+
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/stripe/webhook", nil))
+	assert.Equal(t, http.StatusNotFound, recorder.Code, "a switched-off webhook must answer like unknown paths")
+
+	_, on := register("true")
+	for _, route := range upstreamRoutes {
+		assert.True(t, on[route], route)
+	}
+	assert.True(t, on["POST /api/hw/revolut/webhook"])
+}
