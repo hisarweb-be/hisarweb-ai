@@ -3,6 +3,7 @@ package common
 import (
 	"os"
 	"slices"
+	"strings"
 )
 
 // hwSignalSaltInsufficient reports whether this process lacks a usable
@@ -15,5 +16,5 @@ func hwSignalSaltInsufficient() bool {
 	if slices.Contains(hwSkipPhoneStepAppEnvs, hwAppEnv()) {
 		return false
 	}
-	return len(os.Getenv(hwSignalSaltEnv)) < hwSignalSaltMinBytes
+	return len(strings.TrimSpace(os.Getenv(hwSignalSaltEnv))) < hwSignalSaltMinBytes
 }

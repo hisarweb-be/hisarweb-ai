@@ -110,6 +110,13 @@ func HwCompleteTelegramPhoneStep(userID int, telegramID string) (granted bool, r
 // would invite a second number nobody needs.
 func hwPromptForPhoneStep(userID int, telegramID string) {
 	go func() {
+		// A panic here must not take the process down: the login would otherwise
+		// be a way to crash the service.
+		defer func() {
+			if r := recover(); r != nil {
+				common.SysLog("hw phone step prompt recovered from a panic")
+			}
+		}()
 		hasPhone, err := model.HwUserHasPhoneSignal(userID)
 		if err != nil || hasPhone {
 			return

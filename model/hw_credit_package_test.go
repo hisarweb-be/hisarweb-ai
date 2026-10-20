@@ -497,3 +497,52 @@ func TestHwPurchaseByFrozenAccountForfeitsTheFreeCredit(t *testing.T) {
 		assert.Zero(t, hwTestPackageByOrderRef(t, freeRef).RetiredAt)
 	})
 }
+
+// The same hole in the other order: an account that paid first and is frozen
+// later must lose its remaining free credit, while an account that never paid
+// keeps it so a thaw loses nothing.
+func TestHwFreezeAfterPurchaseForfeitsTheFreeCredit(t *testing.T) {
+	hwCreditTestSetup(t)
+	require.NoError(t, DB.AutoMigrate(&HwAccountFlag{}))
+	require.NoError(t, DB.Exec("DELETE FROM hw_account_flags").Error)
+	t.Cleanup(func() {
+		DB.Exec("DELETE FROM hw_account_flags")
+	})
+	now := int64(1_700_000_000)
+
+	t.Run("a payer frozen later keeps only what it paid for", func(t *testing.T) {
+		user := createHwTestUser(t, 0)
+		freeRef := fmt.Sprintf("free:%d", user.Id)
+		granted, err := GrantCreditPackage(nil, user.Id, 100, HwSourceFree, freeRef, now)
+		require.NoError(t, err)
+		require.True(t, granted)
+		granted, err = GrantCreditPackage(nil, user.Id, 50, HwSourcePurchase, "order-first", now+10)
+		require.NoError(t, err)
+		require.True(t, granted)
+		require.Equal(t, 150, getUserQuotaFromDB(t, user.Id))
+
+		frozen, err := FreezeHwAccounts([]int{user.Id}, HwFreezeReasonSharedPhone, now+20)
+		require.NoError(t, err)
+		require.Equal(t, 1, frozen)
+
+		assert.Equal(t, 50, getUserQuotaFromDB(t, user.Id), "only the paid credit may be spent after the freeze")
+		freePackage := hwTestPackageByOrderRef(t, freeRef)
+		assert.Equal(t, now+20, freePackage.RetiredAt)
+		assert.Equal(t, 100, freePackage.RetiredRemaining)
+	})
+
+	t.Run("an account that never paid keeps its trial credit", func(t *testing.T) {
+		user := createHwTestUser(t, 0)
+		freeRef := fmt.Sprintf("free:%d", user.Id)
+		granted, err := GrantCreditPackage(nil, user.Id, 100, HwSourceFree, freeRef, now)
+		require.NoError(t, err)
+		require.True(t, granted)
+
+		frozen, err := FreezeHwAccounts([]int{user.Id}, HwFreezeReasonSharedPhone, now+20)
+		require.NoError(t, err)
+		require.Equal(t, 1, frozen)
+
+		assert.Equal(t, 100, getUserQuotaFromDB(t, user.Id))
+		assert.Equal(t, int64(0), hwTestPackageByOrderRef(t, freeRef).RetiredAt)
+	})
+}

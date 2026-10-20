@@ -75,6 +75,9 @@ func FreezeHwAccounts(userIDs []int, reason string, now int64) (int, error) {
 		if result.RowsAffected == 1 {
 			frozen++
 			hwInvalidateFrozenCache(userID)
+			if err := hwForfeitFreeCreditOfFrozenPayer(userID, now); err != nil {
+				return frozen, err
+			}
 			continue
 		}
 		// The row exists. A frozen account keeps its first finding. A thawed
@@ -105,6 +108,9 @@ func FreezeHwAccounts(userIDs []int, reason string, now int64) (int, error) {
 		if result.RowsAffected == 1 {
 			frozen++
 			hwInvalidateFrozenCache(userID)
+			if err := hwForfeitFreeCreditOfFrozenPayer(userID, now); err != nil {
+				return frozen, err
+			}
 		}
 	}
 	return frozen, nil
@@ -164,6 +170,36 @@ var (
 	hwFrozenCacheMu sync.Mutex
 	hwFrozenCache   = make(map[int]hwFrozenCacheEntry)
 )
+
+// hwForfeitFreeCreditOfFrozenPayer closes the other order of the same hole as
+// the forfeit at payment time: an account that paid first and was frozen later
+// must not keep spending its trial credit either, because the free-group guard
+// no longer applies to it. An account that never paid is left alone, so a
+// wrongly frozen trial user loses nothing when the administrator thaws it. A
+// payment racing with the freeze is covered by whichever commits second: the
+// payment sees the frozen flag, or this check sees the purchase.
+func hwForfeitFreeCreditOfFrozenPayer(userID int, now int64) error {
+	var forfeited int
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var paid int64
+		if err := tx.Model(&HwCreditPackage{}).
+			Where("user_id = ? AND source = ?", userID, HwSourcePurchase).
+			Count(&paid).Error; err != nil {
+			return err
+		}
+		if paid == 0 {
+			return nil
+		}
+		var err error
+		forfeited, err = hwForfeitFreePackagesForFrozenAccount(tx, userID, now)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	HwSyncCachesAfterFreeForfeit(userID, forfeited)
+	return nil
+}
 
 func hwInvalidateFrozenCache(userID int) {
 	hwFrozenCacheMu.Lock()
