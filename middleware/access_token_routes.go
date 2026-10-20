@@ -48,6 +48,9 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/perf-metrics/summary": accessTokenAnyRule,
 	"GET /api/perf-metrics":         accessTokenAnyRule,
 	"GET /api/rankings":             accessTokenAnyRule,
+	// router/hw-revolut.go: card top-up orders and admin refunds (session only)
+	"POST /api/user/hw/orders":         accessTokenSessionRule,
+	"POST /api/hw/admin/orders/refund": accessTokenSessionRule,
 	// router/hw_pricing.go: public HisarWeb AI price comparator and quality meter
 	"GET /api/hw/pricing/compare":         accessTokenAnyRule,
 	"GET /api/hw/quality/latest":          accessTokenAnyRule,
