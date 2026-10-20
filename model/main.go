@@ -19,10 +19,13 @@ import (
 	"gorm.io/gorm"
 )
 
-var commonGroupCol string
-var commonKeyCol string
-var commonTrueVal string
-var commonFalseVal string
+// The column-name variables start on their MySQL/SQLite spelling so a database
+// handle that skipped InitDB (tests) never builds SQL with an empty column
+// name; initCol switches them to the PostgreSQL spelling when it runs.
+var commonGroupCol = "`group`"
+var commonKeyCol = "`key`"
+var commonTrueVal = "1"
+var commonFalseVal = "0"
 
 var logKeyCol string
 var logGroupCol string

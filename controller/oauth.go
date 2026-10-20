@@ -325,6 +325,10 @@ func handleOAuthLogin(c *gin.Context, provider oauth.Provider, oauthUser *oauth.
 			common.ApiErrorT(c, "New user registration has been disabled by administrator")
 		case *OAuthEmailAlreadyTakenError:
 			common.ApiErrorT(c, "Email address is already in use")
+		case *OAuthSignupLimitReachedError:
+			common.ApiErrorT(c, "Too many accounts registered from this network today, please try again tomorrow")
+		case *OAuthDisposableEmailError:
+			common.ApiErrorT(c, "This email provider is not allowed. Please use a permanent email address.")
 		case *OAuthLegacyBindingNotConfirmedError:
 			common.ApiErrorT(c, "This {{provider}} account cannot be linked to an existing account automatically, please sign in or register another way and then link {{provider}} in account settings", providerParams(provider.GetName()))
 		default:
@@ -341,6 +345,15 @@ func handleOAuthLogin(c *gin.Context, provider oauth.Provider, oauthUser *oauth.
 
 	// 9. Setup login
 	setupLogin(user, migration, c)
+	// A Telegram login proves a phone-bound upstream account: record the phone
+	// signal and try the one-time free trial credit behind it. The outcome is
+	// logged inside the service with the user ID only; a failure never blocks
+	// the login that already succeeded.
+	if provider.ProviderUserIDColumn() == "telegram_id" {
+		if _, _, err := service.HwCompleteTelegramPhoneStep(user.Id, oauthUser.ProviderUserID); err != nil {
+			common.SysError(common.LogText("hw: telegram phone step failed for user %d: %v", user.Id, err))
+		}
+	}
 }
 
 // handleOAuthBind handles binding OAuth account to existing user
@@ -387,6 +400,13 @@ func handleOAuthBind(c *gin.Context, providerName string, provider oauth.Provide
 	if err != nil {
 		writeSecurityOperationError(c, err)
 		return true, true
+	}
+	// Binding Telegram is the phone step of an existing account: record the
+	// signal and try the free trial credit, exactly like the Telegram login.
+	if providerName == "telegram" {
+		if _, _, err := service.HwCompleteTelegramPhoneStep(identity.UserID, oauthUser.ProviderUserID); err != nil {
+			common.SysError(common.LogText("hw: telegram phone step failed for user %d: %v", identity.UserID, err))
+		}
 	}
 	notificationFailed := service.NotifyAccountSecurityChange(service.AccountMailLanguage(c, user.Id), user.Email, i18n.MsgSecurityEventLoginLinked, map[string]any{"Provider": provider.GetName()}) != nil
 	common.ApiSuccessT(c, "Binding successful", gin.H{"action": "bind", "notification_warning": notificationFailed})
@@ -480,6 +500,15 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 		return nil, nil, &OAuthRegistrationDisabledError{}
 	}
 
+	// An OAuth signup is a new account too and shares the form's per-IP daily
+	// limit, so one address cannot bypass the cap through a provider. Telegram
+	// has no signup path here (it only logs into already-bound accounts).
+	if allowed, err := model.HwReserveSignupSlot(c.ClientIP(), common.GetTimestamp(), model.HwSignupIpDailyLimit); err != nil {
+		common.SysError(common.LogText("hw: per-IP signup limit unavailable, oauth registration continues: %v", err))
+	} else if !allowed {
+		return nil, nil, &OAuthSignupLimitReachedError{}
+	}
+
 	// Set up new user
 	user.Username = provider.GetProviderPrefix() + strconv.Itoa(model.GetMaxUserId()+1)
 
@@ -501,6 +530,9 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 	}
 	if oauthUser.Email != "" {
 		user.Email = model.NormalizeEmail(oauthUser.Email)
+		if err := service.HwRejectDisposableEmail(user.Email); err != nil {
+			return nil, nil, &OAuthDisposableEmailError{}
+		}
 		if err := model.EnsureEmailAvailable(user.Email, 0); err != nil {
 			if errors.Is(err, model.ErrEmailAlreadyTaken) {
 				return nil, nil, &OAuthEmailAlreadyTakenError{}
@@ -575,6 +607,12 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 		user.FinalizeOAuthUserCreation(inviterId)
 	}
 
+	// Record the signup address as an abuse signal (keyed hash) so the daily
+	// sweep sees OAuth signups in its per-address wave check too. This flow has
+	// no device header: the provider redirect carries no custom header.
+	if err := model.UpsertHwUserSignals(user.Id, model.HwUserSignals{Ip: c.ClientIP()}); err != nil {
+		common.SysError(common.LogText("hw: failed to store signup signal for user %d: %v", user.Id, err))
+	}
 	return user, nil, nil
 }
 
@@ -605,6 +643,22 @@ type OAuthEmailAlreadyTakenError struct{}
 
 func (e *OAuthEmailAlreadyTakenError) Error() string {
 	return "email is already in use"
+}
+
+// OAuthSignupLimitReachedError reports an OAuth signup that hit the per-IP
+// daily new-account limit it shares with the signup form.
+type OAuthSignupLimitReachedError struct{}
+
+func (e *OAuthSignupLimitReachedError) Error() string {
+	return "signup limit reached"
+}
+
+// OAuthDisposableEmailError reports a provider email on a blocked disposable
+// domain: the account path is refused for the same reason as the form.
+type OAuthDisposableEmailError struct{}
+
+func (e *OAuthDisposableEmailError) Error() string {
+	return "email provider is not allowed"
 }
 
 // OAuthLegacyBindingNotConfirmedError reports a legacy GitHub binding match that
