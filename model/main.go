@@ -383,6 +383,8 @@ func migrateDB() error {
 		&HwUserSignal{},
 		&HwFirstPurchaseClaim{},
 		&HwFreeCreditClaim{},
+		&HwOrder{},
+		&HwAffiliateRetry{},
 		&HwPriceSnapshot{},
 		&HwQualityRun{},
 		&HwQualityScore{},
