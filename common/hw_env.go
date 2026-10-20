@@ -35,10 +35,10 @@ var (
 	// environment. The message names only the variables, never their values.
 	ErrHwPhoneStepSkipOutsideDevelopment = errors.New("HW_SKIP_PHONE_STEP is only allowed when APP_ENV is development, dev, test or local: the phone step guards the free trial credit")
 
-	// ErrHwSignalSaltRequiredInProduction is returned when APP_ENV names
-	// production but HW_SIGNAL_SALT is missing or shorter than 32 bytes. There
+	// ErrHwSignalSaltRequired is returned when APP_ENV names no development
+	// environment and HW_SIGNAL_SALT is missing or shorter than 32 bytes. There
 	// is deliberately no fallback secret, and the message names no value.
-	ErrHwSignalSaltRequiredInProduction = errors.New("HW_SIGNAL_SALT must be set to at least 32 bytes when APP_ENV is production or prod")
+	ErrHwSignalSaltRequired = errors.New("HW_SIGNAL_SALT must be set to at least 32 bytes unless APP_ENV names a development environment (development, dev, test, local)")
 )
 
 // hwAppEnv returns APP_ENV with surrounding whitespace removed and lowercased,
@@ -82,8 +82,8 @@ func HwValidateEnvironment() error {
 	if hwPhoneStepFlagSet() && !slices.Contains(hwSkipPhoneStepAppEnvs, hwAppEnv()) {
 		return ErrHwPhoneStepSkipOutsideDevelopment
 	}
-	if HwAppEnvIsProduction() && len(os.Getenv(hwSignalSaltEnv)) < hwSignalSaltMinBytes {
-		return ErrHwSignalSaltRequiredInProduction
+	if hwSignalSaltInsufficient() {
+		return ErrHwSignalSaltRequired
 	}
 	return nil
 }

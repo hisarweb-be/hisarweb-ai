@@ -1,6 +1,7 @@
 package common
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -56,33 +57,46 @@ func TestHwValidateEnvironment(t *testing.T) {
 		assert.True(t, HwAppEnvIsProduction())
 	})
 
-	t.Run("production refuses a missing or short signal salt", func(t *testing.T) {
-		for _, appEnv := range []string{"production", "prod", " PROD "} {
+	// Only an APP_ENV that explicitly names a development environment may run
+	// without the signal salt: an empty or misspelled value is a real deployment
+	// that lost its setting, and it must refuse every keyed abuse hash.
+	t.Run("every environment but an explicit development one refuses a missing salt", func(t *testing.T) {
+		for _, appEnv := range []string{"", "production", "prod", " PROD ", "staging", "preview", "dev-local", "developmentx"} {
 			for _, salt := range []string{"", "short", strings.Repeat("x", hwSignalSaltMinBytes-1)} {
-				t.Setenv("APP_ENV", appEnv)
-				t.Setenv("HW_SKIP_PHONE_STEP", "")
-				t.Setenv("HW_SIGNAL_SALT", salt)
-				err := HwValidateEnvironment()
-				require.ErrorIs(t, err, ErrHwSignalSaltRequiredInProduction)
-				// The refusal names the variables, never their values.
-				if salt != "" {
-					assert.NotContains(t, err.Error(), salt)
-				}
+				t.Run(appEnv+"/salt="+strconv.Itoa(len(salt)), func(t *testing.T) {
+					t.Setenv("APP_ENV", appEnv)
+					t.Setenv("HW_SKIP_PHONE_STEP", "")
+					t.Setenv("HW_SIGNAL_SALT", salt)
+					err := HwValidateEnvironment()
+					require.ErrorIs(t, err, ErrHwSignalSaltRequired)
+					// The refusal names the variables, never their values.
+					if salt != "" {
+						assert.NotContains(t, err.Error(), salt)
+					}
+				})
 			}
 		}
 	})
 
-	t.Run("production accepts a salt of at least 32 bytes", func(t *testing.T) {
-		t.Setenv("APP_ENV", "production")
-		t.Setenv("HW_SKIP_PHONE_STEP", "")
-		t.Setenv("HW_SIGNAL_SALT", strings.Repeat("s", hwSignalSaltMinBytes))
-		assert.NoError(t, HwValidateEnvironment())
+	t.Run("a sufficient salt is accepted everywhere", func(t *testing.T) {
+		for _, appEnv := range []string{"production", "staging", ""} {
+			t.Run(appEnv, func(t *testing.T) {
+				t.Setenv("APP_ENV", appEnv)
+				t.Setenv("HW_SKIP_PHONE_STEP", "")
+				t.Setenv("HW_SIGNAL_SALT", strings.Repeat("s", hwSignalSaltMinBytes))
+				assert.NoError(t, HwValidateEnvironment())
+			})
+		}
 	})
 
 	t.Run("a development environment does not need the signal salt", func(t *testing.T) {
-		t.Setenv("APP_ENV", "development")
-		t.Setenv("HW_SKIP_PHONE_STEP", "")
-		t.Setenv("HW_SIGNAL_SALT", "")
-		assert.NoError(t, HwValidateEnvironment())
+		for _, appEnv := range []string{"development", "dev", "test", "local", " DEVELOPMENT ", "Dev"} {
+			t.Run(appEnv, func(t *testing.T) {
+				t.Setenv("APP_ENV", appEnv)
+				t.Setenv("HW_SKIP_PHONE_STEP", "")
+				t.Setenv("HW_SIGNAL_SALT", "")
+				assert.NoError(t, HwValidateEnvironment())
+			})
+		}
 	})
 }
