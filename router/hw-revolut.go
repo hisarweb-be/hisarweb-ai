@@ -22,6 +22,9 @@ func SetHwRoutes(apiRouter *gin.RouterGroup) {
 	hwUserRoute.Use(middleware.DisableCache(), middleware.UserAuth())
 	{
 		hwUserRoute.POST("/orders", middleware.CriticalRateLimit(), middleware.UserCriticalRateLimit("hw-topup"), controller.HwCreateTopUpOrder)
+		// The balance per package with its expiry date, for the top-up page. A
+		// read of the caller's own ledger needs no critical rate limit.
+		hwUserRoute.GET("/packages", controller.HwListUserPackages)
 	}
 
 	hwAdminRoute := apiRouter.Group("/hw/admin")
