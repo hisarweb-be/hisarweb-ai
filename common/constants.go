@@ -191,7 +191,10 @@ var GeminiSafetySetting string
 var CohereSafetySetting string
 
 const (
-	RequestIdKey         = "X-Oneapi-Request-Id"
+	// RequestIdKey is the response header that carries the request id back to
+	// the client. The header name is customer-visible, so it must not name the
+	// upstream project this gateway is forked from.
+	RequestIdKey         = "X-Request-Id"
 	UpstreamRequestIdKey = "X-Upstream-Request-Id"
 )
 

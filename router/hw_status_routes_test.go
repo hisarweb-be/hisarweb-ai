@@ -54,6 +54,9 @@ func hwStatusRouteEnv(t *testing.T) *gin.Engine {
 	require.NoError(t, model.DB.AutoMigrate(
 		&model.Log{}, &model.Option{},
 		&model.HwStatusSample{}, &model.HwIncident{}, &model.HwCreditExtension{},
+		// The public quality and price answers are exercised over the same
+		// engine, so their tables exist here as well; they stay empty.
+		&model.HwQualityRun{}, &model.HwQualityScore{}, &model.HwPriceSnapshot{},
 	))
 	t.Cleanup(func() {
 		model.DB, model.LOG_DB = previousDB, previousLogDB
@@ -172,6 +175,71 @@ func TestHwStatusRouteIsPublicAndNamesNoSupplier(t *testing.T) {
 	assert.NotContains(t, lower, "channel")
 	assert.NotContains(t, lower, "upstream")
 	assert.Empty(t, response.Header.Get("X-OpenRouter-Id"))
+}
+
+// TestHwStatusRouteCarriesThePublicReadBudget proves the budget the public
+// reads really use over HTTP: twenty-five polls in quick succession are not
+// rejected, the answer is cacheable for half a minute, and the budget still
+// ends at sixty-one - a mobile carrier behind one address cannot be locked out
+// after twenty visits, but a runaway client is still stopped.
+func TestHwStatusRouteCarriesThePublicReadBudget(t *testing.T) {
+	engine := hwStatusRouteEnv(t)
+	remoteAddr := "198.51.100.40:41000"
+	serve := func() *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodGet, "/api/hw/status", nil)
+		request.RemoteAddr = remoteAddr
+		recorder := httptest.NewRecorder()
+		engine.ServeHTTP(recorder, request)
+		return recorder
+	}
+
+	for attempt := 1; attempt <= 25; attempt++ {
+		recorder := serve()
+		require.Equal(t, http.StatusOK, recorder.Code, "poll %d must not be rejected", attempt)
+		assert.Equal(t, "public, max-age=30", recorder.Header().Get("Cache-Control"))
+	}
+	for attempt := 26; attempt <= 60; attempt++ {
+		require.Equal(t, http.StatusOK, serve().Code, "poll %d must still pass", attempt)
+	}
+
+	tooMany := serve()
+	require.Equal(t, http.StatusTooManyRequests, tooMany.Code, "the sixty-first poll must be stopped")
+	assert.Equal(t, "60", tooMany.Header().Get("Retry-After"))
+	assert.Empty(t, tooMany.Header().Get("Cache-Control"), "a rejection must never be cached")
+}
+
+// TestHwPublicReadRoutesShareTheRoomierBudget proves the other two public
+// reads are on the same roomy budget: twenty-five polls of each are answered,
+// not rejected, and the shared budget still closes at sixty-one. The quality
+// answer is cacheable; the comparator answer depends on the query and is not.
+func TestHwPublicReadRoutesShareTheRoomierBudget(t *testing.T) {
+	engine := hwStatusRouteEnv(t)
+	remoteAddr := "198.51.100.41:41000"
+	get := func(target string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodGet, target, nil)
+		request.RemoteAddr = remoteAddr
+		recorder := httptest.NewRecorder()
+		engine.ServeHTTP(recorder, request)
+		return recorder
+	}
+
+	// Fifty polls over the two routes, all answered: the old critical budget
+	// of twenty in twenty minutes would have rejected the twenty-first.
+	for attempt := 1; attempt <= 25; attempt++ {
+		quality := get("/api/hw/quality/latest")
+		require.Equal(t, http.StatusOK, quality.Code, "quality poll %d: %s", attempt, quality.Body.String())
+		assert.Equal(t, "public, max-age=30", quality.Header().Get("Cache-Control"))
+
+		compare := get("/api/hw/pricing/compare?model=claude-sonnet-5-5&input_tokens=1000&output_tokens=1000")
+		require.Equal(t, http.StatusNotFound, compare.Code, "comparator poll %d: %s", attempt, compare.Body.String())
+		assert.Empty(t, compare.Header().Get("Cache-Control"), "the comparator answer must not be cached")
+	}
+
+	for attempt := 51; attempt <= 60; attempt++ {
+		require.Equal(t, http.StatusOK, get("/api/hw/quality/latest").Code, "poll %d must still pass", attempt)
+	}
+	assert.Equal(t, http.StatusTooManyRequests, get("/api/hw/status").Code,
+		"the sixty-first public read must be stopped, whichever of the three it is")
 }
 
 func TestHwStatusRouteShowsRunningOutage(t *testing.T) {
