@@ -598,6 +598,9 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 		}
 	}
 	common.SetContextKey(c, constant.ContextKeyChannelId, channel.Id)
+	// The supplier accounting rules (prompt overhead) and the response mask read
+	// the tag of the channel that answers, not of an earlier attempt.
+	service.HwNoteChannelTag(c, channel.GetTag())
 	common.SetContextKey(c, constant.ContextKeyChannelName, channel.Name)
 	common.SetContextKey(c, constant.ContextKeyChannelType, channel.Type)
 	common.SetContextKey(c, constant.ContextKeyChannelCreateTime, channel.CreatedTime)

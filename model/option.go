@@ -65,6 +65,7 @@ func InitOptionMap() {
 	common.OptionMap[HwPhase0MeasurementDoneOption] = "false"
 	common.OptionMap[HwCustomerWindowCeilingUSDOption] = ""
 	common.OptionMap[HwCheckoutReturnURLOption] = ""
+	common.OptionMap[HwUpstreamPromptOverheadOption] = ""
 	common.OptionMap["TaskPluginEnabled"] = strconv.FormatBool(constant.TaskPluginEnabled)
 	jsplugin.DefaultRegistry.SetEnabled(constant.TaskPluginEnabled)
 	common.OptionMap[setting.TaskPluginMarketplaceSourcesKey] = setting.TaskPluginMarketplaceSources2JsonString()

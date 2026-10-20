@@ -1,7 +1,10 @@
 package middleware
 
 import (
+	"math"
 	"strings"
+
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -80,7 +83,58 @@ func (w *hwMaskWriter) filterCustomerUsage(usage map[string]any) {
 		hwKeepOnly(usage, hwOpenAIChatUsageKeys)
 		hwKeepOnlyNested(usage, "prompt_tokens_details", hwOpenAIPromptDetailsKeys)
 		hwKeepOnlyNested(usage, "completion_tokens_details", hwOpenAICompletionDetailsKeys)
+	default:
+		return
 	}
+	w.correctCustomerUsage(usage)
+}
+
+// correctCustomerUsage removes the supplier's hidden prompt overhead from the
+// usage the customer reads, with the same function the settlement bills with, so
+// the answer and the charge cannot disagree. The supplier's raw count stays in
+// the admin log (service.PostTextConsumeQuota records it there).
+func (w *hwMaskWriter) correctCustomerUsage(usage map[string]any) {
+	modelName := w.customerModel()
+	estimate := service.HwLocalPromptEstimate(w.ctx)
+	if w.anthropic {
+		reported, ok := hwUsageNumber(usage["input_tokens"])
+		if !ok {
+			return
+		}
+		if corrected, overhead := service.HwCorrectUpstreamPrompt(w.ctx, modelName, reported, estimate); overhead > 0 {
+			usage["input_tokens"] = corrected
+		}
+		return
+	}
+	reported, ok := hwUsageNumber(usage["prompt_tokens"])
+	if !ok {
+		return
+	}
+	corrected, overhead := service.HwCorrectUpstreamPrompt(w.ctx, modelName, reported, estimate)
+	if overhead <= 0 {
+		return
+	}
+	usage["prompt_tokens"] = corrected
+	if completion, ok := hwUsageNumber(usage["completion_tokens"]); ok {
+		usage["total_tokens"] = corrected + completion
+	}
+}
+
+// hwUsageNumber reads one token count out of a decoded usage object.
+func hwUsageNumber(value any) (int, bool) {
+	switch typed := value.(type) {
+	case float64:
+		if typed < 0 || typed > math.MaxInt32 {
+			return 0, false
+		}
+		return int(typed), true
+	case int:
+		if typed < 0 {
+			return 0, false
+		}
+		return typed, true
+	}
+	return 0, false
 }
 
 func hwKeepOnly(object map[string]any, allowed map[string]bool) {

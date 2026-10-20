@@ -396,7 +396,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		return
 	}
 	originUsage := usage
-	billingUsage := effectiveBillingUsage(usage)
+	billingUsage, promptOverhead := hwCorrectUsagePromptOverhead(ctx, relayInfo, effectiveBillingUsage(usage))
 	if usage == nil {
 		extraContent = append(extraContent, common.NewMessage("Upstream returned no usage"))
 	}
@@ -488,6 +488,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		other = GenerateTextOtherInfo(ctx, relayInfo, summary.ModelRatio, summary.GroupRatio, summary.CompletionRatio, summary.CacheTokens, summary.CacheRatio, summary.ModelPrice, relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio)
 	}
 	appendUsageBillingPathForLog(other, common.GetContextKeyBool(ctx, constant.ContextKeyLocalCountTokens), originUsage)
+	hwAppendPromptOverheadAdminInfo(other, promptOverhead)
 	if adminRejectReason != "" {
 		other.SetAdmin("reject_reason", adminRejectReason)
 	}

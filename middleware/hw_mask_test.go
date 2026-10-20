@@ -4,10 +4,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -354,4 +356,62 @@ func hwSortedObjectKeys(object map[string]any) []string {
 	}
 	slices.Sort(keys)
 	return keys
+}
+
+// The supplier counts a hidden prompt overhead that the customer never sent.
+// The answer shows the corrected count, with the same rule the settlement bills
+// with: reported minus overhead, never below zero or the local estimate.
+func TestHwMaskAppliesSupplierPromptOverhead(t *testing.T) {
+	common.OptionMapRWMutex.Lock()
+	if common.OptionMap == nil {
+		common.OptionMap = make(map[string]string)
+	}
+	common.OptionMap["HwUpstreamPromptOverhead"] = `{"*":800}`
+	common.OptionMapRWMutex.Unlock()
+	t.Cleanup(func() {
+		common.OptionMapRWMutex.Lock()
+		defer common.OptionMapRWMutex.Unlock()
+		delete(common.OptionMap, "HwUpstreamPromptOverhead")
+	})
+
+	for _, tc := range []struct {
+		name, path, body, estimate string
+		wantBody                   []string
+	}{
+		{
+			name: "claude messages", path: "/v1/messages",
+			body:     `{"id":"msg_1","type":"message","role":"assistant","content":[],"usage":{"input_tokens":807,"output_tokens":5}}`,
+			estimate: "0", wantBody: []string{`"input_tokens":7`, `"output_tokens":5`},
+		},
+		{
+			name: "short request keeps its local estimate", path: "/v1/messages",
+			body:     `{"id":"msg_1","type":"message","role":"assistant","content":[],"usage":{"input_tokens":807,"output_tokens":5}}`,
+			estimate: "9", wantBody: []string{`"input_tokens":9`, `"output_tokens":5`},
+		},
+		{
+			name: "chat completions", path: "/v1/chat/completions",
+			body:     `{"id":"chatcmpl-1","object":"chat.completion","choices":[],"usage":{"prompt_tokens":807,"completion_tokens":5,"total_tokens":812}}`,
+			estimate: "0", wantBody: []string{`"prompt_tokens":7`, `"completion_tokens":5`, `"total_tokens":12`},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			engine := gin.New()
+			engine.Handle(http.MethodPost, tc.path, func(c *gin.Context) {
+				service.HwNoteChannelTag(c, "lumia")
+				estimate, err := strconv.Atoi(tc.estimate)
+				require.NoError(t, err)
+				service.HwNoteLocalPromptEstimate(c, estimate)
+				c.Next()
+			}, HwMask(), func(c *gin.Context) {
+				c.Header("Content-Type", "application/json")
+				c.String(http.StatusOK, tc.body)
+			})
+			recorder := hwMaskDo(t, engine, http.MethodPost, tc.path, "", nil)
+			require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+			for _, want := range tc.wantBody {
+				assert.Contains(t, recorder.Body.String(), want, "the customer sees the corrected count:\n%s", recorder.Body.String())
+			}
+		})
+	}
 }
