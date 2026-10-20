@@ -30,7 +30,7 @@ func setupHwPackagesTestDB(t *testing.T, userID int) *gin.Engine {
 	require.NoError(t, err)
 	model.DB = db
 	model.LOG_DB = db
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.HwCreditPackage{}, &model.HwPriceSnapshot{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.HwCreditPackage{}, &model.HwPriceSnapshot{}, &model.HwCreditExtension{}))
 	t.Cleanup(func() {
 		sqlDB, _ := db.DB()
 		_ = sqlDB.Close()
