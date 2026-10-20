@@ -4,12 +4,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
@@ -113,6 +116,35 @@ func TestHwFreeGroupRateLimitReadsTheAccountGroup(t *testing.T) {
 		assert.Equal(t, http.StatusTooManyRequests, call(userID, tokenGroup),
 			"a token group %s does not lift the free budget", tokenGroup)
 	}
+}
+
+// A pinned channel must not skip the free-group model class: the pin decides
+// where a request goes, never what a trial account may call.
+func TestHwFreeGroupModelGateAlsoRunsForPinnedChannels(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	require.NoError(t, i18n.Init())
+	hwFreeGroupTestDB(t)
+
+	router := gin.New()
+	router.POST("/v1/chat/completions", func(c *gin.Context) {
+		common.SetContextKey(c, constant.ContextKeyUserGroup, "free")
+		common.SetContextKey(c, constant.ContextKeyUsingGroup, "free")
+		service.GetChannelConstraints(c).AddPin(dto.ChannelPin{
+			ChannelId: 7,
+			Source:    dto.PinSourceToken,
+			Rank:      dto.PinRankToken,
+			RetryMode: dto.PinRetrySingleAttempt,
+		})
+	}, Distribute(), func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"claude-sonnet-5-5"}`))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+
+	assert.Equal(t, http.StatusForbidden, recorder.Code, "the pinned channel must not lift the model class of a free account")
 }
 
 func TestHwFreeGroupRateLimitCapsTheDay(t *testing.T) {

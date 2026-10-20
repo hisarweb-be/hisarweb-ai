@@ -8,17 +8,19 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestHwFreeGroupRateLimitCoversTaskAndVideoRoutes proves that the routes that
-// start billable work outside the relay families carry the same frozen check as
-// a relay call: a task submission, a video generation and a video remix. Each
-// request is refused by the guard in front of the handler, so the test does not
-// need a task plugin round trip or a supplier.
-func TestHwFreeGroupRateLimitCoversTaskAndVideoRoutes(t *testing.T) {
+// TestHwFreeGroupRateLimitCoversEveryBillableRoute proves that every route that
+// starts billable work for a free account carries the same frozen check as a
+// relay call: the task and video families, the task-plugin protocol endpoints,
+// the Responses WebSocket handshake and the Midjourney submits, plus a dynamic
+// plugin route. Each request is refused by the guard in front of the handler, so
+// the test does not need a task plugin round trip or a supplier.
+func TestHwFreeGroupRateLimitCoversEveryBillableRoute(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	previousDB := model.DB
@@ -69,19 +71,48 @@ func TestHwFreeGroupRateLimitCoversTaskAndVideoRoutes(t *testing.T) {
 	require.Equal(t, 1, frozen)
 
 	engine := gin.New()
-	SetTaskRouter(engine)
+	engine.Use(gin.Recovery())
+	SetRelayRouter(engine)
+	SetTaskPluginProtocolRouter(engine)
 	SetVideoRouter(engine)
+	SetTaskRouter(engine)
 
-	for _, path := range []string{"/v1/tasks/example", "/v1/video/generations", "/v1/videos/vid_1/remix"} {
-		request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"any"}`))
-		request.Header.Set("Content-Type", "application/json")
-		request.Header.Set("Authorization", "Bearer sk-hwfreegroup")
-		recorder := httptest.NewRecorder()
-		engine.ServeHTTP(recorder, request)
+	// A dynamic plugin route is registered the way the plugin router builds it.
+	// The plugin and its generation are stand-ins; the guard must answer before
+	// either is used.
+	binding := pluginruntime.RouteBinding{
+		Plugin: &pluginruntime.LoadedPlugin{Meta: pluginruntime.Meta{Key: "hw-route-test", Version: "1.0.0"}},
+		Route:  pluginruntime.Route{Method: http.MethodPost, Path: "/hw-plugin/route", Type: pluginruntime.RouteTypeSubmit},
+	}
+	engine.POST(binding.Route.Path,
+		productionPluginRouteHandlers(&pluginruntime.RoutingGeneration{Number: 1}, binding)...)
 
-		assert.Equal(t, http.StatusForbidden, recorder.Code, "%s must be refused for a frozen free account", path)
-		assert.Contains(t, recorder.Body.String(), "account_frozen", path)
-		assert.NotContains(t, recorder.Body.String(), "lumia")
-		assert.NotContains(t, recorder.Body.String(), "openrouter")
+	for _, testCase := range []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodPost, path: "/v1/tasks/example"},
+		{method: http.MethodPost, path: "/v1/video/generations"},
+		{method: http.MethodPost, path: "/v1/videos/vid_1/remix"},
+		{method: http.MethodPost, path: "/v1/responses"},
+		{method: http.MethodGet, path: "/v1/responses"},
+		{method: http.MethodPost, path: "/v1/images/generations"},
+		{method: http.MethodPost, path: "/v1/images/edits"},
+		{method: http.MethodPost, path: "/v1/videos"},
+		{method: http.MethodPost, path: "/mj/submit/imagine"},
+		{method: http.MethodPost, path: "/hw-plugin/route"},
+	} {
+		t.Run(testCase.method+" "+testCase.path, func(t *testing.T) {
+			request := httptest.NewRequest(testCase.method, testCase.path, strings.NewReader(`{"model":"any"}`))
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("Authorization", "Bearer sk-hwfreegroup")
+			recorder := httptest.NewRecorder()
+			engine.ServeHTTP(recorder, request)
+
+			assert.Equal(t, http.StatusForbidden, recorder.Code, "%s %s must be refused for a frozen free account", testCase.method, testCase.path)
+			assert.Contains(t, recorder.Body.String(), "account_frozen", testCase.path)
+			assert.NotContains(t, recorder.Body.String(), "lumia")
+			assert.NotContains(t, recorder.Body.String(), "openrouter")
+		})
 	}
 }

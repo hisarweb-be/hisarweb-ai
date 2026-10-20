@@ -76,6 +76,9 @@ func SetRelayRouter(router *gin.Engine) {
 	// handshake response headers are filtered.
 	relayV1Router.Use(middleware.HwMask())
 	relayV1Router.Use(middleware.TokenAuth())
+	// The free-group guard sits directly after authentication, so it also covers
+	// the Responses WebSocket handshake registered before the routes below.
+	relayV1Router.Use(middleware.HwFreeGroupRateLimit())
 	// The bureau reserve gate covers every customer route below, including the
 	// WebSocket handshake; it refuses new requests only and never touches a
 	// stream that is already running.
@@ -86,7 +89,6 @@ func SetRelayRouter(router *gin.Engine) {
 		relayV1Router.GET("/responses", controller.ResponsesWebSocket)
 	}
 	relayV1Router.Use(middleware.ModelRequestRateLimit())
-	relayV1Router.Use(middleware.HwFreeGroupRateLimit())
 	{
 		// WebSocket 路由（统一到 Relay）
 		wsRouter := relayV1Router.Group("")
@@ -229,7 +231,7 @@ func SetRelayRouter(router *gin.Engine) {
 func registerMjRouterGroup(relayMjRouter *gin.RouterGroup) {
 	relayMjRouter.Use(middleware.HwMask())
 	relayMjRouter.GET("/image/:id", relay.RelayMidjourneyImage)
-	relayMjRouter.Use(middleware.TokenAuth(), middleware.Distribute())
+	relayMjRouter.Use(middleware.TokenAuth(), middleware.HwFreeGroupRateLimit(), middleware.Distribute())
 	{
 		relayMjRouter.POST("/submit/action", controller.RelayMidjourney)
 		relayMjRouter.POST("/submit/shorten", controller.RelayMidjourney)

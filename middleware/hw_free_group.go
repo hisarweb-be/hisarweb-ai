@@ -45,6 +45,13 @@ func hwUserGroup(c *gin.Context) string {
 	return common.GetContextKeyString(c, constant.ContextKeyUserGroup)
 }
 
+// HwAccountGroup returns the group of the account behind the request. Paths
+// outside this package (the Responses WebSocket relay) use it so the trial
+// class follows the account there too.
+func HwAccountGroup(c *gin.Context) string {
+	return hwUserGroup(c)
+}
+
 // HwFreeGroupRateLimit blocks a frozen account and caps the request rate of a
 // free trial account per minute and per rolling day. The limits are fixed and
 // on by default (see setting.HwFreeGroupPerMinuteLimit /
