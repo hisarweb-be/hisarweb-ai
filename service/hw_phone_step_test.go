@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -194,6 +195,68 @@ func TestHwCompleteTelegramPhoneStep(t *testing.T) {
 		assert.Equal(t, common.QuotaFromFloat(2*float64(common.QuotaPerUnit)), HwFreeTrialQuota())
 		t.Setenv("HW_FREE_TRIAL_QUOTA", "9999")
 		assert.Equal(t, model.HwMaxFreeTrialQuota(), HwFreeTrialQuota(), "an absurd setting is clamped to the cap")
+	})
+}
+
+// A Telegram login must not wait for the bot: a chat that never answers costs
+// the customer the whole delivery timeout. The prompt goes out in the
+// background, and only while the account has no number yet.
+func TestHwCompleteTelegramPhoneStepDoesNotWaitForThePrompt(t *testing.T) {
+	t.Run("the login returns while the bot is still silent", func(t *testing.T) {
+		hwPhoneStepTestSetup(t)
+		started := make(chan struct{})
+		release := make(chan struct{})
+		var releaseOnce, startedOnce sync.Once
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			startedOnce.Do(func() { close(started) })
+			<-release
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		}))
+		t.Cleanup(func() {
+			releaseOnce.Do(func() { close(release) })
+			server.Close()
+		})
+		t.Setenv(hwTelegramAPIBaseEnv, server.URL)
+		t.Setenv(hwTelegramBotTokenEnv, "test-bot-token")
+		user := hwPhoneStepTestUser(t, "no-wait@example.com")
+
+		returned := make(chan struct{})
+		go func() {
+			defer close(returned)
+			_, _, _ = HwCompleteTelegramPhoneStep(user.Id, "800001")
+		}()
+		select {
+		case <-returned:
+		case <-time.After(3 * time.Second):
+			t.Fatal("the Telegram login waited for the bot answer")
+		}
+		select {
+		case <-started:
+		case <-time.After(3 * time.Second):
+			t.Fatal("the login did not ask the bot for the share-contact button")
+		}
+		releaseOnce.Do(func() { close(release) })
+	})
+
+	t.Run("an account that already shared its number is not asked again", func(t *testing.T) {
+		hwPhoneStepTestSetup(t)
+		var sends atomic.Int64
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			sends.Add(1)
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		}))
+		t.Cleanup(server.Close)
+		t.Setenv(hwTelegramAPIBaseEnv, server.URL)
+		t.Setenv(hwTelegramBotTokenEnv, "test-bot-token")
+		user := hwPhoneStepTestUser(t, "already-shared@example.com")
+		require.NoError(t, model.HwRecordPhoneSignal(user.Id, "0555 987 65 43"))
+
+		_, _, err := HwCompleteTelegramPhoneStep(user.Id, "800002")
+		require.NoError(t, err)
+		// A prompt that should not be sent would reach the double within
+		// milliseconds; the window is generous so it cannot hide a send.
+		time.Sleep(200 * time.Millisecond)
+		assert.Zero(t, sends.Load(), "a number the account already has needs no second prompt")
 	})
 }
 

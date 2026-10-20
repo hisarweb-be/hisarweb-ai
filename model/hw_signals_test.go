@@ -81,6 +81,28 @@ func TestUpsertHwUserSignalsKeepsHistory(t *testing.T) {
 	}
 }
 
+// Only a number shared through the bot counts as a phone signal: a device token
+// or the Telegram identity must not make the login skip the contact prompt.
+func TestHwUserHasPhoneSignal(t *testing.T) {
+	hwCreditTestSetup(t)
+	user := createHwTestUser(t, 0)
+
+	hasPhone, err := HwUserHasPhoneSignal(user.Id)
+	require.NoError(t, err)
+	assert.False(t, hasPhone, "a fresh account has no number yet")
+
+	require.NoError(t, UpsertHwUserSignals(user.Id, HwUserSignals{DeviceToken: "dev-has-phone", Ip: "203.0.113.44"}))
+	require.NoError(t, HwRecordTelegramPhoneStep(user.Id, "424242"))
+	hasPhone, err = HwUserHasPhoneSignal(user.Id)
+	require.NoError(t, err)
+	assert.False(t, hasPhone, "a device token and a Telegram identity are no phone signal")
+
+	require.NoError(t, HwRecordPhoneSignal(user.Id, "0555 123 45 67"))
+	hasPhone, err = HwUserHasPhoneSignal(user.Id)
+	require.NoError(t, err)
+	assert.True(t, hasPhone)
+}
+
 func TestHwSharedSignal(t *testing.T) {
 	hwCreditTestSetup(t)
 	first := createHwTestUser(t, 0)

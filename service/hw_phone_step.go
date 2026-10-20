@@ -92,16 +92,33 @@ func HwCompleteTelegramPhoneStep(userID int, telegramID string) (granted bool, r
 	// still waits for the number shared through the bot. The bot may only write
 	// to a chat the customer opened itself, so this prompt reaches the customers
 	// who started the bot before; for everyone else the same prompt answers the
-	// /start that opens the chat. A failed prompt costs the prompt only, never
-	// the login, and the customer's language is not known here: the site default
-	// is Turkish.
-	texts := hwTelegramTextsFor("tr")
-	hwAnswerTelegramChat(context.Background(), telegramID, texts.Prompt, texts.Button)
+	// /start that opens the chat. The prompt leaves in the background: a chat
+	// that never answers must cost a goroutine and a timeout, never the login.
+	hwPromptForPhoneStep(userID, telegramID)
 	user, err := model.GetUserById(userID, false)
 	if err != nil {
 		return false, "", err
 	}
 	return hwMaybeGrantFreeTrialCredit(user)
+}
+
+// hwPromptForPhoneStep asks the bot to show the share-contact button, outside
+// the login and with its own deadline. Nothing waits for it: the customer's
+// language is not known here, so the site default (Turkish) is used, and a
+// failed prompt only means the /start of the chat has to carry it instead. An
+// account that already shared a number is not asked again, because the prompt
+// would invite a second number nobody needs.
+func hwPromptForPhoneStep(userID int, telegramID string) {
+	go func() {
+		hasPhone, err := model.HwUserHasPhoneSignal(userID)
+		if err != nil || hasPhone {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), hwTelegramRequestTimeout)
+		defer cancel()
+		texts := hwTelegramTextsFor("tr")
+		hwAnswerTelegramChat(ctx, telegramID, texts.Prompt, texts.Button)
+	}()
 }
 
 // HwGrantFreeCreditIfPhoneStepSkipped is the local smoke-test path: only when

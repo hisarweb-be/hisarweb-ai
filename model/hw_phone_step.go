@@ -46,6 +46,21 @@ func HwRecordPhoneSignal(userID int, rawPhone string) error {
 	return hwUpsertHashedSignalRow(userID, HwSignalKindPhone, phone)
 }
 
+// HwUserHasPhoneSignal reports whether the account already carries a phone
+// number shared through the bot. A customer who did so needs no second request
+// for the contact button, and the caller uses this to skip the prompt. Only a
+// non-empty phone hash counts; the Telegram identity is a different kind.
+func HwUserHasPhoneSignal(userID int) (bool, error) {
+	if userID <= 0 {
+		return false, ErrHwInvalidUserSignal
+	}
+	var count int64
+	err := DB.Model(&HwUserSignal{}).
+		Where("user_id = ? AND kind = ? AND hash <> ?", userID, HwSignalKindPhone, "").
+		Count(&count).Error
+	return count > 0, err
+}
+
 // HwRecordDevPhoneStep is the local-development stand-in for the Telegram step:
 // it is called only when HW_SKIP_PHONE_STEP is active outside production, so
 // the smoke-test registration can reach the free credit without Telegram. The
