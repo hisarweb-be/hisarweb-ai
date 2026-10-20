@@ -67,6 +67,10 @@ import { usePricingData } from '../hooks/use-pricing-data'
 import type { ParsedTaskTier } from '../lib/billing-expr'
 import { formatBillingCondition } from '../lib/billing-expression/condition-display'
 import {
+  customerGroupLabel,
+  visibleCustomerGroups,
+} from '../lib/customer-groups'
+import {
   formatTaskUsageUnitPrice,
   getDynamicPriceEntries,
   getDynamicPriceUnitLabelKey,
@@ -517,7 +521,9 @@ function ModelBackendSignalsSection(props: { model: PricingModel }) {
 function ModelBackendProviderSection(props: { model: PricingModel }) {
   const { t } = useTranslation()
   const model = props.model
-  const groups = normalizeCatalogItems(model.enable_groups)
+  const groups = visibleCustomerGroups(
+    normalizeCatalogItems(model.enable_groups)
+  ).map((group) => customerGroupLabel(group, t))
   const endpoints = normalizeCatalogItems(model.supported_endpoint_types)
   const tags = parseTags(model.tags)
   const cells: React.ReactNode[] = []
@@ -1198,7 +1204,11 @@ function ProviderGroupPricingSection(
             return (
               <div key={group} className='overflow-hidden rounded-lg border'>
                 <div className='bg-muted/20 flex items-center justify-between gap-3 border-b px-3 py-2'>
-                  <GroupBadge group={group} size='sm' />
+                  <GroupBadge
+                    group={group}
+                    label={customerGroupLabel(group, t)}
+                    size='sm'
+                  />
                   <span className='text-muted-foreground font-mono text-xs'>
                     {ratio}x
                   </span>
@@ -1389,7 +1399,13 @@ function ProviderGroupPricingSection(
             header: t('Group'),
             className: thClass,
             cellClassName: 'py-2.5',
-            cell: (group) => <GroupBadge group={group} size='sm' />,
+            cell: (group) => (
+              <GroupBadge
+                group={group}
+                label={customerGroupLabel(group, t)}
+                size='sm'
+              />
+            ),
           },
           {
             id: 'ratio',

@@ -243,6 +243,51 @@ const tr = {
   statusEmpty: 'Henüz durum verisi yok',
   statusEmptyBody:
     'Durum ölçümü henüz başlamadı. İlk ölçümden sonra model durumları burada görünecek.',
+
+  docsTitle: 'API belgeleri',
+  docsLead:
+    'HisarWeb AI, OpenAI ve Claude ile uyumlu tek bir API sunar. Anahtarınızı bir kez oluşturup uygulamanızda kullanın.',
+  docsBaseUrlTitle: 'Temel adres',
+  docsBaseUrlBody: 'Tüm istekler aşağıdaki temel adresle başlar:',
+  docsKeyTitle: 'API anahtarı oluşturma',
+  docsKeyBody:
+    'Panoda API anahtarları bölümünü açın, yeni bir anahtar oluşturun ve anahtarı yalnızca kendi sunucunuzda saklayın.',
+  docsChatTitle: 'Sohbet tamamlama isteği',
+  docsMessagesTitle: 'Claude mesaj isteği',
+  docsStreamTitle: 'Akış (stream)',
+  docsStreamBody:
+    'Yanıtı parça parça almak için isteğe "stream": true ekleyin. Yanıt sunucudan olay akışı (SSE) olarak gelir.',
+  docsModelsTitle: 'Hangi modeller ücretsiz?',
+  docsModelsBody:
+    'Ücretsiz deneme hesabı haiku sınıfı hızlı modelleri kullanabilir; bunlar küçük ve hızlı işler için yeterlidir. Ücretli hesap katalogdaki tüm modelleri kullanabilir.',
+  docsModelsFree:
+    'Ücretsiz: haiku sınıfı modeller (örneğin claude-haiku-4-5).',
+  docsModelsPaid:
+    'Ücretli: katalogdaki diğer tüm modeller; güncel fiyatlar fiyat karşılaştırma sayfasında yazar.',
+  docsErrorsTitle: 'Hata kodları',
+  docsError401:
+    '401: anahtar geçersiz veya eksik. Anahtarın doğru kopyalandığını kontrol edin.',
+  docsError402:
+    '402 yetersiz bakiye: hesap bakiyesi bu istek için yetmiyor. Bakiye yükleyip tekrar deneyin.',
+  docsError429:
+    '429: çok fazla istek gönderildi. Kısa bir süre bekleyip tekrar deneyin.',
+  docsLinksTitle: 'Daha fazla',
+  docsLinkStatus: 'Servis durumu (7/24)',
+  docsLinkCompare: 'Fiyat karşılaştırma',
+
+  aboutDefaultTitle: 'HisarWeb AI hakkında',
+  aboutDefaultIntro:
+    'HisarWeb AI, yapay zekâ uygulamanız için tek bir API anahtarı sunar. Bakiyeyi Türk lirası ile yüklersiniz ve yalnızca kullandığınız kadar ödersiniz; gösterilen tüm fiyatlara KDV dahildir.',
+  aboutDefaultPayment:
+    'Ödemeyi kartla veya Revolut ile yapabilirsiniz. Faturalarınızı ve bakiye hareketlerinizi panodan görürsünüz.',
+  aboutDefaultStatus:
+    'Hizmet durumunu 7/24 durum sayfasından izleyebilirsiniz.',
+  aboutDefaultStatusLink: 'Durum sayfasına git',
+
+  retry: 'Tekrar dene',
+  rateLimited:
+    'Çok fazla istek gönderildi. Lütfen birkaç saniye sonra tekrar deneyin.',
+  statusScrollHint: 'Tüm sütunlar için tabloyu yana kaydırın.',
 } as const
 
 export type HwTextKey = keyof typeof tr
@@ -455,6 +500,50 @@ const en: Record<HwTextKey, string> = {
   statusEmpty: 'No status data yet',
   statusEmptyBody:
     'The status measurement has not started yet. The model states appear here after the first measurement.',
+
+  docsTitle: 'API documentation',
+  docsLead:
+    'HisarWeb AI offers one API that is compatible with OpenAI and Claude. Create your key once and use it in your application.',
+  docsBaseUrlTitle: 'Base URL',
+  docsBaseUrlBody: 'Every request starts from this base URL:',
+  docsKeyTitle: 'Creating an API key',
+  docsKeyBody:
+    'In the console, open the API keys section, create a new key and keep it on your own server only.',
+  docsChatTitle: 'Chat completion request',
+  docsMessagesTitle: 'Claude messages request',
+  docsStreamTitle: 'Streaming',
+  docsStreamBody:
+    'Add "stream": true to the request to receive the answer in parts. The answer arrives from the server as a stream of events (SSE).',
+  docsModelsTitle: 'Which models are free?',
+  docsModelsBody:
+    'A free trial account can use the fast haiku-class models; they are enough for small, quick jobs. A paid account can use every model in the catalog.',
+  docsModelsFree:
+    'Free: haiku-class models (for example claude-haiku-4-5).',
+  docsModelsPaid:
+    'Paid: every other model in the catalog; the current prices are on the price comparison page.',
+  docsErrorsTitle: 'Error codes',
+  docsError401:
+    '401: the key is invalid or missing. Check that the key was copied completely.',
+  docsError402:
+    '402 insufficient balance: the account balance does not cover this request. Top up and try again.',
+  docsError429:
+    '429: too many requests. Wait a moment and try again.',
+  docsLinksTitle: 'More',
+  docsLinkStatus: 'Service status (24/7)',
+  docsLinkCompare: 'Price comparison',
+
+  aboutDefaultTitle: 'About HisarWeb AI',
+  aboutDefaultIntro:
+    'HisarWeb AI gives your AI application one API key. You top up the balance in Turkish lira and pay only for what you use; every price shown includes VAT.',
+  aboutDefaultPayment:
+    'You can pay by card or with Revolut. Your invoices and balance movements are in the console.',
+  aboutDefaultStatus:
+    'You can follow the service status around the clock on the status page.',
+  aboutDefaultStatusLink: 'Go to the status page',
+
+  retry: 'Try again',
+  rateLimited: 'Too many requests. Please try again in a few seconds.',
+  statusScrollHint: 'Scroll the table sideways to see every column.',
 }
 
 export const hwTexts: Record<HwLanguage, Record<HwTextKey, string>> = { tr, en }

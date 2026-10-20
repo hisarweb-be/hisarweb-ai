@@ -96,16 +96,27 @@ export function getEndpointTypeLabels(
 ): Record<EndpointTypeOption, string> {
   return {
     [ENDPOINT_TYPES.ALL]: t('All Types'),
-    [ENDPOINT_TYPES.OPENAI]: 'Chat',
-    [ENDPOINT_TYPES.OPENAI_RESPONSE]: 'Response',
-    [ENDPOINT_TYPES.ANTHROPIC]: 'Anthropic',
-    [ENDPOINT_TYPES.GEMINI]: 'Gemini',
-    [ENDPOINT_TYPES.JINA_RERANK]: 'Rerank',
+    [ENDPOINT_TYPES.OPENAI]: t('Chat'),
+    [ENDPOINT_TYPES.OPENAI_RESPONSE]: t('Response'),
+    [ENDPOINT_TYPES.ANTHROPIC]: t('Anthropic'),
+    [ENDPOINT_TYPES.GEMINI]: t('Gemini'),
+    [ENDPOINT_TYPES.JINA_RERANK]: t('Rerank'),
     [ENDPOINT_TYPES.IMAGE_GENERATION]: t('Image'),
     [ENDPOINT_TYPES.EMBEDDINGS]: t('Embeddings'),
     [ENDPOINT_TYPES.OPENAI_VIDEO]: t('Video'),
   }
 }
+
+/**
+ * Endpoint types this site actually sells. The public filter offers only
+ * these; the catalog may carry models of other types (images, videos,
+ * embeddings) that no customer can call, and naming them would advertise
+ * something that does not work.
+ */
+export const SOLD_ENDPOINT_TYPES: EndpointTypeOption[] = [
+  ENDPOINT_TYPES.OPENAI,
+  ENDPOINT_TYPES.ANTHROPIC,
+]
 
 /** Filter section keys */
 export const FILTER_SECTIONS = {

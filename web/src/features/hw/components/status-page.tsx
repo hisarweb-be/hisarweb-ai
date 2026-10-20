@@ -31,6 +31,7 @@ import { PublicLayout } from '@/components/layout'
 import { Footer } from '@/components/layout/components/footer'
 import { PageTransition } from '@/components/page-transition'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -46,11 +47,13 @@ import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 import { getHwStatus } from '../api'
+import { useSingleRetry } from '../hooks/use-single-retry'
 import {
   formatHwStamp,
   hwStatusMessage,
   hwStatusTextKey,
 } from '../lib/format'
+import { httpStatus } from '../lib/http-status'
 import { pickHwLanguage, useHwText, type HwTextKey } from '../texts'
 import type { HwStatusState } from '../types'
 import { StatusIncidents } from './status-incidents'
@@ -106,7 +109,7 @@ function ModelStateBadge(props: {
 }
 
 /** `/durum`: the public service status, readable without a login. */
-export function StatusPage() {
+export function StatusPage(props: { retryDelayMs?: number } = {}) {
   const text = useHwText()
   const { i18n } = useTranslation()
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
@@ -119,6 +122,14 @@ export function StatusPage() {
     staleTime: 30_000,
     meta: { errorToast: false },
   })
+
+  useSingleRetry(
+    () => {
+      void status.refetch()
+    },
+    status.isError,
+    props.retryDelayMs ?? 5000
+  )
 
   const answer = status.data?.data
   const models = answer?.models ?? []
@@ -146,7 +157,24 @@ export function StatusPage() {
         {status.isError && (
           <Alert variant='destructive'>
             <AlertTitle>{text('statusTitle')}</AlertTitle>
-            <AlertDescription>{text('statusError')}</AlertDescription>
+            <AlertDescription>
+              <p>
+                {httpStatus(status.error) === 429
+                  ? text('rateLimited')
+                  : text('statusError')}
+              </p>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                className='mt-3'
+                onClick={() => {
+                  void status.refetch()
+                }}
+              >
+                {text('retry')}
+              </Button>
+            </AlertDescription>
           </Alert>
         )}
 
@@ -180,44 +208,49 @@ export function StatusPage() {
               <CardTitle>{text('statusModelsTitle')}</CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{text('statusModelColumn')}</TableHead>
-                    <TableHead>{text('statusColumn')}</TableHead>
-                    <TableHead>
-                      {text('statusAvailabilityColumn', {
-                        days: answer.availability_days,
-                      })}
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {models.map((entry) => (
-                    <TableRow key={entry.model}>
-                      <TableCell>
-                        <span className='font-medium'>{entry.model}</span>
-                        <span className='text-muted-foreground block text-xs'>
-                          {hwStatusMessage(entry, language)}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <ModelStateBadge state={entry.status} text={text} />
-                      </TableCell>
-                      <TableCell>
-                        {entry.availability_percent > 0
-                          ? text('statusAvailabilityValue', {
-                              percent: formatNumber(
-                                entry.availability_percent,
-                                locale
-                              ),
-                            })
-                          : text('statusNoMeasurement')}
-                      </TableCell>
+              <p className='text-muted-foreground mb-2 text-xs sm:hidden'>
+                {text('statusScrollHint')}
+              </p>
+              <div className='overflow-x-auto'>
+                <Table withContainer={false} className='min-w-[34rem]'>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{text('statusModelColumn')}</TableHead>
+                      <TableHead>{text('statusColumn')}</TableHead>
+                      <TableHead>
+                        {text('statusAvailabilityColumn', {
+                          days: answer.availability_days,
+                        })}
+                      </TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {models.map((entry) => (
+                      <TableRow key={entry.model}>
+                        <TableCell>
+                          <span className='font-medium'>{entry.model}</span>
+                          <span className='text-muted-foreground block text-xs'>
+                            {hwStatusMessage(entry, language)}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <ModelStateBadge state={entry.status} text={text} />
+                        </TableCell>
+                        <TableCell>
+                          {entry.availability_percent > 0
+                            ? text('statusAvailabilityValue', {
+                                percent: formatNumber(
+                                  entry.availability_percent,
+                                  locale
+                                ),
+                              })
+                            : text('statusNoMeasurement')}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         )}

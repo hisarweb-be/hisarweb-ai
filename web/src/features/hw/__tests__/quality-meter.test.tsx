@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { createInstance } from 'i18next'
 import { I18nextProvider } from 'react-i18next'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -87,7 +87,7 @@ const empty: HwQualityLatest = {
     'These measurements are a sample over a small fixed task set, not a guarantee.',
 }
 
-function renderPage() {
+function renderPage(retryDelayMs = 60_000) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -95,7 +95,7 @@ function renderPage() {
   return render(
     <I18nextProvider i18n={trI18n}>
       <QueryClientProvider client={client}>
-        <QualityMeter />
+        <QualityMeter retryDelayMs={retryDelayMs} />
       </QueryClientProvider>
     </I18nextProvider>
   )
@@ -161,6 +161,65 @@ describe('quality meter page', () => {
       await screen.findByText('Ölçüm verisi okunamadı. Lütfen tekrar deneyin.')
     ).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
+
+  it('says in Turkish that too many requests were sent on a 429', async () => {
+    vi.spyOn(api, 'get').mockRejectedValue(
+      Object.assign(new Error('Too many requests'), {
+        response: { status: 429 },
+      })
+    )
+    renderPage()
+
+    expect(
+      await screen.findByText(
+        'Çok fazla istek gönderildi. Lütfen birkaç saniye sonra tekrar deneyin.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Tekrar dene' })
+    ).toBeInTheDocument()
+  })
+
+  it('retries once by itself after a failure and then shows the measurement', async () => {
+    let calls = 0
+    vi.spyOn(api, 'get').mockImplementation(async () => {
+      calls += 1
+      if (calls === 1) {
+        throw Object.assign(new Error('Server error'), {
+          response: { status: 500 },
+        })
+      }
+      return { data: { success: true, message: '', data: measured } }
+    })
+    renderPage(20)
+
+    expect(
+      await screen.findByText('Ölçüm verisi okunamadı. Lütfen tekrar deneyin.')
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText('claude-sonnet-5', undefined, { timeout: 2000 })
+    ).toBeInTheDocument()
+    expect(api.get).toHaveBeenCalledTimes(2)
+  })
+
+  it('asks the API again when the visitor presses Tekrar dene', async () => {
+    let calls = 0
+    vi.spyOn(api, 'get').mockImplementation(async () => {
+      calls += 1
+      if (calls === 1) {
+        throw Object.assign(new Error('Server error'), {
+          response: { status: 500 },
+        })
+      }
+      return { data: { success: true, message: '', data: measured } }
+    })
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Tekrar dene' }))
+
+    expect(await screen.findByText('claude-sonnet-5')).toBeInTheDocument()
+    expect(api.get).toHaveBeenCalledTimes(2)
   })
 
   it('never claims the models equal the original and names no supplier', async () => {

@@ -33,17 +33,15 @@ type LegalDocumentProps = {
   title: string
   queryKey: string
   fetchDocument: () => Promise<LegalDocumentResponse>
-  emptyMessage: string
 }
 
 export function LegalDocument({
   title,
   queryKey,
   fetchDocument,
-  emptyMessage,
 }: LegalDocumentProps) {
   const { t } = useTranslation()
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: [queryKey],
     queryFn: fetchDocument,
     staleTime: 10 * 60 * 1000,
@@ -68,7 +66,7 @@ export function LegalDocument({
     )
   }
 
-  if (!success || !hasContent) {
+  if (isError || !success || !hasContent) {
     return (
       <PublicLayout>
         <div className='mx-auto max-w-2xl py-12'>
@@ -80,7 +78,9 @@ export function LegalDocument({
               <div className='space-y-1'>
                 <CardTitle className='text-lg font-semibold'>{title}</CardTitle>
                 <p className='text-muted-foreground text-sm'>
-                  {data?.message || emptyMessage}
+                  {isError
+                    ? t('The page could not be loaded. Please try again.')
+                    : t('This page will be published soon.')}
                 </p>
               </div>
             </CardHeader>

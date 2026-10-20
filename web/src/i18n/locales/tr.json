@@ -1,5 +1,10 @@
 {
   "translation": {
+    "Free": "Ücretsiz",
+    "Paid": "Ücretli",
+    "No models have been added yet": "Henüz model eklenmedi",
+    "This page will be published soon.": "Bu sayfa yakında yayınlanacak.",
+    "The page could not be loaded. Please try again.": "Sayfa yüklenemedi. Lütfen tekrar deneyin.",
     "，": ", ",
     ". This action cannot be undone.": ". Bu işlem geri alınamaz.",
     "...": "...",
@@ -2638,6 +2643,9 @@
     "Your identity has been verified. Continue to the provider to finish linking your account.": "Kimliğiniz doğrulandı. Hesabınızı bağlamayı tamamlamak için sağlayıcıya geçin.",
     "Your new backup codes are ready": "Yeni yedek kodlarınız hazır",
     "Your transaction history will appear here": "İşlem geçmişiniz burada görünecek",
-    "Zoom": "Yakınlaştır"
+    "Zoom": "Yakınlaştır",
+    "Source code": "Kaynak kodu",
+    "Source code (AGPL-3.0)": "Kaynak kodu (AGPL-3.0)",
+    "HisarWeb AI is based on New API (AGPL-3.0) by QuantumNous.": "HisarWeb AI, QuantumNous'un New API (AGPL-3.0) projesine dayanır."
   }
 }

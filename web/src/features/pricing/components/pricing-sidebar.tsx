@@ -34,9 +34,11 @@ import {
   ENDPOINT_TYPES,
   FILTER_ALL,
   QUOTA_TYPES,
+  SOLD_ENDPOINT_TYPES,
   getEndpointTypeLabels,
   getQuotaTypeLabels,
 } from '../constants'
+import { customerGroupLabel } from '../lib/customer-groups'
 import { hasTaskUsageSchema } from '../lib/dynamic-price'
 import { parseTags } from '../lib/filters'
 import type { PricingModel, PricingVendor } from '../types'
@@ -208,7 +210,7 @@ export const PricingSidebar = memo(function PricingSidebar(
     },
     ...props.groups.map((group) => ({
       value: group,
-      label: group,
+      label: customerGroupLabel(group, t),
       suffix: formatGroupRatio(props.groupRatios?.[group]),
     })),
   ]
@@ -255,13 +257,11 @@ export const PricingSidebar = memo(function PricingSidebar(
       label: endpointTypeLabels[ENDPOINT_TYPES.ALL],
       count: props.models.length,
     },
-    ...Object.entries(endpointTypeLabels)
-      .filter(([value]) => value !== ENDPOINT_TYPES.ALL)
-      .map(([value, label]) => ({
-        value,
-        label,
-        count: counts.endpoints.get(value) ?? 0,
-      })),
+    ...SOLD_ENDPOINT_TYPES.map((value) => ({
+      value,
+      label: endpointTypeLabels[value],
+      count: counts.endpoints.get(value) ?? 0,
+    })),
   ]
 
   return (

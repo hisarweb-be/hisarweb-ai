@@ -35,6 +35,7 @@ import {
 import { EXCLUDED_GROUPS, VIEW_MODES } from './constants'
 import { useFilters } from './hooks/use-filters'
 import { usePricingData } from './hooks/use-pricing-data'
+import { visibleCustomerGroups } from './lib/customer-groups'
 
 export function Pricing() {
   const { t } = useTranslation()
@@ -99,11 +100,15 @@ export function Pricing() {
 
   const availableGroups = useMemo(
     () =>
-      Object.keys(usableGroup || {}).filter(
-        (g) => !EXCLUDED_GROUPS.includes(g)
+      visibleCustomerGroups(
+        Object.keys(usableGroup || {}).filter(
+          (g) => !EXCLUDED_GROUPS.includes(g)
+        )
       ),
     [usableGroup]
   )
+
+  const modelCount = models?.length || 0
 
   const handleClearAll = useCallback(() => {
     clearFilters()
@@ -182,9 +187,11 @@ export function Pricing() {
               {t('Model Square')}
             </h1>
             <p className='text-muted-foreground/80 mt-3 text-sm sm:mt-4 sm:text-base'>
-              {t('This site currently has {{count}} models enabled', {
-                count: models?.length || 0,
-              })}
+              {modelCount > 0
+                ? t('This site currently has {{count}} models enabled', {
+                    count: modelCount,
+                  })
+                : t('No models have been added yet')}
             </p>
             <p className='text-muted-foreground/60 mx-auto mt-2 max-w-2xl text-xs leading-relaxed sm:text-sm'>
               {t(

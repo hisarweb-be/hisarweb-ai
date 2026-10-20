@@ -139,6 +139,33 @@ describe('pricing controls', () => {
     ).toBeVisible()
   })
 
+  it('names the sold groups and offers only the endpoint types that are sold', () => {
+    const props = toolbarProps()
+    const model: PricingModel = {
+      id: 1,
+      model_name: 'text-model',
+      quota_type: 0,
+      model_ratio: 1,
+      completion_ratio: 1,
+      enable_groups: ['free'],
+      supported_endpoint_types: ['openai', 'image-generation', 'openai-video'],
+    }
+    render(
+      <PricingSidebar
+        {...props}
+        groups={['free', 'paid']}
+        groupRatios={{ free: 1, paid: 1 }}
+        models={[model]}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: /^Free/ })).toBeVisible()
+    expect(screen.getByRole('button', { name: /^Paid/ })).toBeVisible()
+    expect(screen.getByRole('button', { name: /^Chat\s*1$/ })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /^Image\s*\d/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Video\s*\d/ })).toBeNull()
+  })
+
   it('changes the token unit and keeps the selected unit pressed when clicked again', async () => {
     const props = toolbarProps()
     const user = userEvent.setup()

@@ -20,6 +20,7 @@ import { Link } from '@tanstack/react-router'
 import { Fragment, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { AttributionNotice } from '@/components/attribution-notice'
 import { useStatus } from '@/hooks/use-status'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { DEFAULT_SYSTEM_NAME } from '@/lib/constants'
@@ -119,19 +120,15 @@ function LegalLinks(props: { leadingSeparator?: boolean }) {
 
 // inline=true returns just the inner span for composition in a parent flex
 // row. inline=false wraps in a centered/right-aligned div (default).
+// The attribution is a legal notice, not marketing copy: AGPL-3.0 section 7
+// requires it to stay visible, and the upstream NOTICE line is quoted verbatim.
+// "New API" and "QuantumNous" appear there and nowhere else in the interface.
 function ProjectAttribution(props: { currentYear: number; inline?: boolean }) {
-  const { t } = useTranslation()
   const content = (
     <span className='text-muted-foreground/45'>
-      &copy; {props.currentYear} HisarWeb AI ·{' '}
-      <a
-        href='https://github.com/hisarweb-be/hisarweb-ai'
-        target='_blank'
-        rel='noopener noreferrer'
-        className='text-foreground/70 hover:text-foreground font-medium transition-colors'
-      >
-        {t('Based on New API (AGPL-3.0)')}
-      </a>
+      &copy; {props.currentYear} HisarWeb AI
+      <br />
+      <AttributionNotice />
     </span>
   )
   if (props.inline) {
@@ -158,30 +155,14 @@ export function Footer(props: FooterProps) {
   const isDemoSiteMode = Boolean(demoSiteEnabled)
   const currentYear = new Date().getFullYear()
 
-  // Only our own documentation page is offered; the upstream project's wiki is
-  // not written for our customers, so those links are gone.
+  // Only our own documentation page is offered; the upstream project's wiki and
+  // its related projects are not written for our customers, so those links are
+  // gone.
   const fallbackColumns = useMemo<FooterColumnProps[]>(
     () => [
       {
         title: t('footer.columns.docs.title'),
-        links: [{ text: t('Docs'), href: 'https://api.hisarweb.be/docs' }],
-      },
-      {
-        title: t('footer.columns.related.title'),
-        links: [
-          {
-            text: t('footer.columns.related.links.oneApi'),
-            href: 'https://github.com/songquanpeng/one-api',
-          },
-          {
-            text: t('footer.columns.related.links.midjourney'),
-            href: 'https://github.com/novicezk/midjourney-proxy',
-          },
-          {
-            text: t('footer.columns.related.links.newApiKeyTool'),
-            href: 'https://github.com/Calcium-Ion/new-api-key-tool',
-          },
-        ],
+        links: [{ text: t('Docs'), href: '/docs' }],
       },
     ],
     [t]

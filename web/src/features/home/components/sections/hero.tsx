@@ -51,7 +51,7 @@ export function Hero(props: HeroProps) {
   // Our own documentation page is the fallback; the upstream project's wiki is
   // not written for our customers.
   const docsUrl =
-    (status?.docs_link as string | undefined) || 'https://api.hisarweb.be/docs'
+    (status?.docs_link as string | undefined) || '/docs'
 
   const renderDocsButton = () => {
     const isExternal = docsUrl.startsWith('http')
