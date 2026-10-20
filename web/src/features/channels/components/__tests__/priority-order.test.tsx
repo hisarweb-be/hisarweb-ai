@@ -34,7 +34,7 @@ import {
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
-import { api } from '@/lib/api'
+import { api, type ApiRequestConfig } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { CHANNEL_PRIORITY_GUIDE_KEYS } from '../../constants'
@@ -122,7 +122,7 @@ beforeEach(() => {
     role: 100,
     group: 'default',
   })
-  vi.spyOn(api, 'get').mockImplementation(async (url, config) => {
+  vi.spyOn(api, 'get').mockImplementation(async (url, config?: ApiRequestConfig) => {
     if (url === '/api/channel/priority/order') {
       return { data: { success: true, data: current } }
     }

@@ -384,10 +384,14 @@ func migrateDB() error {
 		&HwFirstPurchaseClaim{},
 		&HwFreeCreditClaim{},
 		&HwOrder{},
+		&HwMailLog{},
 		&HwAffiliateRetry{},
 		&HwPriceSnapshot{},
 		&HwQualityRun{},
 		&HwQualityScore{},
+		&HwStatusSample{},
+		&HwIncident{},
+		&HwCreditExtension{},
 	)
 	if err != nil {
 		return err
