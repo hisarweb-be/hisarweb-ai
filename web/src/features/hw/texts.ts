@@ -76,15 +76,20 @@ const tr = {
 
   faqTitle: 'Sık sorulan sorular',
   faq1Q: 'API anahtarı nedir?',
-  faq1A: 'Uygulamanızın HisarWeb AI modellerine bağlanmasını sağlayan gizli bir metindir. Anahtarı yalnızca kendi sunucunuzda saklayın.',
+  faq1A:
+    'Uygulamanızın HisarWeb AI modellerine bağlanmasını sağlayan gizli bir metindir. Anahtarı yalnızca kendi sunucunuzda saklayın.',
   faq2Q: 'Nasıl ödeme yapabilirim?',
-  faq2A: 'Kredi kartı veya Revolut ile TL olarak ödeyebilirsiniz. Ödeme sayfası sipariş sırasında açılır.',
+  faq2A:
+    'Kredi kartı veya Revolut ile TL olarak ödeyebilirsiniz. Ödeme sayfası sipariş sırasında açılır.',
   faq3Q: 'Bakiyem ne kadar süre geçerli?',
-  faq3A: 'Satın aldığınız bakiye 30 gün, ücretsiz deneme bakiyesi 14 gün geçerlidir. Süresi dolan bakiye kullanılamaz.',
+  faq3A:
+    'Satın aldığınız bakiye 30 gün, ücretsiz deneme bakiyesi 14 gün geçerlidir. Süresi dolan bakiye kullanılamaz.',
   faq4Q: 'Abonelik var mı?',
-  faq4A: 'Hayır. Aylık ücret yok; yalnızca yüklediğiniz bakiyeyi kullanırsınız.',
+  faq4A:
+    'Hayır. Aylık ücret yok; yalnızca yüklediğiniz bakiyeyi kullanırsınız.',
   faq5Q: 'Hangi modelleri kullanabilirim?',
-  faq5A: 'Modellerin listesi ve güncel fiyatları fiyat karşılaştırma sayfasında yazar.',
+  faq5A:
+    'Modellerin listesi ve güncel fiyatları fiyat karşılaştırma sayfasında yazar.',
 
   finalCtaTitle: 'Bugün başlayın',
   finalCtaBody:
@@ -134,7 +139,11 @@ const tr = {
   compareInputLabel: 'Aylık girdi token sayısı',
   compareOutputLabel: 'Aylık çıktı token sayısı',
   compareSubmit: 'Karşılaştır',
+  compareResultTitle: 'Karşılaştırma sonucu',
+  compareResultLead: '{model} · ayda {input} girdi / {output} çıktı token',
   compareOfficial: 'Resmî liste fiyatı',
+  compareOfficialUsd: 'Resmî liste fiyatı (USD)',
+  compareOfficialTry: 'Resmî liste fiyatı (TL)',
   compareOursFirst: 'HisarWeb AI fiyatı (ilk alışveriş)',
   compareOursRepeat: 'HisarWeb AI fiyatı (sonraki alışverişler)',
   compareSavingFirst: 'İlk alışverişte tasarruf: {amount}',
@@ -143,6 +152,8 @@ const tr = {
   comparePriceDate: 'Fiyat tarihi',
   compareFxSource: 'Kur kaynağı',
   compareFxDate: 'Kur tarihi',
+  compareFxRate: 'Kur (1 USD)',
+  compareStaleTitle: 'Fiyat verisi güncel olmayabilir',
   compareStale:
     'Uyarı: fiyat verisi güncel olmayabilir. Son başarılı güncellemenin değerleri gösteriliyor.',
   compareKdv: 'Tüm fiyatlar KDV dahil ve TL olarak gösterilir.',
@@ -160,6 +171,8 @@ const tr = {
     'Henüz yayınlanmış bir ölçüm yok. İlk ölçüm tamamlandığında sonuçlar burada görünecek.',
   qualityMeasuredAt: 'Ölçüm tarihi',
   qualityTaskCount: 'Görev sayısı',
+  qualityModelColumn: 'Model',
+  qualityRunLine: '{tasks} görev · görev seti {version}',
   qualityScore: 'Ortalama puan',
   qualityLatency: 'Ortalama yanıt süresi',
   qualityLatencyUnit: '{ms} ms',
@@ -216,15 +229,19 @@ const en: Record<HwTextKey, string> = {
 
   faqTitle: 'Frequently asked questions',
   faq1Q: 'What is an API key?',
-  faq1A: 'A secret string that lets your application reach the HisarWeb AI models. Keep it on your own server only.',
+  faq1A:
+    'A secret string that lets your application reach the HisarWeb AI models. Keep it on your own server only.',
   faq2Q: 'How can I pay?',
-  faq2A: 'With a card or Revolut, in Turkish lira. The payment page opens while you order.',
+  faq2A:
+    'With a card or Revolut, in Turkish lira. The payment page opens while you order.',
   faq3Q: 'How long is my balance valid?',
-  faq3A: 'Balance you buy is valid for 30 days; trial credit for 14 days. Expired balance cannot be used.',
+  faq3A:
+    'Balance you buy is valid for 30 days; trial credit for 14 days. Expired balance cannot be used.',
   faq4Q: 'Is there a subscription?',
   faq4A: 'No. There is no monthly fee; you only spend the balance you top up.',
   faq5Q: 'Which models can I use?',
-  faq5A: 'The list of models and their current prices is on the price comparison page.',
+  faq5A:
+    'The list of models and their current prices is on the price comparison page.',
 
   finalCtaTitle: 'Start today',
   finalCtaBody:
@@ -274,7 +291,11 @@ const en: Record<HwTextKey, string> = {
   compareInputLabel: 'Monthly input tokens',
   compareOutputLabel: 'Monthly output tokens',
   compareSubmit: 'Compare',
+  compareResultTitle: 'Comparison result',
+  compareResultLead: '{model} · {input} input / {output} output tokens a month',
   compareOfficial: 'Official list price',
+  compareOfficialUsd: 'Official list price (USD)',
+  compareOfficialTry: 'Official list price (TRY)',
   compareOursFirst: 'HisarWeb AI price (first purchase)',
   compareOursRepeat: 'HisarWeb AI price (later purchases)',
   compareSavingFirst: 'Saving on the first purchase: {amount}',
@@ -283,6 +304,8 @@ const en: Record<HwTextKey, string> = {
   comparePriceDate: 'Price date',
   compareFxSource: 'Rate source',
   compareFxDate: 'Rate date',
+  compareFxRate: 'Rate (1 USD)',
+  compareStaleTitle: 'The price data may be out of date',
   compareStale:
     'Warning: the price data may be out of date. The values of the last successful update are shown.',
   compareKdv: 'All prices are shown in TRY and include VAT.',
@@ -300,6 +323,8 @@ const en: Record<HwTextKey, string> = {
     'No measurement has been published yet. The results appear here once the first one is complete.',
   qualityMeasuredAt: 'Measured on',
   qualityTaskCount: 'Tasks',
+  qualityModelColumn: 'Model',
+  qualityRunLine: '{tasks} tasks · task set {version}',
   qualityScore: 'Average score',
   qualityLatency: 'Average response time',
   qualityLatencyUnit: '{ms} ms',
@@ -333,6 +358,7 @@ export function fillHwText(text: string, vars?: HwTextVars): string {
 /** Returns the text of the active interface language, Turkish by default. */
 export function useHwText(): (key: HwTextKey, vars?: HwTextVars) => string {
   const { i18n } = useTranslation()
-  const dictionary = hwTexts[pickHwLanguage(i18n.resolvedLanguage ?? i18n.language)]
+  const dictionary =
+    hwTexts[pickHwLanguage(i18n.resolvedLanguage ?? i18n.language)]
   return (key, vars) => fillHwText(dictionary[key], vars)
 }
