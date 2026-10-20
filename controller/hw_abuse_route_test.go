@@ -23,7 +23,7 @@ import (
 // runs token authentication, the free-group guard and distribution in the
 // production order.
 func (e *hwEnv) hwAbuseRouter() *gin.Engine {
-	require.NoError(e.t, e.db.AutoMigrate(&model.HwAccountFlag{}))
+	require.NoError(e.t, e.db.AutoMigrate(&model.HwAccountFlag{}, &model.HwCreditPackage{}, &model.HwCreditExtension{}))
 	router := gin.New()
 	router.Use(middleware.RequestId())
 	v1 := router.Group("/v1")

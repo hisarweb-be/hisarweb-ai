@@ -25,7 +25,7 @@ func hwAdminTestSetup(t *testing.T) (frozenUser model.User, admin model.User) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	model.DB = db
-	require.NoError(t, db.AutoMigrate(&model.HwAccountFlag{}, &model.User{}))
+	require.NoError(t, db.AutoMigrate(&model.HwAccountFlag{}, &model.User{}, &model.HwCreditPackage{}, &model.HwCreditExtension{}))
 
 	frozenUser = model.User{
 		Username: "hw-frozen-" + common.GetRandomString(6), Password: "x",

@@ -35,7 +35,7 @@ func TestHwFreeGroupRateLimitCoversEveryBillableRoute(t *testing.T) {
 	t.Setenv("SQL_DSN", "")
 	require.NoError(t, model.InitDB())
 	database := model.DB
-	require.NoError(t, database.AutoMigrate(&model.User{}, &model.Token{}, &model.HwAccountFlag{}))
+	require.NoError(t, database.AutoMigrate(&model.User{}, &model.Token{}, &model.HwAccountFlag{}, &model.HwCreditPackage{}, &model.HwCreditExtension{}))
 	t.Cleanup(func() {
 		sqlDB, closeErr := database.DB()
 		require.NoError(t, closeErr)

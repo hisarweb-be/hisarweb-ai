@@ -32,7 +32,7 @@ func hwPhoneStepTestSetup(t *testing.T) {
 	require.NoError(t, model.DB.AutoMigrate(
 		&model.HwCreditPackage{}, &model.HwUserSignal{}, &model.HwFirstPurchaseClaim{},
 		&model.HwFreeCreditClaim{}, &model.HwAccountFlag{}, &model.HwSignupIp{},
-		&model.HwTelegramUpdate{},
+		&model.HwTelegramUpdate{}, &model.HwCreditExtension{},
 	))
 	for _, table := range []string{
 		"hw_credit_packages", "hw_user_signals", "hw_first_purchase_claims",
