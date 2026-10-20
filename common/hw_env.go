@@ -14,6 +14,12 @@ const (
 	// HwAppEnvProduction is the APP_ENV value that marks a real deployment.
 	HwAppEnvProduction = "production"
 
+	// HwAppEnvDevelopment and HwAppEnvTest are the only values that turn the
+	// production guards off. Every other value, including an unset variable,
+	// counts as production.
+	HwAppEnvDevelopment = "development"
+	HwAppEnvTest        = "test"
+
 	// HwUpstreamPaymentsEnv re-registers the payment routes of the upstream
 	// project (Stripe, Creem, Waffo, Waffo Pancake, Epay and their webhooks).
 	// They stay unregistered unless this is explicitly true: HisarWeb AI sells
@@ -22,9 +28,17 @@ const (
 	HwUpstreamPaymentsEnv = "HW_UPSTREAM_PAYMENTS_ENABLED"
 )
 
-// HwIsProduction reports whether this process runs as a real deployment.
+// HwIsProduction reports whether this process runs as a real deployment. The
+// guard fails closed: a server only counts as non-production when it says so
+// explicitly, through development or test. An unset or misspelled APP_ENV
+// therefore keeps every production guard on instead of silently dropping them.
 func HwIsProduction() bool {
-	return strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), HwAppEnvProduction)
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("APP_ENV"))) {
+	case HwAppEnvDevelopment, HwAppEnvTest:
+		return false
+	default:
+		return true
+	}
 }
 
 // HwUpstreamPaymentsEnabled reports whether the upstream payment routes are

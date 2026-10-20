@@ -10,6 +10,7 @@ ongemoeid; die blijven voor upstream-releases en lokale ontwikkeling.
 | Soort | Naam | Verplicht | Betekenis |
 |---|---|---|---|
 | poort | `APP_HTTP_PORT` | nee (3000) | hostpoort die naar de containerpoort 3000 gaat |
+| app | `APP_ENV` | nee (vast `production` in de compose) | productiestand. De compose zet hem vast op `production`, nooit via `${...}`: alleen `development` of `test` zet de productiecontroles uit, een lege of onbekende waarde geldt als productie |
 | app | `PORT` | nee (3000) | poort binnen de container; laat staan |
 | app | `SESSION_SECRET` | ja | souscheidsleutel voor sessies; willekeurig, minstens 32 tekens |
 | app | `CRYPTO_SECRET` | ja | versleutelt opgeslagen geheimen in de database (o.a. kanaalsleutels); nooit wijzigen na de eerste start |

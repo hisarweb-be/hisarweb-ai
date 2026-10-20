@@ -21,6 +21,10 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      # Fixed, never interpolated: this compose is the customer-facing
+      # deployment, and APP_ENV decides whether the production guards are on
+      # (setup token, secure cookies, no default administrator password).
+      APP_ENV: "production"
       PORT: "3000"
       TZ: ${TZ:-Europe/Istanbul}
       SQL_DSN: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}?sslmode=disable

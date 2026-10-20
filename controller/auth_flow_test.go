@@ -361,7 +361,7 @@ func TestHwProductionRefusesDefaultAdminLogin(t *testing.T) {
 	assert.Contains(t, response.Body.String(), "Username or password is incorrect", "a refusal must look like any other failed login")
 	assert.Equal(t, 0, queries, "the production refusal must not consult the stored administrator row")
 
-	t.Setenv("APP_ENV", "")
+	t.Setenv("APP_ENV", common.HwAppEnvDevelopment)
 	queries = 0
 	response = securityEnrollmentRequest(http.MethodPost, "/api/user/login", body, "", service.AuthIdentity{}, Login)
 	assert.Positive(t, queries, "outside production the same pair must reach the normal credential lookup")
