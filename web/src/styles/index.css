@@ -30,6 +30,17 @@ For commercial licensing, please contact support@quantumnous.com
 @import './theme.css';
 @import './theme-presets.css';
 
+/* HisarWeb huisstijl: Inter is het schrift van hisarweb.be (public/fonts,
+   OFL). Lokaal meegeleverd, zodat er geen netwerkverzoek aan een font-CDN
+   nodig is en de eerste weergave niet wacht. */
+@font-face {
+  font-family: 'Inter var';
+  src: url('/fonts/inter-var.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   :root {
     /* Mobile browser toolbars change dvh; 50% positioning and vh still use
