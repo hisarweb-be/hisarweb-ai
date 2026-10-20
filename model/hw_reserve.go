@@ -15,9 +15,13 @@ import (
 // Only the window and the log aggregation live here. The rule itself, the
 // source of the bureau usage and the gate sit in service/ and middleware/.
 const (
-	// HwReserveWindowSeconds is the length of a reserve window. Because it
-	// divides a day evenly, every window starts on a whole UTC hour.
+	// HwReserveWindowSeconds is the length of a reserve window. The windows of
+	// a day start at 00, 05, 10, 15 and 20 UTC; because five of them do not fit
+	// in a day, the last one runs from 20:00 to midnight and is an hour shorter.
 	HwReserveWindowSeconds int64 = 5 * 3600
+
+	// HwReserveLastWindowSeconds is the short last window of a day.
+	HwReserveLastWindowSeconds int64 = 4 * 3600
 
 	// HwWindowCapacityUSDOption is the cost of the shared capacity per window,
 	// in US dollars. Empty or zero means "unknown", and the gate then refuses
@@ -45,15 +49,17 @@ const (
 )
 
 // HwReserveWindow returns the reserve window that contains now, as Unix
-// seconds: [windowStart, windowEnd). The computation is done in UTC and does
-// not depend on the server timezone.
+// seconds: [windowStart, windowEnd). Windows restart every day at 00 UTC and
+// start at 00, 05, 10, 15 and 20; the last one ends at the next midnight. The
+// computation is done in UTC and does not depend on the server timezone.
 func HwReserveWindow(now time.Time) (windowStart int64, windowEnd int64) {
-	unix := now.UTC().Unix()
-	offset := unix % HwReserveWindowSeconds
-	if offset < 0 {
-		offset += HwReserveWindowSeconds
+	utc := now.UTC()
+	dayStart := time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, time.UTC).Unix()
+	slot := int64(utc.Hour()) / 5
+	windowStart = dayStart + slot*HwReserveWindowSeconds
+	if slot == 4 {
+		return windowStart, dayStart + 24*3600
 	}
-	windowStart = unix - offset
 	return windowStart, windowStart + HwReserveWindowSeconds
 }
 
