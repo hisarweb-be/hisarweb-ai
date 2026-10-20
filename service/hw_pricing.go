@@ -1,0 +1,512 @@
+package service
+
+// Daily TL pricing for HisarWeb AI: a master-node job fetches the open LiteLLM
+// price list and the TCMB USD/TRY rate once a day, stores both as one snapshot,
+// and publishes the rate through the HwTryPerUsd option. Every TRY amount the
+// customer sees is derived from that snapshot with decimal arithmetic only.
+
+import (
+	"context"
+	"encoding/xml"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
+
+	"github.com/shopspring/decimal"
+)
+
+// Option keys and built-in source URLs. The URL options are empty by default;
+// an empty option means the built-in URL below.
+const (
+	HwOptionPriceListURL  = "HwPriceListURL"
+	HwOptionFxURL         = "HwFxURL"
+	HwOptionTryPerUsd     = "HwTryPerUsd"
+	HwOptionTryPerUsdDate = "HwTryPerUsdDate"
+
+	HwDefaultPriceListURL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
+	HwDefaultFxURL        = "https://www.tcmb.gov.tr/kurlar/today.xml"
+)
+
+const (
+	hwPriceSnapshotInterval = 24 * time.Hour
+	hwPriceFetchTimeout     = 60 * time.Second
+	// hwPriceMaxBodyBytes caps both downloads; the real price list is a few MB.
+	hwPriceMaxBodyBytes = 32 << 20
+	// HwMaxTokensPerMonth bounds the comparator's monthly token volumes. The
+	// bound also guards the micro-dollar multiplication against int64
+	// overflow: 2 x 1e11 x 1.68e8 (the priciest listed chat price) stays far
+	// below 9.2e18.
+	HwMaxTokensPerMonth = 100_000_000_000
+)
+
+var (
+	// ErrHwInvalidRate rejects a missing, zero, negative, or unparseable rate.
+	ErrHwInvalidRate = errors.New("USD/TRY rate is missing or invalid")
+	// ErrHwNegativeUsdValue rejects a negative dollar amount; a price the
+	// customer sees can never be negative.
+	ErrHwNegativeUsdValue = errors.New("dollar value must not be negative")
+)
+
+// HwSoldModel links the model name we sell to its key in the open price list.
+// The name is the customer-facing own name; the price list key never appears in
+// a customer-facing answer.
+type HwSoldModel struct {
+	Name     string
+	PriceKey string
+}
+
+// hwSoldModels is the catalog of models we sell under our own names. The
+// comparator and the quality meter both read it, so a model appears on the site
+// only when it is here.
+var hwSoldModels = []HwSoldModel{
+	{Name: "claude-opus-5-5", PriceKey: "claude-opus-5-5"},
+	{Name: "claude-sonnet-5-5", PriceKey: "claude-sonnet-5-5"},
+	{Name: "claude-sonnet-5", PriceKey: "claude-sonnet-5"},
+	{Name: "claude-haiku-4-5", PriceKey: "claude-haiku-4-5"},
+	{Name: "gpt-5.2", PriceKey: "gpt-5.2"},
+	{Name: "gpt-5.4", PriceKey: "gpt-5.4"},
+	{Name: "gpt-5.4-mini", PriceKey: "gpt-5.4-mini"},
+	{Name: "gemini-3.5-flash", PriceKey: "gemini-3.5-flash"},
+}
+
+// HwSoldModelNames returns the own names of every model in the catalog.
+func HwSoldModelNames() []string {
+	names := make([]string, 0, len(hwSoldModels))
+	for _, sold := range hwSoldModels {
+		names = append(names, sold.Name)
+	}
+	return names
+}
+
+func hwFindSoldModel(name string) (HwSoldModel, bool) {
+	for _, sold := range hwSoldModels {
+		if sold.Name == name {
+			return sold, true
+		}
+	}
+	return HwSoldModel{}, false
+}
+
+// hwOptionValue reads one option with the option lock held.
+func hwOptionValue(key string) string {
+	common.OptionMapRWMutex.RLock()
+	defer common.OptionMapRWMutex.RUnlock()
+	return common.OptionMap[key]
+}
+
+// HwPriceListURL returns the configured price list URL, or the built-in one.
+func HwPriceListURL() string {
+	if url := strings.TrimSpace(hwOptionValue(HwOptionPriceListURL)); url != "" {
+		return url
+	}
+	return HwDefaultPriceListURL
+}
+
+// HwFxURL returns the configured exchange rate URL, or the built-in one.
+func HwFxURL() string {
+	if url := strings.TrimSpace(hwOptionValue(HwOptionFxURL)); url != "" {
+		return url
+	}
+	return HwDefaultFxURL
+}
+
+// hwPriceListEntry keeps each price as raw JSON text so the decimal string is
+// parsed exactly as published (the list uses scientific notation like 4e-06),
+// never through a float.
+type hwPriceListEntry struct {
+	InputCostPerToken  common.RawMessage `json:"input_cost_per_token"`
+	OutputCostPerToken common.RawMessage `json:"output_cost_per_token"`
+	Mode               string            `json:"mode"`
+}
+
+// hwParsePriceList decodes the open price list document.
+func hwParsePriceList(body []byte) (map[string]hwPriceListEntry, error) {
+	var list map[string]hwPriceListEntry
+	if err := common.Unmarshal(body, &list); err != nil {
+		return nil, fmt.Errorf("price list is not valid JSON: %w", err)
+	}
+	return list, nil
+}
+
+// hwMicroUsdPerMillion converts a per-token price (decimal text) into integer
+// micro-dollars per million tokens: USD/token x 1,000,000 tokens x 1,000,000
+// micro/USD. A price smaller than a micro-dollar per million tokens is rounded
+// to the nearest micro-dollar; that is far below any real model price.
+func hwMicroUsdPerMillion(raw []byte) (int64, error) {
+	text := strings.TrimSpace(string(raw))
+	if text == "" || text == "null" {
+		return 0, errors.New("price field is empty")
+	}
+	perToken, err := decimal.NewFromString(text)
+	if err != nil {
+		return 0, fmt.Errorf("price %q is not a number", text)
+	}
+	if perToken.IsNegative() {
+		return 0, fmt.Errorf("price %q is negative", text)
+	}
+	return perToken.Mul(decimal.NewFromInt(1_000_000_000_000)).Round(0).IntPart(), nil
+}
+
+// hwExtractSoldModelPrices picks our catalog models out of the parsed price
+// list. A model missing from the list is simply absent from the result; the
+// comparator then reports no price data for it instead of inventing one.
+func hwExtractSoldModelPrices(list map[string]hwPriceListEntry) (map[string]model.HwModelPrice, error) {
+	prices := make(map[string]model.HwModelPrice, len(hwSoldModels))
+	for _, sold := range hwSoldModels {
+		entry, ok := list[sold.PriceKey]
+		if !ok {
+			continue
+		}
+		inMicro, err := hwMicroUsdPerMillion(entry.InputCostPerToken)
+		if err != nil {
+			return nil, fmt.Errorf("model %s: input price: %w", sold.Name, err)
+		}
+		outMicro, err := hwMicroUsdPerMillion(entry.OutputCostPerToken)
+		if err != nil {
+			return nil, fmt.Errorf("model %s: output price: %w", sold.Name, err)
+		}
+		prices[sold.Name] = model.HwModelPrice{InputMicroUsd: inMicro, OutputMicroUsd: outMicro}
+	}
+	return prices, nil
+}
+
+// hwTcmbDocument mirrors the parts of the TCMB daily rates bulletin we need.
+type hwTcmbDocument struct {
+	XMLName    struct{} `xml:"Tarih_Date"`
+	Date       string   `xml:"Date,attr"`
+	Tarih      string   `xml:"Tarih,attr"`
+	Currencies []struct {
+		Code         string `xml:"CurrencyCode,attr"`
+		ForexSelling string `xml:"ForexSelling"`
+	} `xml:"Currency"`
+}
+
+// hwParseTcmbFx reads the USD forex-selling rate and the validity date from the
+// TCMB bulletin. The rate is kept as decimal text exactly as published; an
+// empty, non-numeric, zero, or negative rate is refused.
+func hwParseTcmbFx(body []byte) (decimal.Decimal, string, error) {
+	var doc hwTcmbDocument
+	if err := xml.Unmarshal(body, &doc); err != nil {
+		return decimal.Decimal{}, "", fmt.Errorf("rate document is not valid XML: %w", err)
+	}
+	rateText := ""
+	for _, currency := range doc.Currencies {
+		if currency.Code == "USD" {
+			rateText = strings.TrimSpace(currency.ForexSelling)
+			break
+		}
+	}
+	if rateText == "" {
+		return decimal.Decimal{}, "", errors.New("USD forex selling rate not found")
+	}
+	rate, err := decimal.NewFromString(rateText)
+	if err != nil {
+		return decimal.Decimal{}, "", fmt.Errorf("rate %q is not a number", rateText)
+	}
+	if !rate.IsPositive() {
+		return decimal.Decimal{}, "", fmt.Errorf("rate %q is not positive", rateText)
+	}
+	fxDate, err := hwTcmbFxDate(doc.Date, doc.Tarih)
+	if err != nil {
+		return decimal.Decimal{}, "", err
+	}
+	return rate, fxDate, nil
+}
+
+// hwTcmbFxDate picks the bulletin date. The Date attribute is MM/DD/YYYY and
+// Tarih is DD.MM.YYYY; either is accepted so a regional format change does not
+// break the fetch, and the result is normalized to YYYY-MM-DD.
+func hwTcmbFxDate(dateAttr string, tarihAttr string) (string, error) {
+	for _, candidate := range []struct {
+		text   string
+		layout string
+	}{{dateAttr, "01/02/2006"}, {tarihAttr, "02.01.2006"}} {
+		text := strings.TrimSpace(candidate.text)
+		if text == "" {
+			continue
+		}
+		parsed, err := time.Parse(candidate.layout, text)
+		if err != nil {
+			continue
+		}
+		return parsed.Format("2006-01-02"), nil
+	}
+	return "", errors.New("no parseable rate date in the rate document")
+}
+
+// hwFetchURL downloads one document with a size cap.
+func hwFetchURL(ctx context.Context, client *http.Client, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("source returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, hwPriceMaxBodyBytes))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) == 0 {
+		return nil, errors.New("source returned an empty document")
+	}
+	return body, nil
+}
+
+// HwFetchPriceSnapshot reads both sources once and assembles one snapshot. Any
+// failure is an error; the caller then keeps the previous snapshot and marks it
+// stale. No value is ever filled in from memory.
+func HwFetchPriceSnapshot(ctx context.Context, client *http.Client, priceListURL string, fxURL string, now time.Time) (*model.HwPriceSnapshot, error) {
+	if client == nil {
+		client = &http.Client{Timeout: hwPriceFetchTimeout}
+	}
+	priceBody, err := hwFetchURL(ctx, client, priceListURL)
+	if err != nil {
+		return nil, fmt.Errorf("price list fetch failed: %w", err)
+	}
+	fxBody, err := hwFetchURL(ctx, client, fxURL)
+	if err != nil {
+		return nil, fmt.Errorf("rate fetch failed: %w", err)
+	}
+	list, err := hwParsePriceList(priceBody)
+	if err != nil {
+		return nil, err
+	}
+	prices, err := hwExtractSoldModelPrices(list)
+	if err != nil {
+		return nil, err
+	}
+	if len(prices) == 0 {
+		return nil, errors.New("price list contains none of the sold models")
+	}
+	rate, fxDate, err := hwParseTcmbFx(fxBody)
+	if err != nil {
+		return nil, err
+	}
+	modelsJSON, err := common.Marshal(prices)
+	if err != nil {
+		return nil, err
+	}
+	return &model.HwPriceSnapshot{
+		PriceSourceUrl: priceListURL,
+		FxSourceUrl:    fxURL,
+		FetchedAt:      now.Unix(),
+		FxDate:         fxDate,
+		TryPerUsd:      rate.String(),
+		Models:         string(modelsJSON),
+		ListedCount:    len(list),
+	}, nil
+}
+
+// HwRefreshPriceSnapshot runs one fetch cycle: fetch, store, and publish the
+// rate option. On a failed fetch the previous snapshot stays and is marked
+// stale, so the site can show the old prices together with their date.
+func HwRefreshPriceSnapshot(ctx context.Context, client *http.Client, now time.Time) error {
+	snapshot, err := HwFetchPriceSnapshot(ctx, client, HwPriceListURL(), HwFxURL(), now)
+	if err != nil {
+		if markErr := model.HwMarkPriceSnapshotsStale(now.Unix()); markErr != nil {
+			common.SysError(common.LogText("failed to mark the price snapshot stale after a failed refresh (class %s)", hwPricingErrorClass(markErr)))
+		}
+		return err
+	}
+	if err := model.HwSavePriceSnapshot(snapshot); err != nil {
+		return err
+	}
+	rate, err := decimal.NewFromString(snapshot.TryPerUsd)
+	if err != nil {
+		return err
+	}
+	return hwApplyTryRateOption(rate, snapshot.FxDate)
+}
+
+// hwPricingErrorClass maps an error to a short log class. Log lines carry the
+// class and never the error text: a transport error can quote the URL with its
+// query string.
+func hwPricingErrorClass(err error) string {
+	switch {
+	case err == nil:
+		return "nil"
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
+		return "timeout"
+	default:
+		return "fetch"
+	}
+}
+
+// hwApplyTryRateOption publishes the daily rate through HwTryPerUsd, but only
+// when it is valid (checked by the parser) and newer than the published one.
+// The validity date travels in HwTryPerUsdDate; an equal or older date leaves
+// both options untouched.
+func hwApplyTryRateOption(rate decimal.Decimal, fxDate string) error {
+	if !rate.IsPositive() {
+		return ErrHwInvalidRate
+	}
+	publishedDate := strings.TrimSpace(hwOptionValue(HwOptionTryPerUsdDate))
+	if publishedDate != "" && publishedDate >= fxDate {
+		return nil
+	}
+	if err := model.UpdateOption(HwOptionTryPerUsd, rate.String()); err != nil {
+		return err
+	}
+	return model.UpdateOption(HwOptionTryPerUsdDate, fxDate)
+}
+
+// hwKdvFactor is the VAT factor 1.2 (20 % KDV): every TRY price the customer
+// sees already includes it.
+var hwKdvFactor = decimal.NewFromInt(6).Div(decimal.NewFromInt(5))
+
+// HwTryPrice converts a dollar amount into the TRY amount the customer sees.
+//
+// Formula (fixed by the project decision on pricing): TRY = USD x (TRY per
+// USD) x 1.2. The factor 1.2 adds the 20 % KDV, and the rate and every price
+// shown to the customer are inclusive of it. The result is rounded to whole
+// kuruş (two decimals, half away from zero) with decimal arithmetic only;
+// there is no float anywhere in the chain.
+func HwTryPrice(usdValue decimal.Decimal, tryPerUsd decimal.Decimal) (decimal.Decimal, error) {
+	if !tryPerUsd.IsPositive() {
+		return decimal.Decimal{}, ErrHwInvalidRate
+	}
+	if usdValue.IsNegative() {
+		return decimal.Decimal{}, ErrHwNegativeUsdValue
+	}
+	return usdValue.Mul(tryPerUsd).Mul(hwKdvFactor).Round(2), nil
+}
+
+var hwPriceSnapshotOnce sync.Once
+
+// StartHwPriceSnapshotJob starts the daily price snapshot job: one fetch at
+// start and then every 24 hours, only on the master node, once per process.
+// Each cycle is panic-guarded; a failed cycle keeps the old snapshot and marks
+// it stale.
+func StartHwPriceSnapshotJob() {
+	hwPriceSnapshotOnce.Do(func() {
+		if !common.IsMasterNode {
+			return
+		}
+		go func() {
+			common.SysLog(common.LogText("price snapshot job started: interval=%s", hwPriceSnapshotInterval))
+			runHwPriceSnapshotOnceSafely()
+			ticker := time.NewTicker(hwPriceSnapshotInterval)
+			defer ticker.Stop()
+			for range ticker.C {
+				runHwPriceSnapshotOnceSafely()
+			}
+		}()
+	})
+}
+
+func runHwPriceSnapshotOnceSafely() {
+	defer func() {
+		if r := recover(); r != nil {
+			common.SysError(common.LogText("price snapshot job panicked: %v", r))
+		}
+	}()
+	if err := HwRefreshPriceSnapshot(context.Background(), nil, time.Now()); err != nil {
+		common.SysError(common.LogText("price snapshot refresh failed (class %s); the previous snapshot stays and is marked stale", hwPricingErrorClass(err)))
+		return
+	}
+	common.SysLog(common.LogText("price snapshot refreshed"))
+}
+
+// HwComparePriceInput is the validated query of the price comparator.
+type HwComparePriceInput struct {
+	Model        string
+	InputTokens  int64
+	OutputTokens int64
+}
+
+// HwPriceComparison is the price comparison of one monthly usage volume. All
+// amounts are decimal values; TRY amounts include the 20 % KDV.
+type HwPriceComparison struct {
+	Model        string
+	InputTokens  int64
+	OutputTokens int64
+	OfficialUsd  decimal.Decimal
+	OfficialTry  decimal.Decimal
+	// FirstPurchaseTry is the payable amount for a first purchase (50 % off
+	// the first 1000 TRY of value), RepeatPurchaseTry for every later one
+	// (15 % off), both from the purchase pricing of the credit ledger.
+	FirstPurchaseTry  decimal.Decimal
+	RepeatPurchaseTry decimal.Decimal
+	SavingsFirstTry   decimal.Decimal
+	SavingsRepeatTry  decimal.Decimal
+	TryPerUsd         decimal.Decimal
+}
+
+var (
+	// ErrHwModelNotSold rejects a model name outside our catalog.
+	ErrHwModelNotSold = errors.New("model is not sold here")
+	// ErrHwNoPriceData reports a sold model without usable price data.
+	ErrHwNoPriceData = errors.New("no current price data for this model")
+)
+
+// HwComparePrice prices one monthly token volume against the newest snapshot.
+// The USD cost is exact integer arithmetic: (input tokens x input price +
+// output tokens x output price) in micro-dollars, where the prices are
+// micro-dollars per million tokens, scaled by 10^-12 with a decimal exponent —
+// no division, no rounding, no float.
+func HwComparePrice(snapshot *model.HwPriceSnapshot, input HwComparePriceInput) (*HwPriceComparison, error) {
+	sold, ok := hwFindSoldModel(input.Model)
+	if !ok {
+		return nil, ErrHwModelNotSold
+	}
+	// Defense in depth: the controller rejects these with a 400 first, the
+	// service never multiplies an unbounded number into a price.
+	if input.InputTokens < 0 || input.OutputTokens < 0 ||
+		input.InputTokens > HwMaxTokensPerMonth || input.OutputTokens > HwMaxTokensPerMonth {
+		return nil, fmt.Errorf("token counts must be between 0 and %d", HwMaxTokensPerMonth)
+	}
+	if snapshot == nil {
+		return nil, ErrHwNoPriceData
+	}
+	prices, err := snapshot.HwSnapshotModelPrices()
+	if err != nil {
+		return nil, err
+	}
+	price, ok := prices[sold.Name]
+	if !ok || price.InputMicroUsd <= 0 || price.OutputMicroUsd <= 0 {
+		return nil, ErrHwNoPriceData
+	}
+	rate, err := decimal.NewFromString(snapshot.TryPerUsd)
+	if err != nil || !rate.IsPositive() {
+		return nil, ErrHwInvalidRate
+	}
+	microTotal := input.InputTokens*price.InputMicroUsd + input.OutputTokens*price.OutputMicroUsd
+	officialUsd := decimal.New(microTotal, -12)
+	officialTry, err := HwTryPrice(officialUsd, rate)
+	if err != nil {
+		return nil, err
+	}
+	firstQuote, err := model.HwComputePurchase(officialTry, true)
+	if err != nil {
+		return nil, err
+	}
+	repeatQuote, err := model.HwComputePurchase(officialTry, false)
+	if err != nil {
+		return nil, err
+	}
+	return &HwPriceComparison{
+		Model:             sold.Name,
+		InputTokens:       input.InputTokens,
+		OutputTokens:      input.OutputTokens,
+		OfficialUsd:       officialUsd,
+		OfficialTry:       officialTry,
+		FirstPurchaseTry:  firstQuote.PayableTRY,
+		RepeatPurchaseTry: repeatQuote.PayableTRY,
+		SavingsFirstTry:   officialTry.Sub(firstQuote.PayableTRY),
+		SavingsRepeatTry:  officialTry.Sub(repeatQuote.PayableTRY),
+		TryPerUsd:         rate,
+	}, nil
+}
