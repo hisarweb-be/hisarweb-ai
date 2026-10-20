@@ -124,6 +124,19 @@ func HwQualityLatest(c *gin.Context) {
 	common.ApiSuccess(c, summary)
 }
 
+// HwStatus answers the public service status: the state of every own model, the
+// availability over the last thirty days and the recent outages, in Turkish and
+// English. It needs no login and quotes no supplier and no internal error text;
+// a read failure answers a neutral message.
+func HwStatus(c *gin.Context) {
+	answer, err := service.HwStatusNow(time.Now())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "status could not be read"})
+		return
+	}
+	common.ApiSuccess(c, answer)
+}
+
 // HwQualityRun starts one measurement pass. It is an admin action: it calls
 // every configured model over the full task set, which takes minutes.
 func HwQualityRun(c *gin.Context) {

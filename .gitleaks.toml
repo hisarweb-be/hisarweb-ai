@@ -1,0 +1,62 @@
+# gitleaks configuration for the HisarWeb AI fork of new-api.
+#
+# The default ruleset stays in force: [extend] useDefault = true means every
+# built-in rule still runs. The allowlists below only cover values that were
+# read one by one and found to be test doubles, masking patterns or public
+# constants. Nothing here allows a live credential: a new finding in any other
+# file still fails the scan.
+
+title = "hisarweb-ai"
+
+[extend]
+useDefault = true
+
+# The four masked-token tests seed tokens with obvious fake keys to prove the
+# API never returns them in a list, search, detail or update response.
+[[allowlists]]
+description = "Fake token keys that prove masking in controller/token_test.go"
+targetRules = ["generic-api-key"]
+paths = ['''^controller/token_test\.go$''']
+
+# The reasoning-suffix test sets an upstream model name through the context;
+# gitleaks reads "ContextKeyOriginalModel, \"...\"" as an assignment.
+[[allowlists]]
+description = "Model name passed through the gin context in relay/helper/reasoning_suffix_test.go"
+targetRules = ["generic-api-key"]
+paths = ['''^relay/helper/reasoning_suffix_test\.go$''']
+
+# The phone-step abuse test builds a device token from a fixed hex string. The
+# file was removed from the tree later, but it is still in the history.
+[[allowlists]]
+description = "Fixed fake device token in the phone-step abuse test"
+targetRules = ["generic-api-key"]
+paths = ['''^service/hw_phone_step_test\.go$''']
+
+# mask.go defines the regexes that redact api_key values and documents them
+# with one sample line; mask_test.go feeds that same sample in as a test case.
+# The rule flags its own patterns, which is not a credential.
+[[allowlists]]
+description = "Masking patterns and their documented sample in relaykit/relayconvert/kitutil"
+targetRules = ["gcp-api-key", "generic-api-key"]
+paths = ['''^relaykit/relayconvert/kitutil/mask(_test)?\.go$''']
+
+# createSignedJWT strips the PEM markers off the service-account key it is
+# given. The markers themselves are the literal strings flagged here.
+[[allowlists]]
+description = "PEM header and footer literals stripped in the Vertex service-account signer"
+targetRules = ["private-key"]
+paths = ['''^relay/channel/vertex/service_account\.go$''']
+
+# The dashboard sends this constant in the Auth-Version response header; it is
+# a public cache-busting value, not a key.
+[[allowlists]]
+description = "Public Auth-Version response header constant"
+targetRules = ["generic-api-key"]
+paths = ['''^middleware/auth\.go$''']
+
+# The Jimeng plugin compares product identifiers such as "jimeng_v30_pro".
+# gitleaks reads the "v30_pro" suffix of an identifier that contains "key".
+[[allowlists]]
+description = "Jimeng product identifiers compared in the task plugin"
+targetRules = ["generic-api-key"]
+paths = ['''^plugins/tasks/jimeng/plugin\.js$''']

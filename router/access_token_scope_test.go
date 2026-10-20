@@ -27,6 +27,8 @@ var accessTokenExemptRoutes = []string{
 	"GET /api/status",
 	"GET /api/uptime/status",
 	"GET /api/notice",
+	// The public service status is readable without any account.
+	"GET /api/hw/status",
 	"GET /api/user-agreement",
 	"GET /api/privacy-policy",
 	"GET /api/about",

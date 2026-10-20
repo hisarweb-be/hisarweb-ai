@@ -389,6 +389,9 @@ func migrateDB() error {
 		&HwPriceSnapshot{},
 		&HwQualityRun{},
 		&HwQualityScore{},
+		&HwStatusSample{},
+		&HwIncident{},
+		&HwCreditExtension{},
 	)
 	if err != nil {
 		return err

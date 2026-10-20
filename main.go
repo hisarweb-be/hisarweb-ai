@@ -388,5 +388,9 @@ func InitResources() error {
 	// fell below the warning level, once a day on the master node.
 	service.StartHwCustomerMailJob()
 
+	// Measure the public service status once a minute on the master node and
+	// extend the credit of the packages that ran during an outage.
+	service.StartHwStatusJob()
+
 	return nil
 }

@@ -48,15 +48,18 @@ function EmptyAboutState() {
         </div>
         <div className='space-y-4 text-sm'>
           <p>
-            {t('New API Project Repository:')}{' '}
             <a
-              href='https://github.com/QuantumNous/new-api'
+              href='https://github.com/hisarweb-be/hisarweb-ai'
               target='_blank'
               rel='noopener noreferrer'
               className='text-primary hover:underline'
             >
-              {t('https://github.com/QuantumNous/new-api')}
+              HisarWeb AI · github.com/hisarweb-be/hisarweb-ai
             </a>
+            <br />
+            <span className='text-muted-foreground'>
+              {t('Based on New API (AGPL-3.0)')}
+            </span>
           </p>
           <p className='text-muted-foreground'>
             <a
@@ -67,7 +70,7 @@ function EmptyAboutState() {
             >
               {t('NewAPI')}
             </a>{' '}
-            © {currentYear}{' '}
+            © 2023-{currentYear}{' '}
             <a
               href='https://github.com/QuantumNous'
               target='_blank'

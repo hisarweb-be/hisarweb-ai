@@ -1,0 +1,82 @@
+# Production compose for the HisarWeb AI gateway (fork of new-api).
+#
+# Every secret is read from the environment of the deployment platform; this
+# file only carries names. Coolify reads this file as a Docker Compose
+# application and fills the ${...} references from the app's environment
+# variables. See deploy/README-uitrol.md for the list and the rollout steps.
+name: hisarweb-ai
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: hisarweb-ai:prod
+    restart: unless-stopped
+    # One customer-facing gateway process: 512 MB and one CPU is the agreed
+    # ceiling (proposal in the H2 assignment).
+    mem_limit: 512m
+    cpus: 1.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: "3000"
+      TZ: ${TZ:-Europe/Istanbul}
+      SQL_DSN: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}?sslmode=disable
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+      CRYPTO_SECRET: ${CRYPTO_SECRET:?CRYPTO_SECRET is required}
+      HW_SIGNAL_SALT: ${HW_SIGNAL_SALT:?HW_SIGNAL_SALT is required}
+      # Single node: the in-process cache replaces Redis (no redis service here).
+      MEMORY_CACHE_ENABLED: "true"
+      # Behind the Coolify proxy over HTTPS, so the refresh cookie is Secure and
+      # the exact HTTPS origin(s) must be named.
+      SESSION_COOKIE_SECURE: "true"
+      SESSION_COOKIE_TRUSTED_URL: ${SESSION_COOKIE_TRUSTED_URL:?SESSION_COOKIE_TRUSTED_URL is required}
+      DEFAULT_LANGUAGE: ${DEFAULT_LANGUAGE:-tr}
+      ERROR_LOG_ENABLED: "true"
+      BATCH_UPDATE_ENABLED: "true"
+      NODE_NAME: ${NODE_NAME:-hisarweb-ai-1}
+      # Card payments (Revolut Merchant). Empty means the payment route refuses
+      # to start a payment instead of failing at the provider.
+      REVOLUT_SECRET_KEY: ${REVOLUT_SECRET_KEY:-}
+      REVOLUT_WEBHOOK_SECRET: ${REVOLUT_WEBHOOK_SECRET:-}
+      REVOLUT_API_BASE: ${REVOLUT_API_BASE:-}
+      REVOLUT_API_VERSION: ${REVOLUT_API_VERSION:-}
+      # Bureau reserve gate.
+      HW_BUREAU_USAGE_URL: ${HW_BUREAU_USAGE_URL:-}
+      HW_BUREAU_USAGE_TOKEN: ${HW_BUREAU_USAGE_TOKEN:-}
+      HW_WINDOW_CAPACITY_USD: ${HW_WINDOW_CAPACITY_USD:-}
+      HW_RESERVE_MODE: ${HW_RESERVE_MODE:-}
+    ports:
+      - "${APP_HTTP_PORT:-3000}:3000"
+    volumes:
+      - app_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  postgres:
+    image: postgres:17.11-alpine3.24
+    restart: unless-stopped
+    mem_limit: 512m
+    # No ports: the database is reachable only inside this compose network.
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+volumes:
+  app_data:
+  pg_data:

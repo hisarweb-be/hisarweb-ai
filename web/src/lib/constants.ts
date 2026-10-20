@@ -21,8 +21,20 @@ For commercial licensing, please contact support@quantumnous.com
  */
 
 // System Configuration Defaults
-export const DEFAULT_SYSTEM_NAME = 'New API'
+export const DEFAULT_SYSTEM_NAME = 'HisarWeb AI'
 export const DEFAULT_LOGO = '/logo.png'
+
+// The upstream build ships this name in `common.SystemName`; `/api/status`
+// returns it until an operator stores a SystemName option. For this service it
+// means "not configured", so the product name is shown instead.
+const UPSTREAM_DEFAULT_SYSTEM_NAME = 'New API'
+
+/** Branding name to show: the configured one, or the product default. */
+export function resolveSystemName(value?: string | null): string {
+  const name = value?.trim()
+  if (!name || name === UPSTREAM_DEFAULT_SYSTEM_NAME) return DEFAULT_SYSTEM_NAME
+  return name
+}
 
 // LocalStorage Keys
 export const STORAGE_KEYS = {
