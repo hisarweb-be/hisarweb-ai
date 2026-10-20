@@ -44,6 +44,19 @@ func GetSetup(c *gin.Context) {
 }
 
 func PostSetup(c *gin.Context) {
+	// In production the caller must prove it holds the setup secret; outside
+	// production this is a no-op.
+	if err := HwAuthorizeSetupToken(c); err != nil {
+		hwRefuseSetup(c, err)
+		return
+	}
+
+	// One setup at a time. The lock covers the root check and the creation, so
+	// a second concurrent request waits and then finds the system initialized
+	// instead of creating a second administrator.
+	hwSetupMu.Lock()
+	defer hwSetupMu.Unlock()
+
 	// Check if setup is already completed
 	if constant.Setup {
 		common.ApiErrorT(c, "The system is already initialized")
