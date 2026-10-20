@@ -1,5 +1,10 @@
 {
   "translation": {
+    "Free": "Ücretsiz",
+    "Paid": "Ücretli",
+    "No models have been added yet": "Henüz model eklenmedi",
+    "This page will be published soon.": "Bu sayfa yakında yayınlanacak.",
+    "The page could not be loaded. Please try again.": "Sayfa yüklenemedi. Lütfen tekrar deneyin.",
     "，": ", ",
     ". This action cannot be undone.": ". Bu işlem geri alınamaz.",
     "...": "...",

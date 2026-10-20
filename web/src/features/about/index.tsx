@@ -17,7 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
-import { Construction } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { AttributionNotice } from '@/components/attribution-notice'
@@ -27,28 +26,34 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { isHttpUrl, isLikelyHtml } from '@/lib/content-format'
 import { requireServerSuccess } from '@/lib/server-error-message'
 
+import { useHwText } from '../hw/texts'
 import { getAboutContent } from './api'
 
-function EmptyAboutState() {
-  const { t } = useTranslation()
+/**
+ * What a visitor reads while no about content is configured: the site's own
+ * short description, in Turkish unless English was chosen explicitly.
+ */
+function DefaultAboutContent() {
+  const text = useHwText()
 
   return (
-    <div className='flex min-h-[60vh] items-center justify-center p-8'>
-      <div className='max-w-2xl space-y-6 text-center'>
-        <div className='flex justify-center'>
-          <Construction className='text-muted-foreground h-24 w-24' />
-        </div>
-        <div className='space-y-2'>
-          <h2 className='text-2xl font-bold'>{t('No About Content Set')}</h2>
-          <p className='text-muted-foreground'>
-            {t(
-              'The administrator has not configured any about content yet. You can set it in the settings page, supporting HTML or URL.'
-            )}
-          </p>
-        </div>
-        <div className='text-muted-foreground text-xs'>
-          <AttributionNotice />
-        </div>
+    <div className='mx-auto max-w-3xl px-4 py-12'>
+      <h1 className='text-3xl font-semibold tracking-tight'>
+        {text('aboutDefaultTitle')}
+      </h1>
+      <div className='text-muted-foreground mt-4 space-y-3 leading-relaxed'>
+        <p>{text('aboutDefaultIntro')}</p>
+        <p>{text('aboutDefaultPayment')}</p>
+        <p>{text('aboutDefaultStatus')}</p>
+      </div>
+      <a
+        href='/durum'
+        className='text-primary mt-4 inline-block text-sm font-medium underline-offset-4 hover:underline'
+      >
+        {text('aboutDefaultStatusLink')}
+      </a>
+      <div className='text-muted-foreground mt-12 text-xs'>
+        <AttributionNotice />
       </div>
     </div>
   )
@@ -82,7 +87,7 @@ export function About() {
   if (!hasContent) {
     return (
       <PublicLayout>
-        <EmptyAboutState />
+        <DefaultAboutContent />
       </PublicLayout>
     )
   }

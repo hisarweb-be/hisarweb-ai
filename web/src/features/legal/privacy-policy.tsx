@@ -28,9 +28,6 @@ export function PrivacyPolicy() {
       title={t('Privacy Policy')}
       queryKey='privacy-policy'
       fetchDocument={getPrivacyPolicy}
-      emptyMessage={t(
-        'The administrator has not configured a privacy policy yet.'
-      )}
     />
   )
 }

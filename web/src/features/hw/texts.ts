@@ -274,6 +274,20 @@ const tr = {
   docsLinksTitle: 'Daha fazla',
   docsLinkStatus: 'Servis durumu (7/24)',
   docsLinkCompare: 'Fiyat karşılaştırma',
+
+  aboutDefaultTitle: 'HisarWeb AI hakkında',
+  aboutDefaultIntro:
+    'HisarWeb AI, yapay zekâ uygulamanız için tek bir API anahtarı sunar. Bakiyeyi Türk lirası ile yüklersiniz ve yalnızca kullandığınız kadar ödersiniz; gösterilen tüm fiyatlara KDV dahildir.',
+  aboutDefaultPayment:
+    'Ödemeyi kartla veya Revolut ile yapabilirsiniz. Faturalarınızı ve bakiye hareketlerinizi panodan görürsünüz.',
+  aboutDefaultStatus:
+    'Hizmet durumunu 7/24 durum sayfasından izleyebilirsiniz.',
+  aboutDefaultStatusLink: 'Durum sayfasına git',
+
+  retry: 'Tekrar dene',
+  rateLimited:
+    'Çok fazla istek gönderildi. Lütfen birkaç saniye sonra tekrar deneyin.',
+  statusScrollHint: 'Tüm sütunlar için tabloyu yana kaydırın.',
 } as const
 
 export type HwTextKey = keyof typeof tr
@@ -517,6 +531,19 @@ const en: Record<HwTextKey, string> = {
   docsLinksTitle: 'More',
   docsLinkStatus: 'Service status (24/7)',
   docsLinkCompare: 'Price comparison',
+
+  aboutDefaultTitle: 'About HisarWeb AI',
+  aboutDefaultIntro:
+    'HisarWeb AI gives your AI application one API key. You top up the balance in Turkish lira and pay only for what you use; every price shown includes VAT.',
+  aboutDefaultPayment:
+    'You can pay by card or with Revolut. Your invoices and balance movements are in the console.',
+  aboutDefaultStatus:
+    'You can follow the service status around the clock on the status page.',
+  aboutDefaultStatusLink: 'Go to the status page',
+
+  retry: 'Try again',
+  rateLimited: 'Too many requests. Please try again in a few seconds.',
+  statusScrollHint: 'Scroll the table sideways to see every column.',
 }
 
 export const hwTexts: Record<HwLanguage, Record<HwTextKey, string>> = { tr, en }

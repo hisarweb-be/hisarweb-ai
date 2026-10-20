@@ -28,6 +28,10 @@ import { GroupBadge } from '@/components/group-badge'
 import { StatusBadge } from '@/components/status-badge'
 import { getLobeIcon } from '@/lib/lobe-icon'
 
+import {
+  customerGroupLabel,
+  visibleCustomerGroups,
+} from '../lib/customer-groups'
 import { parseTags } from '../lib/filters'
 import type { PricingModel } from '../types'
 import { CachedPriceCell } from './cached-price-cell'
@@ -187,11 +191,16 @@ export function usePricingColumns(
       accessorKey: 'enable_groups',
       header: t('Groups'),
       cell: ({ row }) => {
-        const groups = row.original.enable_groups || []
+        const groups = visibleCustomerGroups(row.original.enable_groups || [])
         return (
           <BadgeListCell
             items={groups.map((group) => (
-              <GroupBadge key={group} group={group} size='sm' />
+              <GroupBadge
+                key={group}
+                group={group}
+                label={customerGroupLabel(group, t)}
+                size='sm'
+              />
             ))}
             tooltipClassName='max-w-[280px] p-2'
           />
