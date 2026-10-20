@@ -26,7 +26,11 @@ type ClaudeError struct {
 type ErrorType string
 
 const (
-	ErrorTypeNewAPIError     ErrorType = "new_api_error"
+	// ErrorTypeNewAPIError is the type of a gateway-local error. The value is
+	// what the client reads, so it stays neutral and does not name the upstream
+	// project; the Go constant keeps its historical name for the internal code
+	// that compares it.
+	ErrorTypeNewAPIError     ErrorType = "api_error"
 	ErrorTypeOpenAIError     ErrorType = "openai_error"
 	ErrorTypeClaudeError     ErrorType = "claude_error"
 	ErrorTypeMidjourneyError ErrorType = "midjourney_error"
