@@ -24,6 +24,7 @@ import { PublicLayout } from '@/components/layout'
 import { Footer } from '@/components/layout/components/footer'
 import { PageTransition } from '@/components/page-transition'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -38,10 +39,12 @@ import { toIntlLocale } from '@/i18n/languages'
 import { formatNumber } from '@/lib/format'
 
 import { getHwQualityLatest } from '../api'
+import { useSingleRetry } from '../hooks/use-single-retry'
 import { formatHwStamp } from '../lib/format'
+import { httpStatus } from '../lib/http-status'
 import { pickHwLanguage, useHwText } from '../texts'
 
-export function QualityMeter() {
+export function QualityMeter(props: { retryDelayMs?: number } = {}) {
   const t = useHwText()
   const { i18n } = useTranslation()
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
@@ -53,6 +56,14 @@ export function QualityMeter() {
     staleTime: 10 * 60 * 1000,
     meta: { errorToast: false },
   })
+
+  useSingleRetry(
+    () => {
+      void quality.refetch()
+    },
+    quality.isError,
+    props.retryDelayMs ?? 5000
+  )
 
   const summary = quality.data?.data
   const models = summary?.models ?? []
@@ -80,7 +91,24 @@ export function QualityMeter() {
         {quality.isError && (
           <Alert variant='destructive'>
             <AlertTitle>{t('qualityTitle')}</AlertTitle>
-            <AlertDescription>{t('qualityError')}</AlertDescription>
+            <AlertDescription>
+              <p>
+                {httpStatus(quality.error) === 429
+                  ? t('rateLimited')
+                  : t('qualityError')}
+              </p>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                className='mt-3'
+                onClick={() => {
+                  void quality.refetch()
+                }}
+              >
+                {t('retry')}
+              </Button>
+            </AlertDescription>
           </Alert>
         )}
 
