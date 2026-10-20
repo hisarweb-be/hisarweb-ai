@@ -35,6 +35,7 @@ const tr = {
   navBuy: 'Satın al',
   navCompare: 'Fiyat karşılaştırma',
   navQuality: 'Kalite ölçümleri',
+  navStatus: 'Durum',
 
   landingBadge: 'Türkiye için: TL fiyatlar, KDV dahil',
   landingTitle:
@@ -198,6 +199,50 @@ const tr = {
     'Bu sonuçlar sınırlı sayıda görevden oluşan bir örneklem ölçümüdür; her kullanım senaryosunu temsil etmez.',
   qualityError: 'Ölçüm verisi okunamadı. Lütfen tekrar deneyin.',
   qualityLoading: 'Ölçüm verisi yükleniyor…',
+
+  statusTitle: 'Hizmet durumu',
+  statusLead:
+    'HisarWeb AI modellerinin güncel durumu, son 30 günün kullanılabilirliği ve yaşanan kesintiler.',
+  statusOverallOperational: 'Tüm sistemler çalışıyor',
+  statusOverallOperationalBody:
+    'Ölçülen tüm modeller istekleri yanıtlıyor.',
+  statusOverallDegraded: 'Hizmette yavaşlama var',
+  statusOverallDegradedBody:
+    'Bazı istekler yavaş yanıt veriyor; hizmet çalışmaya devam ediyor.',
+  statusOverallOutage: 'Kesinti var',
+  statusOverallOutageBody:
+    'En az bir modelde kesinti var; ekip üzerinde çalışıyor.',
+  statusOperational: 'Çalışıyor',
+  statusDegraded: 'Yavaşlama',
+  statusOutage: 'Kesinti',
+  statusUpdatedAt: 'Son güncelleme: {time}',
+  statusAutoRefresh: 'Bu sayfa 60 saniyede bir kendini yeniler.',
+  statusModelsTitle: 'Modeller',
+  statusModelColumn: 'Model',
+  statusColumn: 'Durum',
+  statusAvailabilityColumn: 'Son {days} gün kullanılabilirlik',
+  statusAvailabilityValue: '%{percent}',
+  statusNoMeasurement: 'Henüz ölçüm yok',
+  statusIncidentsTitle: 'Kesintiler',
+  statusOngoingIncident: 'Süren kesinti',
+  statusRecentIncidents: 'Son kesintiler',
+  statusNoIncidents: 'Bu dönemde kayıtlı kesinti yok.',
+  statusIncidentStart: 'Başlangıç: {time}',
+  statusIncidentEnd: 'Bitiş: {time}',
+  statusIncidentOngoing: 'Devam ediyor',
+  statusIncidentDuration: 'Süre: {duration}',
+  statusDurationMinutes: '{minutes} dakika',
+  statusDurationHours: '{hours} saat {minutes} dakika',
+  statusDurationHoursOnly: '{hours} saat',
+  statusDurationBelowMinute: '1 dakikadan kısa',
+  statusExtensionTitle: 'Kesinti uzarsa bakiyeniz de uzar',
+  statusExtensionBody:
+    '15 dakikadan uzun süren bir kesintide, ücretli paketlerinizin süresi kesintinin süresi kadar otomatik olarak uzatılır. Bunun için bir şey yapmanız gerekmez.',
+  statusLoading: 'Durum bilgisi yükleniyor…',
+  statusError: 'Durum bilgisi okunamadı. Lütfen tekrar deneyin.',
+  statusEmpty: 'Henüz durum verisi yok',
+  statusEmptyBody:
+    'Durum ölçümü henüz başlamadı. İlk ölçümden sonra model durumları burada görünecek.',
 } as const
 
 export type HwTextKey = keyof typeof tr
@@ -207,6 +252,7 @@ const en: Record<HwTextKey, string> = {
   navBuy: 'Buy credit',
   navCompare: 'Price comparison',
   navQuality: 'Quality results',
+  navStatus: 'Status',
 
   landingBadge: 'For Turkey: prices in TRY, VAT included',
   landingTitle: 'Affordable API access to Claude and GPT models, paid in TRY',
@@ -366,6 +412,49 @@ const en: Record<HwTextKey, string> = {
     'These results are a sample over a limited task set; they do not represent every use case.',
   qualityError: 'The measurement data could not be loaded. Please try again.',
   qualityLoading: 'Loading the measurement…',
+
+  statusTitle: 'Service status',
+  statusLead:
+    'The current state of the HisarWeb AI models, the availability over the last 30 days and the outages that happened.',
+  statusOverallOperational: 'All systems are operational',
+  statusOverallOperationalBody: 'Every measured model answers requests.',
+  statusOverallDegraded: 'The service is slow',
+  statusOverallDegradedBody:
+    'Some requests are answering slowly; the service keeps working.',
+  statusOverallOutage: 'There is an outage',
+  statusOverallOutageBody:
+    'At least one model is in an outage; the team is working on it.',
+  statusOperational: 'Operational',
+  statusDegraded: 'Degraded',
+  statusOutage: 'Outage',
+  statusUpdatedAt: 'Last updated: {time}',
+  statusAutoRefresh: 'This page refreshes itself every 60 seconds.',
+  statusModelsTitle: 'Models',
+  statusModelColumn: 'Model',
+  statusColumn: 'Status',
+  statusAvailabilityColumn: 'Availability over the last {days} days',
+  statusAvailabilityValue: '{percent}%',
+  statusNoMeasurement: 'No measurement yet',
+  statusIncidentsTitle: 'Outages',
+  statusOngoingIncident: 'Ongoing outage',
+  statusRecentIncidents: 'Recent outages',
+  statusNoIncidents: 'No outage has been recorded in this period.',
+  statusIncidentStart: 'Started: {time}',
+  statusIncidentEnd: 'Ended: {time}',
+  statusIncidentOngoing: 'Still running',
+  statusIncidentDuration: 'Duration: {duration}',
+  statusDurationMinutes: '{minutes} min',
+  statusDurationHours: '{hours} h {minutes} min',
+  statusDurationHoursOnly: '{hours} h',
+  statusDurationBelowMinute: 'less than a minute',
+  statusExtensionTitle: 'A long outage extends your balance too',
+  statusExtensionBody:
+    'When an outage lasts longer than 15 minutes, the paid packages you hold are extended automatically by the length of the outage. You do not have to do anything for that.',
+  statusLoading: 'Loading the service status…',
+  statusError: 'The service status could not be loaded. Please try again.',
+  statusEmpty: 'No status data yet',
+  statusEmptyBody:
+    'The status measurement has not started yet. The model states appear here after the first measurement.',
 }
 
 export const hwTexts: Record<HwLanguage, Record<HwTextKey, string>> = { tr, en }

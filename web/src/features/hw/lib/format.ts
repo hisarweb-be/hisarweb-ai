@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { HwTextKey } from '../texts'
+import type { HwLanguage, HwTextKey, HwTextVars } from '../texts'
 import { formatDateTimeStr } from '@/lib/format'
 import { HW_COMPARE_MAX_MONTHLY_TOKENS } from '../constants'
 import type { HwMoneyText } from '../types'
@@ -125,4 +125,48 @@ export function formatHwStamp(
     typeof value === 'number' ? new Date(value * 1000) : new Date(value)
   if (Number.isNaN(date.getTime())) return '-'
   return formatDateTimeStr(date)
+}
+
+/** Text key of a model state in the public status answer. */
+export function hwStatusTextKey(state: string): HwTextKey {
+  switch (state) {
+    case 'degraded':
+      return 'statusDegraded'
+    case 'outage':
+      return 'statusOutage'
+    default:
+      return 'statusOperational'
+  }
+}
+
+/**
+ * Reads an outage length in seconds as minutes and hours. The server rounds a
+ * length up to whole minutes, so this does the same: an outage of 61 seconds
+ * reads as 2 minutes and not as "1 minute".
+ */
+export function formatHwDuration(
+  seconds: number,
+  text: (key: HwTextKey, vars?: HwTextVars) => string
+): string {
+  if (!Number.isFinite(seconds) || seconds < 60) {
+    return text('statusDurationBelowMinute')
+  }
+  const minutes = Math.ceil(seconds / 60)
+  if (minutes < 60) return text('statusDurationMinutes', { minutes })
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  if (rest === 0) return text('statusDurationHoursOnly', { hours })
+  return text('statusDurationHours', { hours, minutes: rest })
+}
+
+/**
+ * The message the server wrote for the page language. Turkish is the default of
+ * the site, so a missing Turkish text falls back to the English one.
+ */
+export function hwStatusMessage(
+  entry: { message_tr: string; message_en: string },
+  language: HwLanguage
+): string {
+  if (language === 'en') return entry.message_en || entry.message_tr
+  return entry.message_tr || entry.message_en
 }
