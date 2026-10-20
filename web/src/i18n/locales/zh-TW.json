@@ -7319,6 +7319,9 @@
     "Zhipu": "智譜",
     "Zhipu GLM": "智譜GLM",
     "Zhipu V4": "智譜 V4",
-    "Zoom": "縮放"
+    "Zoom": "縮放",
+    "Source code": "原始碼",
+    "Source code (AGPL-3.0)": "原始碼（AGPL-3.0）",
+    "HisarWeb AI is based on New API (AGPL-3.0) by QuantumNous.": "HisarWeb AI 基於 QuantumNous 的 New API（AGPL-3.0）。"
   }
 }

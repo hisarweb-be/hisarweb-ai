@@ -58,6 +58,18 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           {children}
         </div>
       </div>
+      {/* AGPL-3.0 section 13: the sign-in and sign-up screens offer the
+          corresponding source of this application. */}
+      <footer className='text-muted-foreground/60 absolute inset-x-0 bottom-4 px-4 text-center text-xs'>
+        <a
+          href='https://github.com/hisarweb-be/hisarweb-ai'
+          target='_blank'
+          rel='noopener noreferrer'
+          className='hover:text-foreground underline underline-offset-4 transition-colors'
+        >
+          {t('Source code (AGPL-3.0)')} · github.com/hisarweb-be/hisarweb-ai
+        </a>
+      </footer>
     </div>
   )
 }
