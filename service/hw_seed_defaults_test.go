@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 
 	"github.com/glebarez/sqlite"
 	"github.com/shopspring/decimal"
@@ -46,6 +47,10 @@ func setupHwSeedDefaultsTest(t *testing.T) {
 	originalCompletionRatio := ratio_setting.CompletionRatio2JSONString()
 	originalGroupRatio := ratio_setting.GroupRatio2JSONString()
 	originalUsableGroups := setting.UserUsableGroups2JSONString()
+	originalServerAddress := system_setting.ServerAddress
+	originalPasskey := *system_setting.GetPasskeySettings()
+	originalLegal := *system_setting.GetLegalSettings()
+	originalChats := setting.Chats2JsonString()
 	originalOptions := make(map[string]string)
 	common.OptionMapRWMutex.RLock()
 	maps.Copy(originalOptions, common.OptionMap)
@@ -60,6 +65,12 @@ func setupHwSeedDefaultsTest(t *testing.T) {
 	common.OptionMapRWMutex.Lock()
 	common.OptionMap = map[string]string{}
 	common.OptionMapRWMutex.Unlock()
+	// An empty option table means the shipped code defaults are in force; put
+	// them back so a test starts where a fresh deployment starts.
+	system_setting.ServerAddress = originalServerAddress
+	*system_setting.GetPasskeySettings() = originalPasskey
+	*system_setting.GetLegalSettings() = originalLegal
+	require.NoError(t, setting.UpdateChatsByJsonString(originalChats))
 
 	t.Cleanup(func() {
 		model.DB = originalDB
@@ -71,6 +82,10 @@ func setupHwSeedDefaultsTest(t *testing.T) {
 		require.NoError(t, ratio_setting.UpdateCompletionRatioByJSONString(originalCompletionRatio))
 		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(originalGroupRatio))
 		require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(originalUsableGroups))
+		system_setting.ServerAddress = originalServerAddress
+		*system_setting.GetPasskeySettings() = originalPasskey
+		*system_setting.GetLegalSettings() = originalLegal
+		require.NoError(t, setting.UpdateChatsByJsonString(originalChats))
 		common.OptionMapRWMutex.Lock()
 		common.OptionMap = originalOptions
 		common.OptionMapRWMutex.Unlock()
@@ -194,6 +209,52 @@ func TestHwSeedDefaultOptions(t *testing.T) {
 		assert.Equal(t, "kr", operation_setting.GetGeneralSetting().CustomCurrencySymbol)
 		assert.Equal(t, operation_setting.QuotaDisplayTypeUSD, operation_setting.GetQuotaDisplayType(),
 			"our TL display is not forced onto another currency")
+	})
+
+	// A visitor of /api/status reads these straight from the answer: the address
+	// the site answers on, the name and domain a passkey prompt shows, the chat
+	// app list and whether both legal pages exist.
+	t.Run("a fresh database gets our own address, passkey name, chat list and legal texts", func(t *testing.T) {
+		setupHwSeedDefaultsTest(t)
+
+		require.NoError(t, HwSeedDefaultOptions())
+
+		assert.Equal(t, "https://api.hisarweb.be", system_setting.ServerAddress)
+		passkey := system_setting.PasskeySettingsSnapshot()
+		assert.Equal(t, "HisarWeb AI", passkey.RPDisplayName)
+		assert.Equal(t, "api.hisarweb.be", passkey.EffectiveRPID())
+		assert.Empty(t, setting.Chats, "no third-party chat app is launched with our key")
+
+		legal := system_setting.GetLegalSettings()
+		require.NotEmpty(t, legal.PrivacyPolicy)
+		require.NotEmpty(t, legal.UserAgreement)
+		for _, text := range []string{legal.PrivacyPolicy, legal.UserAgreement} {
+			// The statement has to point a visitor at a working route for the
+			// rights it lists, and it may never leak a supplier.
+			assert.Contains(t, text, "hisarweb.be@gmail.com")
+			assert.NotContains(t, strings.ToLower(text), "lumia")
+			assert.NotContains(t, strings.ToLower(text), "openrouter")
+		}
+		assert.Contains(t, legal.PrivacyPolicy, "KVKK madde 11")
+	})
+
+	t.Run("public identity entries the operator set are kept", func(t *testing.T) {
+		setupHwSeedDefaultsTest(t)
+		// The operator runs on another address, has configured its own passkey
+		// domain, kept one chat app and wrote its own privacy policy.
+		require.NoError(t, model.UpdateOption(hwServerAddressOption, "https://ai.example.test"))
+		require.NoError(t, model.UpdateOption(hwPasskeyRPIDOption, "ai.example.test"))
+		require.NoError(t, model.UpdateOption(hwChatAppsOption, `[{"Eigen app":"eigenapp://x"}]`))
+		require.NoError(t, model.UpdateOption(hwPrivacyPolicyOption, "Eigen beleid."))
+
+		require.NoError(t, HwSeedDefaultOptions())
+
+		assert.Equal(t, "https://ai.example.test", system_setting.ServerAddress)
+		assert.Equal(t, "ai.example.test", system_setting.PasskeySettingsSnapshot().EffectiveRPID())
+		assert.Len(t, setting.Chats, 1, "an operator list is not emptied")
+		assert.Equal(t, "Eigen beleid.", system_setting.GetLegalSettings().PrivacyPolicy)
+		// The agreement was still empty, so the seeding fills it in.
+		assert.NotEmpty(t, system_setting.GetLegalSettings().UserAgreement)
 	})
 
 	t.Run("a second run writes the same values", func(t *testing.T) {

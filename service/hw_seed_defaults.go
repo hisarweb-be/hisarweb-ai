@@ -85,6 +85,12 @@ func HwSeedDefaultOptions() error {
 		hwSeedThinkingAdapter,
 		hwSeedDisplayCurrency,
 		hwSeedSiteIdentity,
+		// The public identity, in this order: the passkey name, the passkey
+		// domain and the legal texts hang off the address the site answers on.
+		hwSeedSiteAddress,
+		hwSeedPasskeyIdentity,
+		hwSeedChatApps,
+		hwSeedLegalTexts,
 	} {
 		if stepErr := step(storedValues); stepErr != nil {
 			errs = append(errs, stepErr)
