@@ -51,12 +51,6 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "plugin" {
 		os.Exit(jsplugin.RunCLI(os.Args[2:], os.Stdout, os.Stderr))
 	}
-	// Refuse an unsafe test-flag combination before any resource is opened. The
-	// message names the variables only; FatalLog exits non-zero.
-	if err := common.HwValidateEnvironment(); err != nil {
-		common.FatalLog(common.LogText("invalid environment configuration: %s", err.Error()))
-		return
-	}
 	startTime := time.Now()
 	kitutil.SetLogging(common.SysLog, func(message string) {
 		logger.LogError(nil, message)
@@ -307,6 +301,14 @@ func InitResources() error {
 
 	// 加载环境变量
 	common.InitEnv()
+
+	// Refuse an unsafe environment configuration. This runs after .env is loaded
+	// because APP_ENV and the skip flag may come from that file; the message
+	// names the variables only and FatalLog exits non-zero.
+	if err = common.HwValidateEnvironment(); err != nil {
+		common.FatalLog(common.LogText("invalid environment configuration: %s", err.Error()))
+		return err
+	}
 
 	logger.SetupLogger()
 
