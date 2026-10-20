@@ -199,7 +199,7 @@ func TestHwDailyAbuseSweepWaves(t *testing.T) {
 		quiet := hwSweepTestUser(t, quietStart+60)
 		// Keep every account below the per-IP wave and off shared signals.
 		for _, id := range append(waveUsers, quiet.Id) {
-			require.NoError(t, UpsertHwUserSignals(id, HwUserSignals{Phone: "+90555100" + padTwo(id)}))
+			require.NoError(t, UpsertHwUserSignals(id, HwUserSignals{Phone: "+9055510000" + padTwo(id)}))
 		}
 
 		report, err := HwDailyAbuseSweep(now)
