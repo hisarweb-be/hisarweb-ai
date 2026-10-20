@@ -11,12 +11,13 @@ import (
 // AuditOther is the structured metadata stored with an audit event. Privileged
 // fields are separate so API projections can remove them without re-encoding JSON.
 type AuditOther struct {
-	Op          *AuditOperation   `json:"op,omitempty"`
-	AdminInfo   *AuditAdminInfo   `json:"admin_info,omitempty"`
-	AuditInfo   *AuditRequestInfo `json:"audit_info,omitempty"`
-	RootInfo    AuditFields       `json:"root_info,omitempty"`
-	LoginMethod string            `json:"login_method,omitempty"`
-	UserAgent   string            `json:"user_agent,omitempty"`
+	Op          *AuditOperation    `json:"op,omitempty"`
+	AdminInfo   *AuditAdminInfo    `json:"admin_info,omitempty"`
+	AuditInfo   *AuditRequestInfo  `json:"audit_info,omitempty"`
+	Provider    *AuditProviderInfo `json:"provider,omitempty"`
+	RootInfo    AuditFields        `json:"root_info,omitempty"`
+	LoginMethod string             `json:"login_method,omitempty"`
+	UserAgent   string             `json:"user_agent,omitempty"`
 }
 
 type AuditOperation struct {
@@ -29,6 +30,18 @@ type AuditAdminInfo struct {
 	AdminUsername string `json:"admin_username,omitempty"`
 	AdminRole     int    `json:"admin_role,omitempty"`
 	AuthMethod    string `json:"auth_method,omitempty"`
+}
+
+// AuditProviderInfo records which supplier actually served a relayed request.
+// It is stripped from the customer-visible audit projection.
+type AuditProviderInfo struct {
+	Provider    string   `json:"provider"`
+	ChannelID   int      `json:"channel_id"`
+	Attempts    int      `json:"attempts"`
+	Fallback    bool     `json:"fallback"`
+	StreamCut   bool     `json:"stream_cut,omitempty"`
+	MaskAlerts  int      `json:"mask_alerts,omitempty"`
+	UpstreamIDs []string `json:"upstream_ids,omitempty"`
 }
 
 type AuditRequestInfo struct {
