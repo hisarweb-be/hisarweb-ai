@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"net"
 	"os"
 	"strings"
 
@@ -171,14 +172,35 @@ func hwNormalizeTrPhone(raw string) (string, error) {
 	return "+90" + number, nil
 }
 
+// hwIpSignalValue reduces the address that the ip kind hashes. IPv4 keeps its
+// dotted form after parsing. IPv6 is reduced to its /64 prefix: one customer
+// normally controls a whole /64, so hashing the full address would let it walk
+// past the per-address signup limit and hide from the daily sweep by rotating
+// the lower 64 bits. The prefix is written in canonical network form, so every
+// notation of one address maps to one value. A value that does not parse as an
+// address is lowercased and hashed as given, as before.
+func hwIpSignalValue(raw string) string {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	ip := net.ParseIP(value)
+	if ip == nil {
+		return value
+	}
+	if ipv4 := ip.To4(); ipv4 != nil {
+		return ipv4.String()
+	}
+	mask := net.CIDRMask(64, 128)
+	return (&net.IPNet{IP: ip.Mask(mask), Mask: mask}).String()
+}
+
 // hwHashRawSignal hashes one raw signal value of a kind, normalising it first
-// where a single external form exists. Only an IP address is lowercased: its
-// notation is case-insensitive by convention. A device token and a card
-// fingerprint are opaque case-sensitive values, and a phone number is reduced
-// to digits by hwNormalizeTrPhone, which no case rule may disturb.
+// where a single external form exists. Only an IP address is lowercased and
+// reduced to its /64 prefix: its notation is case-insensitive by convention. A
+// device token and a card fingerprint are opaque case-sensitive values, and a
+// phone number is reduced to digits by hwNormalizeTrPhone, which no case rule
+// may disturb.
 func hwHashRawSignal(kind, value string) (string, error) {
 	if kind == HwSignalKindIp {
-		value = strings.ToLower(strings.TrimSpace(value))
+		value = hwIpSignalValue(value)
 	}
 	if kind == HwSignalKindPhone {
 		phone, err := hwNormalizeTrPhone(value)

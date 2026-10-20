@@ -47,6 +47,15 @@ func hwSignupIpDayKey(now int64) int {
 // The raw address never reaches the table; hashing it can fail when
 // HW_SIGNAL_SALT is not configured, and the error is returned to the caller,
 // which decides whether registration continues without the per-IP limit.
+//
+// The counter follows the address that hwHashRawSignal derives: an IPv4 address
+// as written, and an IPv6 address by its /64 prefix, because one customer
+// normally controls a whole /64 and rotating the lower bits must not buy extra
+// accounts. The address must also be the one the connection really came from:
+// gin reports a forwarded X-Forwarded-For / X-Real-IP only when the direct peer
+// is a trusted proxy, so a deployment behind a proxy has to list that proxy in
+// TRUSTED_PROXIES (common.ResolveTrustedProxies). With every peer trusted, a
+// client could send a fresh address per request and walk past this limit.
 func HwReserveSignupSlot(clientIP string, now int64, limit int) (bool, error) {
 	if limit <= 0 {
 		return true, nil

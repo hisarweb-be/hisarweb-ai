@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -39,6 +40,29 @@ func TestHwReserveSignupSlot(t *testing.T) {
 		allowed, err = HwReserveSignupSlot("198.51.100.4", now, HwSignupIpDailyLimit)
 		require.NoError(t, err)
 		assert.True(t, allowed, "another address has its own counter")
+	})
+
+	t.Run("IPv6 addresses inside one /64 share a counter", func(t *testing.T) {
+		for i := 1; i <= HwSignupIpDailyLimit; i++ {
+			allowed, err := HwReserveSignupSlot(fmt.Sprintf("2001:db8:abcd:12::%x", i), now, HwSignupIpDailyLimit)
+			require.NoError(t, err)
+			require.True(t, allowed, "registration number %d must be allowed", i)
+		}
+		allowed, err := HwReserveSignupSlot("2001:db8:abcd:12:ffff:1:2:3", now, HwSignupIpDailyLimit)
+		require.NoError(t, err)
+		assert.False(t, allowed, "a fresh address inside the same /64 must not buy a slot")
+
+		allowed, err = HwReserveSignupSlot("2001:db8:abcd:13::1", now, HwSignupIpDailyLimit)
+		require.NoError(t, err)
+		assert.True(t, allowed, "another /64 keeps its own counter")
+	})
+
+	t.Run("IPv4 addresses keep one counter each", func(t *testing.T) {
+		for _, ip := range []string{"192.0.2.10", "192.0.2.11", "192.0.2.12"} {
+			allowed, err := HwReserveSignupSlot(ip, now, HwSignupIpDailyLimit)
+			require.NoError(t, err)
+			assert.True(t, allowed, "%s has its own counter", ip)
+		}
 	})
 
 	t.Run("the next day the same address is allowed again", func(t *testing.T) {
