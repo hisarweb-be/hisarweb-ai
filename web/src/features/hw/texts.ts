@@ -60,7 +60,7 @@ const tr = {
 
   trialTitle: 'Önce ücretsiz deneyin',
   trialBody:
-    'Hesap açtığınızda 100 TL deneme bakiyesi tanımlanır ve 14 gün geçerlidir. Kredi kartı gerekmez.',
+    'Hesap açtığınızda 250 TL deneme bakiyesi tanımlanır ve 14 gün geçerlidir. Kredi kartı gerekmez.',
   trialCta: 'Deneme hesabı aç',
 
   stepsTitle: 'Dört adımda başlayın',
@@ -98,7 +98,7 @@ const tr = {
 
   finalCtaTitle: 'Bugün başlayın',
   finalCtaBody:
-    '100 TL deneme bakiyesiyle modelleri deneyin; memnun kalırsanız TL ile kredi yükleyin.',
+    '250 TL deneme bakiyesiyle modelleri deneyin; memnun kalırsanız TL ile kredi yükleyin.',
   finalCtaButton: 'Ücretsiz hesap aç',
 
   topUpTitle: 'Kredi yükle',
@@ -110,8 +110,7 @@ const tr = {
   topUpCustomPlaceholder: 'Örn. 1500',
   topUpValueLabel: 'Bakiye değeri',
   topUpPayableLabel: 'Ödenecek tutar',
-  topUpPayableNote:
-    'İndirimli ödenecek tutarı ödeme sayfasında görürsünüz.',
+  topUpPayableNote: 'İndirimli ödenecek tutarı ödeme sayfasında görürsünüz.',
   topUpDiscountFirst: 'İlk alışveriş indirimi (%50, 1000 TL değerine kadar)',
   topUpDiscountRepeat: 'Sonraki alışveriş indirimi (%15)',
   topUpDiscountRule:
@@ -204,8 +203,7 @@ const tr = {
   statusLead:
     'HisarWeb AI modellerinin güncel durumu, son 30 günün kullanılabilirliği ve yaşanan kesintiler.',
   statusOverallOperational: 'Tüm sistemler çalışıyor',
-  statusOverallOperationalBody:
-    'Ölçülen tüm modeller istekleri yanıtlıyor.',
+  statusOverallOperationalBody: 'Ölçülen tüm modeller istekleri yanıtlıyor.',
   statusOverallDegraded: 'Hizmette yavaşlama var',
   statusOverallDegradedBody:
     'Bazı istekler yavaş yanıt veriyor; hizmet çalışmaya devam ediyor.',
@@ -244,6 +242,22 @@ const tr = {
   statusEmptyBody:
     'Durum ölçümü henüz başlamadı. İlk ölçümden sonra model durumları burada görünecek.',
 
+  bonusEyebrow: 'Startbonus',
+  bonusTitle: '250 TL startbonusunuzu alın',
+  bonusLead: 'Bonusu almak için 3 kısa adım var. Şu an {step}. adımdasınız.',
+  bonusClosed:
+    'Telefon doğrulaması şu anda açık değil, bu yüzden bonus henüz tanımlanamıyor. Doğrulama açıldığında bonusu buradan alabileceksiniz; beklemek istemezseniz TL ile bakiye yükleyebilirsiniz.',
+  bonusStepEmail: 'E-posta adresinizi ekleyin ve onaylayın',
+  bonusStepTelegram: 'Telegram hesabınızı bağlayın',
+  bonusStepPhone: 'Telefon numaranızı Telegram botuyla paylaşın',
+  bonusButtonEmail: 'E-postayı ekle',
+  bonusButtonTelegram: 'Telegram’ı bağla',
+  bonusButtonPhone: 'Telegram botunu aç',
+  noCreditTitle: 'Bakiyeniz bitti',
+  noCreditBody:
+    'Bu isteği göndermek için hesabınızda yeterli bakiye yok. Yeni hesaplar 250 TL startbonus alır; bonusu henüz almadıysanız aşağıdan talep edin ya da TL ile bakiye yükleyin.',
+  noCreditBonusButton: '250 TL startbonusu al',
+  noCreditBuyButton: 'Bakiye satın al',
   docsTitle: 'API belgeleri',
   docsLead:
     'HisarWeb AI, OpenAI ve Claude ile uyumlu tek bir API sunar. Anahtarınızı bir kez oluşturup uygulamanızda kullanın.',
@@ -260,8 +274,7 @@ const tr = {
   docsModelsTitle: 'Hangi modeller ücretsiz?',
   docsModelsBody:
     'Ücretsiz deneme hesabı haiku sınıfı hızlı modelleri kullanabilir; bunlar küçük ve hızlı işler için yeterlidir. Ücretli hesap katalogdaki tüm modelleri kullanabilir.',
-  docsModelsFree:
-    'Ücretsiz: haiku sınıfı modeller (örneğin claude-haiku-4-5).',
+  docsModelsFree: 'Ücretsiz: haiku sınıfı modeller (örneğin claude-haiku-4-5).',
   docsModelsPaid:
     'Ücretli: katalogdaki diğer tüm modeller; güncel fiyatlar fiyat karşılaştırma sayfasında yazar.',
   docsErrorsTitle: 'Hata kodları',
@@ -321,7 +334,7 @@ const en: Record<HwTextKey, string> = {
 
   trialTitle: 'Try it for free first',
   trialBody:
-    'A new account receives TRY 100 of trial credit, valid for 14 days. No card needed.',
+    'A new account receives TRY 250 of trial credit, valid for 14 days. No card needed.',
   trialCta: 'Create a trial account',
 
   stepsTitle: 'Start in four steps',
@@ -358,7 +371,7 @@ const en: Record<HwTextKey, string> = {
 
   finalCtaTitle: 'Start today',
   finalCtaBody:
-    'Try the models with TRY 100 of trial credit; top up in TRY when you are happy.',
+    'Try the models with TRY 250 of trial credit; top up in TRY when you are happy.',
   finalCtaButton: 'Create a free account',
 
   topUpTitle: 'Top up',
@@ -370,7 +383,8 @@ const en: Record<HwTextKey, string> = {
   topUpCustomPlaceholder: 'e.g. 1500',
   topUpValueLabel: 'Balance value',
   topUpPayableLabel: 'You pay',
-  topUpPayableNote: 'The amount you pay after the discount is shown on the payment page.',
+  topUpPayableNote:
+    'The amount you pay after the discount is shown on the payment page.',
   topUpDiscountFirst: 'First-purchase discount (50%, up to TRY 1,000 of value)',
   topUpDiscountRepeat: 'Later-purchase discount (15%)',
   topUpDiscountRule:
@@ -393,7 +407,8 @@ const en: Record<HwTextKey, string> = {
   topUpRefresh: 'Refresh balance',
 
   topUpPackagesTitle: 'Your packages',
-  topUpPackagesLead: 'The remaining balance and expiry date are shown per package.',
+  topUpPackagesLead:
+    'The remaining balance and expiry date are shown per package.',
   topUpPackagesLoading: 'Loading the packages…',
   topUpPackagesError: 'The packages could not be loaded. Please try again.',
 
@@ -501,6 +516,23 @@ const en: Record<HwTextKey, string> = {
   statusEmptyBody:
     'The status measurement has not started yet. The model states appear here after the first measurement.',
 
+  bonusEyebrow: 'Start bonus',
+  bonusTitle: 'Claim your TRY 250 start bonus',
+  bonusLead:
+    'There are 3 short steps to receive the bonus. You are on step {step}.',
+  bonusClosed:
+    'Phone verification is not open right now, so the bonus cannot be granted yet. You will be able to claim it here once verification opens; if you do not want to wait, top up in TRY.',
+  bonusStepEmail: 'Add and confirm your e-mail address',
+  bonusStepTelegram: 'Link your Telegram account',
+  bonusStepPhone: 'Share your phone number with the Telegram bot',
+  bonusButtonEmail: 'Add e-mail',
+  bonusButtonTelegram: 'Link Telegram',
+  bonusButtonPhone: 'Open the Telegram bot',
+  noCreditTitle: 'You are out of credit',
+  noCreditBody:
+    'Your account does not have enough credit for this request. New accounts get a TRY 250 start bonus; claim it below if you have not yet, or top up in TRY.',
+  noCreditBonusButton: 'Claim the TRY 250 start bonus',
+  noCreditBuyButton: 'Buy credit',
   docsTitle: 'API documentation',
   docsLead:
     'HisarWeb AI offers one API that is compatible with OpenAI and Claude. Create your key once and use it in your application.',
@@ -517,8 +549,7 @@ const en: Record<HwTextKey, string> = {
   docsModelsTitle: 'Which models are free?',
   docsModelsBody:
     'A free trial account can use the fast haiku-class models; they are enough for small, quick jobs. A paid account can use every model in the catalog.',
-  docsModelsFree:
-    'Free: haiku-class models (for example claude-haiku-4-5).',
+  docsModelsFree: 'Free: haiku-class models (for example claude-haiku-4-5).',
   docsModelsPaid:
     'Paid: every other model in the catalog; the current prices are on the price comparison page.',
   docsErrorsTitle: 'Error codes',
@@ -526,8 +557,7 @@ const en: Record<HwTextKey, string> = {
     '401: the key is invalid or missing. Check that the key was copied completely.',
   docsError402:
     '402 insufficient balance: the account balance does not cover this request. Top up and try again.',
-  docsError429:
-    '429: too many requests. Wait a moment and try again.',
+  docsError429: '429: too many requests. Wait a moment and try again.',
   docsLinksTitle: 'More',
   docsLinkStatus: 'Service status (24/7)',
   docsLinkCompare: 'Price comparison',

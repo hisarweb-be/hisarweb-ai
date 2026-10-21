@@ -127,7 +127,7 @@ test('announces the free trial and the 30-day balance validity', async () => {
     screen.getByRole('heading', { level: 3, name: 'Bakiyeniz 30 gün geçerli' })
   ).toBeInTheDocument()
   expect(
-    screen.getByText(/100 TL deneme bakiyesi tanımlanır ve 14 gün/)
+    screen.getByText(/250 TL deneme bakiyesi tanımlanır ve 14 gün/)
   ).toBeInTheDocument()
 })
 

@@ -20,15 +20,16 @@ import (
 // maximum anyway.
 const hwFreeTrialQuotaEnv = "HW_FREE_TRIAL_QUOTA"
 
-// hwFreeTrialTry is the free trial credit the customer sees: 100 TL. The
+// hwFreeTrialTry is the free trial credit the customer sees: 250 TL. The
 // ledger keeps dollars, so the amount is converted against the daily rate that
 // the price snapshot job publishes in HwTryPerUsd.
-const hwFreeTrialTry = 100
+const hwFreeTrialTry = 250
 
 // hwFreeTrialDefaultDollars is the free trial fallback while no daily rate has
-// been published yet: three dollars, well below part A's ten-dollar cap, so an
-// unknown rate stays on the safe side.
-const hwFreeTrialDefaultDollars = 3
+// been published yet: five dollars, about what 250 TL is worth at the current
+// rate and half of part A's ten-dollar cap, so an unknown rate stays on the safe
+// side. The cap only bites below a rate of 25 TL/USD.
+const hwFreeTrialDefaultDollars = 5
 
 // Bounds of an accepted X-HW-Device token: long enough to be a stable signal,
 // short enough to stay a header value and nothing else.
@@ -152,6 +153,22 @@ func HwGrantFreeCreditIfPhoneStepSkipped(userID int) (granted bool, reason strin
 	}
 	if err := model.HwRecordDevPhoneStep(userID); err != nil {
 		return false, "", err
+	}
+	user, err := model.GetUserById(userID, false)
+	if err != nil {
+		return false, "", err
+	}
+	return hwMaybeGrantFreeTrialCredit(user)
+}
+
+// HwRetryFreeCreditAfterEmailBind runs the grant again once an email address
+// is confirmed: a customer who shared the phone number before binding an
+// email would otherwise stay at zero credit for good. Without a recorded phone
+// step the grant answers "unverified" and nothing changes. Outside production
+// the skip flag records the step first, like at signup.
+func HwRetryFreeCreditAfterEmailBind(userID int) (granted bool, reason string, err error) {
+	if common.HwPhoneStepSkipped() {
+		return HwGrantFreeCreditIfPhoneStepSkipped(userID)
 	}
 	user, err := model.GetUserById(userID, false)
 	if err != nil {

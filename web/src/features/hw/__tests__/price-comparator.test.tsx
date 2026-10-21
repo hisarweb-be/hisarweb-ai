@@ -193,8 +193,14 @@ describe('price comparator page', () => {
     await submitTokens('1000000', '250000')
     await screen.findByText('Fiyat kaynağı')
 
-    const text = document.body.textContent?.toLowerCase() ?? ''
+    // The price table names OpenRouter on purpose, as a public price to compare
+    // with. Everything outside that table, such as the comparison result, still
+    // must not name it as a supplier.
+    const page = document.body.cloneNode(true) as HTMLElement
+    page.querySelector('[data-testid="hw-price-table"]')?.remove()
+    const text = page.textContent?.toLowerCase() ?? ''
     expect(text).not.toContain('lumia')
     expect(text).not.toContain('openrouter')
+    expect(document.body.textContent?.toLowerCase()).not.toContain('lumia')
   })
 })

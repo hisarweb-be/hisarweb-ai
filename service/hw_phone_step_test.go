@@ -211,13 +211,13 @@ func TestHwCompleteTelegramPhoneStep(t *testing.T) {
 		assert.Empty(t, claims, "an identity alone reserves no phone claim")
 	})
 
-	t.Run("the free amount is 100 lira at the daily rate and part A's cap holds", func(t *testing.T) {
-		hwSetTryPerUsdOption(t, "40")
-		assert.Equal(t, common.QuotaFromFloat(2.5*float64(common.QuotaPerUnit)), HwFreeTrialQuota(),
-			"100 TL at 40 TL/USD is 2.5 dollars of credit")
+	t.Run("the free amount is 250 lira at the daily rate and part A's cap holds", func(t *testing.T) {
+		hwSetTryPerUsdOption(t, "50")
+		assert.Equal(t, common.QuotaFromFloat(5*float64(common.QuotaPerUnit)), HwFreeTrialQuota(),
+			"250 TL at 50 TL/USD is 5 dollars of credit")
 
 		hwSetTryPerUsdOption(t, "")
-		assert.Equal(t, common.QuotaFromFloat(3*float64(common.QuotaPerUnit)), HwFreeTrialQuota(),
+		assert.Equal(t, common.QuotaFromFloat(5*float64(common.QuotaPerUnit)), HwFreeTrialQuota(),
 			"without a rate the dollar fallback applies")
 
 		t.Setenv("HW_FREE_TRIAL_QUOTA", "2")
@@ -226,13 +226,13 @@ func TestHwCompleteTelegramPhoneStep(t *testing.T) {
 		t.Setenv("HW_FREE_TRIAL_QUOTA", "9999")
 		assert.Equal(t, model.HwMaxFreeTrialQuota(), HwFreeTrialQuota(), "an absurd fallback is clamped to the cap")
 
-		hwSetTryPerUsdOption(t, "40")
-		assert.Equal(t, common.QuotaFromFloat(2.5*float64(common.QuotaPerUnit)), HwFreeTrialQuota(),
+		hwSetTryPerUsdOption(t, "50")
+		assert.Equal(t, common.QuotaFromFloat(5*float64(common.QuotaPerUnit)), HwFreeTrialQuota(),
 			"a published rate governs the amount; the fallback is not used")
 
-		hwSetTryPerUsdOption(t, "0.5")
+		hwSetTryPerUsdOption(t, "20")
 		assert.Equal(t, model.HwMaxFreeTrialQuota(), HwFreeTrialQuota(),
-			"a rate that turns 100 TL into more than the cap stops at the cap")
+			"a rate that turns 250 TL into more than the cap stops at the cap")
 	})
 }
 
@@ -355,6 +355,36 @@ func TestHwGrantFreeCreditIfPhoneStepSkipped(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, granted, "the browser chooses the token, so a copy refuses nothing (reason %q)", reason)
 		assert.Len(t, hwPhoneStepFreePackages(t, second.Id), 1)
+	})
+}
+
+func TestHwRetryFreeCreditAfterEmailBind(t *testing.T) {
+	hwPhoneStepTestSetup(t)
+
+	t.Run("a dev account without email gets the credit once the email is bound", func(t *testing.T) {
+		t.Setenv("APP_ENV", "development")
+		t.Setenv("HW_SKIP_PHONE_STEP", "1")
+		user := hwPhoneStepTestUser(t, "")
+		granted, reason, err := HwGrantFreeCreditIfPhoneStepSkipped(user.Id)
+		require.NoError(t, err)
+		assert.False(t, granted)
+		assert.Equal(t, "email_unverified", reason)
+		require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", user.Id).Update("email", "bound@example.com").Error)
+		granted, reason, err = HwRetryFreeCreditAfterEmailBind(user.Id)
+		require.NoError(t, err)
+		assert.True(t, granted, "the bind retries the grant (reason %q)", reason)
+		assert.Len(t, hwPhoneStepFreePackages(t, user.Id), 1)
+	})
+
+	t.Run("production without a shared phone number grants nothing", func(t *testing.T) {
+		t.Setenv("APP_ENV", "production")
+		t.Setenv("HW_SKIP_PHONE_STEP", "")
+		user := hwPhoneStepTestUser(t, "prod-bind@example.com")
+		granted, reason, err := HwRetryFreeCreditAfterEmailBind(user.Id)
+		require.NoError(t, err)
+		assert.False(t, granted)
+		assert.Equal(t, "unverified", reason)
+		assert.Empty(t, hwPhoneStepFreePackages(t, user.Id))
 	})
 }
 

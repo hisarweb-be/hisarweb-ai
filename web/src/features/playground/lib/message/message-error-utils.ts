@@ -24,11 +24,12 @@ export const MODEL_PRICING_SETTINGS_PATH =
   '/system-settings/billing/model-pricing'
 
 const MODEL_PRICE_ERROR_CODE = 'model_price_error'
+const NO_CREDIT_ERROR_CODE = 'insufficient_user_quota'
 export const FALLBACK_ERROR_CONTENT = 'An unknown error occurred'
 
 type MessageErrorState = {
   content: string
-  kind: 'generic' | 'model-price'
+  kind: 'generic' | 'model-price' | 'no-credit'
   showSettingsLink: boolean
 }
 
@@ -51,9 +52,13 @@ export function getMessageErrorState(
   const content = getMessageContent(message) || FALLBACK_ERROR_CONTENT
   const isModelPriceError = message.errorCode === MODEL_PRICE_ERROR_CODE
 
+  let kind: MessageErrorState['kind'] = 'generic'
+  if (isModelPriceError) kind = 'model-price'
+  else if (message.errorCode === NO_CREDIT_ERROR_CODE) kind = 'no-credit'
+
   return {
     content,
-    kind: isModelPriceError ? 'model-price' : 'generic',
+    kind,
     showSettingsLink: isModelPriceError && isAdmin,
   }
 }

@@ -16,7 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { AlertCircle, AlertTriangle, Settings } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+import {
+  AlertCircle,
+  AlertTriangle,
+  Gift,
+  Settings,
+  Wallet,
+} from 'lucide-react'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -40,6 +47,7 @@ import { useTranslation } from 'react-i18next'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { useHwText } from '@/features/hw/texts'
 import { useAuthStore } from '@/stores/auth-store'
 
 import {
@@ -66,11 +74,48 @@ export function MessageError({
   actions,
 }: MessageErrorProps) {
   const { t } = useTranslation()
+  const hw = useHwText()
   const user = useAuthStore((s) => s.auth.user)
   const errorState = getMessageErrorState(message, isAdminRole(user?.role))
 
   if (!errorState) {
     return null
+  }
+
+  if (errorState.kind === 'no-credit') {
+    return (
+      <Alert variant='default' className={className}>
+        <Wallet />
+        <AlertTitle>{hw('noCreditTitle')}</AlertTitle>
+        <AlertDescription className='space-y-3'>
+          <p>{hw('noCreditBody')}</p>
+          <div className='flex flex-wrap gap-2'>
+            <Button
+              size='sm'
+              render={
+                <Link
+                  to='/dashboard/$section'
+                  params={{ section: 'overview' }}
+                  hash='startbonus'
+                />
+              }
+            >
+              <Gift className='mr-1 h-3.5 w-3.5' />
+              {hw('noCreditBonusButton')}
+            </Button>
+            <Button
+              variant='outline'
+              size='sm'
+              render={<Link to='/satin-al' />}
+            >
+              <Wallet className='mr-1 h-3.5 w-3.5' />
+              {hw('noCreditBuyButton')}
+            </Button>
+          </div>
+          {actions}
+        </AlertDescription>
+      </Alert>
+    )
   }
 
   if (errorState.kind === 'model-price') {
