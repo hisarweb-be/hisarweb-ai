@@ -106,6 +106,11 @@ func EmailBind(c *gin.Context) {
 	if err := service.NotifyAccountSecurityChange(lang, state.Email, i18n.MsgSecurityEventEmailConfirmed); err != nil {
 		notificationFailed = true
 	}
+	if granted, _, err := service.HwRetryFreeCreditAfterEmailBind(identity.UserID); err != nil {
+		common.SysError(common.LogText("hw: free trial credit check after email bind failed for user %d: %v", identity.UserID, err))
+	} else if granted {
+		common.SysLog(common.LogText("hw: free trial credit granted after email bind to user %d", identity.UserID))
+	}
 	if err := model.PublishUserAuthCache(identity.UserID); err != nil {
 		writeSecurityOperationError(c, err)
 		return

@@ -45,6 +45,7 @@ import { HW_COMPARE_MAX_MONTHLY_TOKENS, HW_SOLD_MODELS } from '../constants'
 import { parseHwTokenCount } from '../lib/format'
 import { useHwText } from '../texts'
 import { ComparisonResult } from './comparison-result'
+import { PriceTable } from './price-table'
 
 export function PriceComparator() {
   const t = useHwText()
@@ -90,13 +91,15 @@ export function PriceComparator() {
 
   return (
     <PublicLayout showMainContainer={false}>
-      <PageTransition className='container mx-auto max-w-4xl space-y-6 px-4 pt-24 pb-12'>
+      <PageTransition className='container mx-auto max-w-6xl space-y-6 px-4 pt-24 pb-12'>
         <header className='space-y-2'>
           <h1 className='text-3xl font-semibold tracking-tight'>
             {t('compareTitle')}
           </h1>
           <p className='text-muted-foreground'>{t('compareLead')}</p>
         </header>
+
+        <PriceTable />
 
         <Card>
           <CardHeader>
