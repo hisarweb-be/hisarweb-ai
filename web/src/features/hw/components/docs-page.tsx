@@ -43,8 +43,8 @@ export const HW_API_BASE_URL = 'https://api.hisarweb.be/v1'
 const CLAUDE_CODE_BASE_URL = 'https://api.hisarweb.be'
 
 /** Static video of the same steps and its still frame. */
-const GUIDE_VIDEO_SRC = '/docs/hisarweb-ai-rehber.mp4'
-const GUIDE_VIDEO_POSTER = '/docs/hisarweb-ai-rehber.jpg'
+const GUIDE_VIDEO_SRC = '/rehber/hisarweb-ai-rehber.mp4'
+const GUIDE_VIDEO_POSTER = '/rehber/hisarweb-ai-rehber.jpg'
 
 const INSTALL_WINDOWS = 'irm https://claude.ai/install.ps1 | iex'
 const INSTALL_UNIX = 'curl -fsSL https://claude.ai/install.sh | bash'
@@ -213,24 +213,24 @@ function BeginnerGuide() {
         <ol className='space-y-10'>
           <GuideStep number={1} title={guide('step1Title')}>
             <Paragraph>{guide('step1Body')}</Paragraph>
-            <GuideImage src='/docs/adim-1-kayit.png' alt={guide('step1Alt')} />
+            <GuideImage src='/rehber/adim-1-kayit.png' alt={guide('step1Alt')} />
           </GuideStep>
           <GuideStep number={2} title={guide('step2Title')}>
             <Paragraph>{guide('step2Body')}</Paragraph>
             <GuideImage
-              src='/docs/adim-2-startbonus.png'
+              src='/rehber/adim-2-startbonus.png'
               alt={guide('step2Alt')}
             />
           </GuideStep>
           <GuideStep number={3} title={guide('step3Title')}>
             <Paragraph>{guide('step3Body')}</Paragraph>
             <GuideImage
-              src='/docs/adim-2-anahtar-olustur.png'
+              src='/rehber/adim-2-anahtar-olustur.png'
               alt={guide('step3Alt')}
             />
             <Paragraph>{guide('step3Body2')}</Paragraph>
             <GuideImage
-              src='/docs/adim-3-anahtar-listesi.png'
+              src='/rehber/adim-3-anahtar-listesi.png'
               alt={guide('step3Alt2')}
             />
           </GuideStep>
@@ -244,7 +244,7 @@ function BeginnerGuide() {
           <GuideStep number={5} title={guide('step5Title')}>
             <Paragraph>{guide('step5Body')}</Paragraph>
             <GuideImage
-              src='/docs/adim-4-playground.png'
+              src='/rehber/adim-4-playground.png'
               alt={guide('step5Alt')}
             />
           </GuideStep>
