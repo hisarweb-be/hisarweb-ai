@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1280, height=720" />
+    <script src="assets/gsap.min.js"></script>
+    <style>
+      :root {
+        --ground: #0f172a;
+        --ink: #f8fafc;
+        --muted: #cbd5e1;
+        --accent: #fbbf24;
+        --blue: #60a5fa;
+        --font: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        --mono: Consolas, "Cascadia Mono", "Courier New", monospace;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { margin: 0; width: 1280px; height: 720px; overflow: hidden; background: var(--ground); }
+      #root { position: relative; width: 1280px; height: 720px; overflow: hidden; font-family: var(--font); color: var(--ink);
+        background: radial-gradient(1000px 600px at 80% 20%, #1e293b 0%, #0f172a 70%); }
+
+      .scene { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; opacity: 0; }
+
+      /* left text column */
+      .txt { position: absolute; left: 60px; top: 0; width: 450px; height: 720px; display: flex; flex-direction: column; justify-content: center; }
+      .tag { font-size: 26px; font-weight: 700; color: var(--accent); letter-spacing: 0.04em; text-transform: none; margin-bottom: 14px; }
+      .h { font-size: 48px; line-height: 1.12; font-weight: 800; letter-spacing: -0.01em; margin-bottom: 30px; }
+      .b { font-size: 29px; line-height: 1.3; color: var(--muted); margin-bottom: 20px; padding-left: 40px; position: relative; opacity: 0; }
+      .b::before { content: ""; position: absolute; left: 4px; top: 13px; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); }
+      .b strong { color: var(--ink); font-weight: 700; }
+
+      /* right screenshot frame */
+      .frame { position: absolute; left: 540px; top: 140px; width: 704px; height: 440px; border-radius: 14px; overflow: hidden; background: #f3f6fa;
+        box-shadow: 0 24px 60px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.12); }
+      .stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+      .stage img { display: block; }
+      .hl { position: absolute; border: 5px solid var(--accent); border-radius: 12px; box-shadow: 0 0 0 4px rgba(251,191,36,0.25); opacity: 0; }
+
+      /* progress bar */
+      #bar { position: absolute; left: 0; bottom: 0; height: 6px; width: 1280px; background: var(--accent); opacity: 0.85; }
+
+      /* title scene */
+      #s0 .bg { position: absolute; left: -40px; top: -40px; width: 1360px; height: 800px; opacity: 0; filter: blur(10px); }
+      #s0 .bg img { width: 1360px; display: block; }
+      #s0 .c { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+      #s0 .brand { font-size: 36px; font-weight: 700; color: var(--accent); letter-spacing: 0.08em; margin-bottom: 18px; opacity: 0; }
+      #s0 .big { font-size: 84px; font-weight: 800; line-height: 1.08; letter-spacing: -0.02em; opacity: 0; }
+      #s0 .sub { font-size: 34px; color: var(--muted); margin-top: 34px; opacity: 0; }
+
+      /* terminal */
+      .term { position: absolute; left: 526px; top: 110px; width: 728px; height: 500px; border-radius: 14px; background: #0b1220; overflow: hidden;
+        box-shadow: 0 24px 60px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.14); font-family: var(--mono); }
+      .term .top { height: 44px; background: #1e293b; display: flex; align-items: center; padding-left: 18px; gap: 9px; }
+      .term .dot { width: 13px; height: 13px; border-radius: 50%; }
+      .term .fn { margin-left: 14px; font-size: 20px; color: #94a3b8; font-family: var(--mono); }
+      .term .code { padding: 22px 24px; font-size: 21px; line-height: 1.55; color: #e2e8f0; white-space: pre; }
+      .term .l { opacity: 0; }
+      .s, .ph { border-radius: 6px; padding: 0 4px; margin: 0 -4px; }
+      .k { color: #7dd3fc; } .s { color: #86efac; } .ph { color: var(--accent); font-weight: 700; }
+      .term .sep { height: 1px; background: #1e293b; margin: 0 26px; }
+      .term .sh { padding: 20px 26px; font-size: 30px; color: #e2e8f0; opacity: 0; }
+      .term .sh .p { color: #86efac; } .term .sh .cur { display: inline-block; width: 16px; height: 30px; background: #e2e8f0; vertical-align: -5px; margin-left: 4px; }
+      .note { position: absolute; font-family: var(--font); font-size: 21px; font-weight: 700; color: #0b1220; background: var(--accent); padding: 4px 12px; border-radius: 8px; opacity: 0; }
+
+      /* closing */
+      #s7 .c { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+      #s7 .big { font-size: 76px; font-weight: 800; margin-bottom: 26px; opacity: 0; }
+      #s7 .lbl { font-size: 32px; color: var(--muted); opacity: 0; margin-bottom: 22px; }
+      #s7 .url { font-size: 64px; font-weight: 800; color: var(--accent); font-family: var(--mono); border: 4px solid var(--accent); border-radius: 18px; padding: 14px 36px; opacity: 0; }
+      #s7 .brand { margin-top: 40px; font-size: 30px; font-weight: 700; color: var(--muted); opacity: 0; letter-spacing: 0.08em; }
+
+      /* offer cards (scene 4) */
+      .offer { font-size: 29px; line-height: 1.25; color: var(--muted); margin-bottom: 16px; padding: 12px 18px; border-left: 6px solid var(--accent); background: rgba(255,255,255,0.06); border-radius: 0 10px 10px 0; opacity: 0; }
+      .offer em { display: block; font-style: normal; font-size: 40px; font-weight: 800; color: var(--ink); }
+      .pill { display: inline-block; font-family: var(--mono); font-size: 26px; font-weight: 700; color: #0b1220; background: var(--accent); padding: 2px 12px; border-radius: 8px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="99" data-width="1280" data-height="720">
+
+      <!-- 0 Title 0-8 -->
+      <div id="s0" class="scene clip" data-start="0" data-duration="8" data-track-index="0">
+        <div class="bg"><img src="assets/adim-4-playground.png" alt="" /></div>
+        <div class="c">
+          <div class="brand">HISARWEB AI</div>
+          <div class="big">HisarWeb AI:<br />ilk yanıtınıza 5 adım</div>
+          <div class="sub">Hesap açmaktan Claude Code'a kadar</div>
+        </div>
+      </div>
+
+      <!-- 1 Hesap 8-21 -->
+      <div id="s1" class="scene clip" data-start="8" data-duration="13" data-track-index="0">
+        <div class="txt">
+          <div class="tag">Adım 1</div>
+          <div class="h">Hesap açın</div>
+          <div class="b"><strong>Kullanıcı adı</strong> seçin</div>
+          <div class="b"><strong>Parola</strong> belirleyin (8-128 karakter)</div>
+          <div class="b">Sözleşmeyi onaylayın, <strong>Hesap oluştur</strong>'a basın</div>
+        </div>
+        <div class="frame">
+          <div class="stage" id="st1" style="width:1280px;height:760px">
+            <img src="assets/adim-1-kayit.png" width="1280" height="760" alt="" />
+            <div class="hl" id="hl1a" style="left:428px;top:226px;width:424px;height:96px"></div>
+            <div class="hl" id="hl1b" style="left:428px;top:296px;width:424px;height:130px"></div>
+            <div class="hl" id="hl1c" style="left:428px;top:440px;width:424px;height:128px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2 Startbonus 21-34 -->
+      <div id="s2" class="scene clip" data-start="21" data-duration="13" data-track-index="0">
+        <div class="txt">
+          <div class="tag">Adım 2</div>
+          <div class="h">250 TL startbonusunu alın</div>
+          <div class="b"><strong>E-posta</strong> adresinizi ekleyin ve onaylayın</div>
+          <div class="b"><strong>Telegram</strong> hesabınızı bağlayın</div>
+          <div class="b"><strong>Telefon</strong> numaranızı HisarWeb botuyla paylaşın</div>
+        </div>
+        <div class="frame">
+          <div class="stage" id="st2" style="width:1280px;height:520px">
+            <img src="assets/adim-2-startbonus.png" width="1280" height="520" alt="" />
+            <div class="hl" id="hl2a" style="left:241px;top:253px;width:333px;height:74px"></div>
+            <div class="hl" id="hl2b" style="left:574px;top:253px;width:332px;height:74px"></div>
+            <div class="hl" id="hl2c" style="left:906px;top:253px;width:333px;height:74px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3 API anahtari 34-48 -->
+      <div id="s3" class="scene clip" data-start="34" data-duration="14" data-track-index="0">
+        <div class="txt">
+          <div class="tag">Adım 3</div>
+          <div class="h">API anahtarı oluşturun</div>
+          <div class="b"><strong>API Anahtarları</strong> sayfasında oluşturun</div>
+          <div class="b">Ad: <strong>claude-code</strong></div>
+          <div class="b">Grup: <strong>Ücretsiz deneme</strong> ya da <strong>Ücretli</strong></div>
+          <div class="b">Anahtarı <strong>kopyalayın</strong></div>
+        </div>
+        <div class="frame">
+          <div class="stage" id="st3a" style="width:1280px;height:760px">
+            <img src="assets/adim-2-anahtar-olustur.png" width="1280" height="760" alt="" />
+            <div class="hl" id="hl3a" style="left:681px;top:172px;width:578px;height:40px"></div>
+            <div class="hl" id="hl3b" style="left:681px;top:242px;width:578px;height:86px"></div>
+          </div>
+          <div class="stage" id="st3b" style="width:1280px;height:760px;opacity:0">
+            <img src="assets/adim-3-anahtar-listesi.png" width="1280" height="760" alt="" />
+            <div class="hl" id="hl3c" style="left:546px;top:222px;width:230px;height:32px"></div>
+            <div class="hl" id="hl3d" style="left:546px;top:282px;width:230px;height:32px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4 Bakiye 48-61 -->
+      <div id="s4" class="scene clip" data-start="48" data-duration="13" data-track-index="0">
+        <div class="txt">
+          <div class="tag">İsteğe bağlı</div>
+          <div class="h">Bakiye yükleyin</div>
+          <div class="b" style="margin-bottom:18px">Sayfa: <span class="pill">/satin-al</span></div>
+          <div class="offer"><em>%50 indirim</em>ilk alışveriş, 1000 TL'ye kadar</div>
+          <div class="offer"><em>%15 indirim</em>sonraki alışverişler</div>
+          <div class="offer"><em>30 gün</em>teklifler geçerli</div>
+        </div>
+        <div class="frame">
+          <div class="stage" id="st4" style="width:1280px;height:760px">
+            <img src="assets/adim-4-playground.png" width="1280" height="760" alt="" />
+            <div class="hl" id="hl4a" style="left:12px;top:424px;width:184px;height:32px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5 Playground 61-74 -->
+      <div id="s5" class="scene clip" data-start="61" data-duration="13" data-track-index="0">
+        <div class="txt">
+          <div class="tag">Adım 4</div>
+          <div class="h">Playground'da deneyin</div>
+          <div class="b">Soldan <strong>Playground</strong>'u açın</div>
+          <div class="b"><strong>Modeli</strong> seçin</div>
+          <div class="b">Mesajınızı yazın, <strong>Gönder</strong>'e basın</div>
+        </div>
+        <div class="frame">
+          <div class="stage" id="st5" style="width:1280px;height:760px">
+            <img src="assets/adim-4-playground.png" width="1280" height="760" alt="" />
+            <div class="hl" id="hl5a" style="left:12px;top:96px;width:184px;height:40px"></div>
+            <div class="hl" id="hl5b" style="left:870px;top:686px;width:196px;height:36px"></div>
+            <div class="hl" id="hl5c" style="left:292px;top:574px;width:894px;height:104px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6 Claude Code 74-89 -->
+      <div id="s6" class="scene clip" data-start="74" data-duration="15" data-track-index="0">
+        <div class="txt">
+          <div class="tag">Adım 5</div>
+          <div class="h">Claude Code'u bağlayın</div>
+          <div class="b">Dosyayı açın: <strong>~/.claude/settings.json</strong></div>
+          <div class="b">Adresin sonuna <strong>/v1 eklemeyin</strong></div>
+          <div class="b"><strong>BURAYA_ANAHTARINIZ</strong> yerine anahtarınızı yazın</div>
+          <div class="b">Terminalde <strong>claude</strong> yazın</div>
+        </div>
+        <div class="term">
+          <div class="top"><span class="dot" style="background:#f87171"></span><span class="dot" style="background:#fbbf24"></span><span class="dot" style="background:#4ade80"></span><span class="fn">~/.claude/settings.json</span></div>
+          <div class="code"><div class="l" id="l1">{</div><div class="l" id="l2">  <span class="k">"env"</span>: {</div><div class="l" id="l3">    <span class="k">"ANTHROPIC_BASE_URL"</span>: <span class="s" id="u1">"https://api.hisarweb.be"</span>,</div><div class="l" id="l4">    <span class="k">"ANTHROPIC_AUTH_TOKEN"</span>: <span class="s">"<span class="ph" id="ph1">BURAYA_ANAHTARINIZ</span>"</span></div><div class="l" id="l5">  }</div><div class="l" id="l6">}</div></div>
+          <div class="sep"></div>
+          <div class="sh" id="sh"><span class="p">$</span> claude<span class="cur"></span></div>
+        </div>
+      </div>
+
+      <!-- 7 Slot 89-99 -->
+      <div id="s7" class="scene clip" data-start="89" data-duration="10" data-track-index="0">
+        <div class="c">
+          <div class="big">Hazırsınız</div>
+          <div class="lbl">Tüm ayrıntılar ve örnekler:</div>
+          <div class="url">api.hisarweb.be/docs</div>
+          <div class="brand">HISARWEB AI</div>
+        </div>
+      </div>
+
+      <div id="bar"></div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      const FW = 704, FH = 440, BASE = FW / 1280;
+
+      // camera: centre (cx,cy) in native image px, zoom s (1 = fit width), clamped so no blank edge shows
+      function cam(W, H, cx, cy, s) {
+        s = Math.max(s, FH / (H * BASE));
+        const k = BASE * s;
+        let x = FW / 2 - cx * k, y = FH / 2 - cy * k;
+        x = Math.min(0, Math.max(FW - W * k, x));
+        y = Math.min(0, Math.max(FH - H * k, y));
+        return { x: x, y: y, scale: k };
+      }
+      function setCam(sel, W, H, cx, cy, s, t) {
+        const c = cam(W, H, cx, cy, s);
+        gsap.set(sel, { x: c.x, y: c.y, scale: c.scale, transformOrigin: "0 0" });
+      }
+      function moveCam(sel, W, H, cx, cy, s, t, d) {
+        const c = cam(W, H, cx, cy, s);
+        tl.to(sel, { x: c.x, y: c.y, scale: c.scale, duration: d, ease: "power2.inOut" }, t);
+      }
+      function sceneFade(id, t0, dur) {
+        tl.fromTo(id, { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power1.out" }, t0);
+        tl.to(id, { opacity: 0, duration: 0.6, ease: "power1.in" }, t0 + dur - 0.6);
+      }
+      function B(sc, i, cls) { return document.querySelectorAll("#" + sc + " " + (cls || ".b"))[i]; }
+      function appear(sel, t, from) {
+        tl.fromTo(sel, { opacity: 0, y: from === undefined ? 14 : from }, { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" }, t);
+      }
+      function hl(sel, t, d) {
+        tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: 0.4, ease: "power1.out" }, t);
+        tl.to(sel, { opacity: 0, duration: 0.4, ease: "power1.in" }, t + d);
+      }
+
+      // progress bar
+      gsap.set("#bar", { transformOrigin: "0 0" });
+      tl.fromTo("#bar", { scaleX: 0 }, { scaleX: 1, duration: 99, ease: "none" }, 0);
+
+      // ---- scene 0: title (0-8)
+      sceneFade("#s0", 0, 8);
+      gsap.set("#s0 .bg", { transformOrigin: "50% 50%" });
+      tl.fromTo("#s0 .bg", { opacity: 0, scale: 1.0 }, { opacity: 0.22, scale: 1.12, duration: 8, ease: "none" }, 0);
+      appear("#s0 .brand", 0.6);
+      appear("#s0 .big", 1.2, 24);
+      appear("#s0 .sub", 2.6);
+
+      // ---- scene 1: hesap (8-21)
+      let T = 8;
+      sceneFade("#s1", T, 13);
+      setCam("#st1", 1280, 760, 640, 330, 1.0);
+      appear("#s1 .tag", T + 0.5); appear("#s1 .h", T + 0.8);
+      appear(B("s1", 0), T + 2.0); appear(B("s1", 1), T + 4.5); appear(B("s1", 2), T + 7.5);
+      moveCam("#st1", 1280, 760, 640, 290, 1.7, T + 1.2, 2.0);
+      hl("#hl1a", T + 2.2, 2.2);
+      hl("#hl1b", T + 4.8, 2.4);
+      moveCam("#st1", 1280, 760, 640, 470, 1.8, T + 7.0, 1.8);
+      hl("#hl1c", T + 7.6, 3.4);
+
+      // ---- scene 2: startbonus (21-34)
+      T = 21;
+      sceneFade("#s2", T, 13);
+      setCam("#st2", 1280, 520, 640, 200, 1.0);
+      appear("#s2 .tag", T + 0.5); appear("#s2 .h", T + 0.8);
+      appear(B("s2", 0), T + 2.2); appear(B("s2", 1), T + 4.7); appear(B("s2", 2), T + 7.2);
+      moveCam("#st2", 1280, 520, 400, 250, 1.9, T + 1.2, 2.0);
+      hl("#hl2a", T + 2.4, 2.3);
+      moveCam("#st2", 1280, 520, 740, 260, 1.9, T + 4.4, 1.6);
+      hl("#hl2b", T + 4.9, 2.3);
+      moveCam("#st2", 1280, 520, 1000, 260, 1.9, T + 6.9, 1.6);
+      hl("#hl2c", T + 7.4, 3.0);
+      moveCam("#st2", 1280, 520, 640, 200, 1.0, T + 10.0, 2.0);
+
+      // ---- scene 3: API anahtari (34-48)
+      T = 34;
+      sceneFade("#s3", T, 14);
+      setCam("#st3a", 1280, 760, 960, 160, 1.0);
+      setCam("#st3b", 1280, 760, 640, 330, 1.0);
+      appear("#s3 .tag", T + 0.5); appear("#s3 .h", T + 0.8);
+      appear(B("s3", 0), T + 1.6); appear(B("s3", 1), T + 3.0);
+      appear(B("s3", 2), T + 4.6); appear(B("s3", 3), T + 8.4);
+      moveCam("#st3a", 1280, 760, 960, 230, 1.5, T + 1.0, 2.0);
+      hl("#hl3a", T + 3.0, 1.9);
+      moveCam("#st3a", 1280, 760, 960, 300, 1.5, T + 4.0, 1.4);
+      hl("#hl3b", T + 4.7, 2.1);
+      // crossfade to key list
+      tl.to("#st3a", { opacity: 0, duration: 0.7, ease: "power1.inOut" }, T + 7.2);
+      tl.to("#st3b", { opacity: 1, duration: 0.7, ease: "power1.inOut" }, T + 7.2);
+      moveCam("#st3b", 1280, 760, 640, 240, 1.0, T + 7.2, 0.1);
+      moveCam("#st3b", 1280, 760, 650, 250, 1.7, T + 8.0, 2.4);
+      hl("#hl3c", T + 8.8, 2.2);
+      hl("#hl3d", T + 10.0, 2.2);
+
+      // ---- scene 4: bakiye (48-61)
+      T = 48;
+      sceneFade("#s4", T, 13);
+      setCam("#st4", 1280, 760, 640, 330, 1.0);
+      appear("#s4 .tag", T + 0.5); appear("#s4 .h", T + 0.8);
+      appear(B("s4", 0), T + 1.6);
+      appear(B("s4", 0, ".offer"), T + 3.0); appear(B("s4", 1, ".offer"), T + 5.6); appear(B("s4", 2, ".offer"), T + 8.2);
+      moveCam("#st4", 1280, 760, 300, 440, 2.0, T + 1.2, 2.2);
+      hl("#hl4a", T + 3.2, 4.0);
+      moveCam("#st4", 1280, 760, 640, 330, 1.0, T + 9.0, 2.2);
+
+      // ---- scene 5: playground (61-74)
+      T = 61;
+      sceneFade("#s5", T, 13);
+      setCam("#st5", 1280, 760, 640, 330, 1.0);
+      appear("#s5 .tag", T + 0.5); appear("#s5 .h", T + 0.8);
+      appear(B("s5", 0), T + 2.0); appear(B("s5", 1), T + 4.8); appear(B("s5", 2), T + 7.4);
+      moveCam("#st5", 1280, 760, 260, 200, 1.9, T + 1.0, 1.8);
+      hl("#hl5a", T + 2.2, 2.4);
+      moveCam("#st5", 1280, 760, 900, 640, 1.8, T + 4.2, 2.0);
+      hl("#hl5b", T + 5.0, 2.2);
+      moveCam("#st5", 1280, 760, 740, 640, 1.5, T + 7.0, 1.6);
+      hl("#hl5c", T + 7.6, 3.4);
+
+      // ---- scene 6: Claude Code (74-89)
+      T = 74;
+      sceneFade("#s6", T, 15);
+      appear("#s6 .tag", T + 0.5); appear("#s6 .h", T + 0.8);
+      appear(B("s6", 0), T + 1.6);
+      ["#l1", "#l2", "#l3", "#l4", "#l5", "#l6"].forEach(function (id, i) { appear(id, T + 2.0 + i * 0.45, 6); });
+      appear(B("s6", 1), T + 5.2);
+      tl.fromTo("#u1", { backgroundColor: "rgba(251,191,36,0)" }, { backgroundColor: "rgba(251,191,36,0.35)", duration: 0.5 }, T + 5.4);
+      tl.to("#u1", { backgroundColor: "rgba(251,191,36,0)", duration: 0.5 }, T + 8.4);
+      appear(B("s6", 2), T + 7.0);
+      tl.fromTo("#ph1", { backgroundColor: "rgba(251,191,36,0)" }, { backgroundColor: "rgba(251,191,36,0.35)", duration: 0.5 }, T + 7.2);
+      tl.to("#ph1", { backgroundColor: "rgba(251,191,36,0)", duration: 0.5 }, T + 10.0);
+      appear(B("s6", 3), T + 10.0);
+      tl.fromTo("#sh", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" }, T + 10.2);
+
+      // ---- scene 7: slot (89-99)
+      T = 89;
+      sceneFade("#s7", T, 10);
+      appear("#s7 .big", T + 0.6, 20);
+      appear("#s7 .lbl", T + 2.0);
+      appear("#s7 .url", T + 3.0);
+      appear("#s7 .brand", T + 5.0);
+
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>
