@@ -214,6 +214,10 @@ func TestHwQualityRunMeasuresJudgesBlindAndWritesFile(t *testing.T) {
 		assert.NotContains(t, lower, "gpt-5.2")
 		assert.Contains(t, body, "hw sample answer")
 		assert.Contains(t, body, "Grading criteria")
+		// The primary supplier drops customer system messages, so the grading
+		// instruction must reach the judge inside the user message.
+		assert.NotContains(t, body, `"role":"system"`)
+		assert.Contains(t, body, "You are a grader")
 	}
 
 	// The public summary aggregates the same run.

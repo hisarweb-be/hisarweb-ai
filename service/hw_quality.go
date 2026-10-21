@@ -183,7 +183,9 @@ func hwCallChat(ctx context.Context, client *http.Client, baseURL string, apiKey
 
 // hwJudgePrompt builds the blind judge request. It carries the task, the
 // criteria, and the answer — and deliberately nothing that identifies the
-// model being judged.
+// model being judged. The grading instruction travels in the user message:
+// the primary supplier replaces a customer system message with its own, and a
+// judge that never sees the instruction solves the task instead of scoring it.
 func hwJudgePrompt(task HwQualityTask, answer string) []hwChatMessage {
 	expected := ""
 	if task.Expected != "" {
@@ -192,15 +194,12 @@ func hwJudgePrompt(task HwQualityTask, answer string) []hwChatMessage {
 	criteria := strings.Join(task.Criteria, "\n- ")
 	return []hwChatMessage{
 		{
-			Role: "system",
-			Content: "You grade a model answer to a task. You see only the task, " +
-				"the grading criteria, and the answer. Reply with a JSON object {\"score\": N} " +
-				"and nothing else, where N is an integer from 0 (completely wrong) to 10 " +
-				"(perfect). Judge strictly on the criteria.",
-		},
-		{
 			Role: "user",
-			Content: "Task (" + task.Kind + ", " + task.Language + "):\n" + task.Prompt +
+			Content: "You are a grader. Do not solve the task yourself. You grade a model answer " +
+				"to a task. You see only the task, the grading criteria, and the answer. Reply " +
+				"with a JSON object {\"score\": N} and nothing else, where N is an integer from " +
+				"0 (completely wrong) to 10 (perfect). Judge strictly on the criteria.\n\n" +
+				"Task (" + task.Kind + ", " + task.Language + "):\n" + task.Prompt +
 				"\n\nGrading criteria:\n- " + criteria + "\n\n" + expected + "Answer to grade:\n" + answer,
 		},
 	}
