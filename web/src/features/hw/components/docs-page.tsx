@@ -31,39 +31,20 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
-import { useDocsDesktopSteps, useDocsGuideText } from '../docs-guide-texts'
+import { useDocsGuideText } from '../docs-guide-texts'
+import { MODEL_HAIKU_FREE, OPENAI_BASE_URL } from '../docs-tool-guides'
 import { useHwText, type HwTextKey } from '../texts'
-
-/** The public API address every example on this page starts from. */
-export const HW_API_BASE_URL = 'https://api.hisarweb.be/v1'
-
-/** The address Claude Code needs: no `/v1`, the client adds the path itself. */
-const CLAUDE_CODE_BASE_URL = 'https://api.hisarweb.be'
+import { ToolGuides } from './docs-tool-guides'
 
 /** Static video of the same steps and its still frame. */
 const GUIDE_VIDEO_SRC = '/rehber/hisarweb-ai-rehber.mp4'
 const GUIDE_VIDEO_POSTER = '/rehber/hisarweb-ai-rehber.jpg'
 
-const INSTALL_WINDOWS = 'irm https://claude.ai/install.ps1 | iex'
-const INSTALL_UNIX = 'curl -fsSL https://claude.ai/install.sh | bash'
-
-const CLAUDE_SETTINGS_EXAMPLE = `{
-  "env": {
-    "ANTHROPIC_BASE_URL": "${CLAUDE_CODE_BASE_URL}",
-    "ANTHROPIC_AUTH_TOKEN": "BURAYA_ANAHTARINIZ",
-    "ANTHROPIC_MODEL": "claude-sonnet-5-5",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5-5",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-4-5"
-  }
-}`
-
 /** The cheapest model, used in every example so the samples work on a trial account. */
-const EXAMPLE_MODEL = 'claude-haiku-4-5'
+const EXAMPLE_MODEL = MODEL_HAIKU_FREE
 
-const CHAT_COMPLETIONS_EXAMPLE = `curl ${HW_API_BASE_URL}/chat/completions \\
+const CHAT_COMPLETIONS_EXAMPLE = `curl ${OPENAI_BASE_URL}/chat/completions \\
   -H "Authorization: Bearer $HISARWEB_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -73,7 +54,7 @@ const CHAT_COMPLETIONS_EXAMPLE = `curl ${HW_API_BASE_URL}/chat/completions \\
     ]
   }'`
 
-const MESSAGES_EXAMPLE = `curl ${HW_API_BASE_URL}/messages \\
+const MESSAGES_EXAMPLE = `curl ${OPENAI_BASE_URL}/messages \\
   -H "x-api-key: $HISARWEB_API_KEY" \\
   -H "anthropic-version: 2023-06-01" \\
   -H "Content-Type: application/json" \\
@@ -85,7 +66,7 @@ const MESSAGES_EXAMPLE = `curl ${HW_API_BASE_URL}/messages \\
     ]
   }'`
 
-const STREAM_EXAMPLE = `curl ${HW_API_BASE_URL}/chat/completions \\
+const STREAM_EXAMPLE = `curl ${OPENAI_BASE_URL}/chat/completions \\
   -H "Authorization: Bearer $HISARWEB_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -130,48 +111,6 @@ function Paragraph(props: { children: React.ReactNode }) {
   return <p className='text-muted-foreground'>{props.children}</p>
 }
 
-function ClaudeCodeConnect() {
-  const guide = useDocsGuideText()
-  const desktopSteps = useDocsDesktopSteps()
-
-  return (
-    <Tabs defaultValue='cli'>
-      <TabsList>
-        <TabsTrigger value='cli'>{guide('cliTitle')}</TabsTrigger>
-        <TabsTrigger value='desktop'>{guide('desktopTitle')}</TabsTrigger>
-      </TabsList>
-      <TabsContent value='cli' className='space-y-3 pt-2'>
-        <h4 className='font-medium'>{guide('cliInstallTitle')}</h4>
-        <Paragraph>{guide('cliInstallWin')}</Paragraph>
-        <CodeBlock code={INSTALL_WINDOWS} language='powershell'>
-          <CodeBlockCopyButton />
-        </CodeBlock>
-        <Paragraph>{guide('cliInstallUnix')}</Paragraph>
-        <CodeBlock code={INSTALL_UNIX} language='bash'>
-          <CodeBlockCopyButton />
-        </CodeBlock>
-        <h4 className='pt-2 font-medium'>{guide('cliSettingsTitle')}</h4>
-        <Paragraph>{guide('cliSettingsBody')}</Paragraph>
-        <CodeBlock code={CLAUDE_SETTINGS_EXAMPLE} language='json'>
-          <CodeBlockCopyButton />
-        </CodeBlock>
-        <Paragraph>{guide('cliSettingsNote')}</Paragraph>
-        <h4 className='pt-2 font-medium'>{guide('cliRunTitle')}</h4>
-        <Paragraph>{guide('cliRunBody')}</Paragraph>
-        <p className='text-sm font-medium'>{guide('cliTested')}</p>
-      </TabsContent>
-      <TabsContent value='desktop' className='space-y-3 pt-2'>
-        <Paragraph>{guide('desktopBody')}</Paragraph>
-        <ol className='text-muted-foreground list-decimal space-y-1.5 pl-5'>
-          {desktopSteps.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
-      </TabsContent>
-    </Tabs>
-  )
-}
-
 /** The plain-language walk from sign-up to a first answer in Claude Code. */
 function BeginnerGuide() {
   const guide = useDocsGuideText()
@@ -213,7 +152,10 @@ function BeginnerGuide() {
         <ol className='space-y-10'>
           <GuideStep number={1} title={guide('step1Title')}>
             <Paragraph>{guide('step1Body')}</Paragraph>
-            <GuideImage src='/rehber/adim-1-kayit.png' alt={guide('step1Alt')} />
+            <GuideImage
+              src='/rehber/adim-1-kayit.png'
+              alt={guide('step1Alt')}
+            />
           </GuideStep>
           <GuideStep number={2} title={guide('step2Title')}>
             <Paragraph>{guide('step2Body')}</Paragraph>
@@ -249,8 +191,7 @@ function BeginnerGuide() {
             />
           </GuideStep>
           <GuideStep number={6} title={guide('step6Title')}>
-            <Paragraph>{guide('step6Body')}</Paragraph>
-            <ClaudeCodeConnect />
+            <ToolGuides />
           </GuideStep>
         </ol>
       </section>
@@ -308,9 +249,9 @@ export function DocsPage() {
                 </p>
                 <div className='bg-muted/50 flex items-center justify-between gap-3 rounded-lg border px-3 py-2'>
                   <code className='min-w-0 truncate font-mono text-sm'>
-                    {HW_API_BASE_URL}
+                    {OPENAI_BASE_URL}
                   </code>
-                  <CopyButton value={HW_API_BASE_URL} />
+                  <CopyButton value={OPENAI_BASE_URL} />
                 </div>
               </DocSection>
 
