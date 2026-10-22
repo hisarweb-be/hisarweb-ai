@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -461,4 +462,48 @@ func TestTelegramOAuthConcurrentBindingHasSingleOwner(t *testing.T) {
 	require.NoError(t, model.DB.Where("provider = ? AND subject = ?", "telegram", "42").Find(&claims).Error)
 	require.Len(t, claims, 1)
 	assert.Equal(t, owners[0].Id, claims[0].UserId)
+}
+
+func callHwTelegramLinkStart(t *testing.T, userID int) map[string]any {
+	t.Helper()
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/hw/telegram/link", nil)
+	c.Set("id", userID)
+	HwTelegramLinkStart(c)
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+	return body
+}
+
+func TestHwTelegramLinkStart(t *testing.T) {
+	user, _ := setupSecurityEnrollmentTest(t)
+	require.NoError(t, model.DB.AutoMigrate(&model.HwTelegramLinkToken{}))
+	previousName, previousToken := common.TelegramBotName, common.TelegramBotToken
+	t.Cleanup(func() { common.TelegramBotName, common.TelegramBotToken = previousName, previousToken })
+	t.Setenv("TELEGRAM_BOT_TOKEN", "")
+	common.TelegramBotName, common.TelegramBotToken = "@HisarWebAI_bot", "test-bot-token"
+
+	body := callHwTelegramLinkStart(t, user.Id)
+	require.Equal(t, true, body["success"], body)
+	data := body["data"].(map[string]any)
+	link, _ := data["url"].(string)
+	require.True(t, strings.HasPrefix(link, "https://t.me/HisarWebAI_bot?start="), link)
+	assert.NotEmpty(t, strings.TrimPrefix(link, "https://t.me/HisarWebAI_bot?start="))
+	var stored int64
+	require.NoError(t, model.DB.Model(&model.HwTelegramLinkToken{}).Where("user_id = ?", user.Id).Count(&stored).Error)
+	assert.EqualValues(t, 1, stored)
+
+	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", user.Id).Update("telegram_id", "777").Error)
+	body = callHwTelegramLinkStart(t, user.Id)
+	require.Equal(t, true, body["success"], body)
+	assert.Equal(t, map[string]any{"linked": true}, body["data"])
+
+	common.TelegramBotName = "bad name!"
+	body = callHwTelegramLinkStart(t, user.Id)
+	assert.Equal(t, false, body["success"])
+
+	common.TelegramBotName, common.TelegramBotToken = "HisarWebAI_bot", ""
+	body = callHwTelegramLinkStart(t, user.Id)
+	assert.Equal(t, false, body["success"])
 }

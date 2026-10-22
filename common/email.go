@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
+	"net"
 	"net/smtp"
 	"slices"
 	"strings"
@@ -41,12 +42,23 @@ func smtpTLSConfig() *tls.Config {
 	}
 }
 
+// A host that blocks the SMTP port drops the packets instead of refusing
+// them, and without a deadline a verification mail then held its request for
+// minutes. The dial and the whole session are bounded so a closed port fails
+// fast with an error.
+var (
+	smtpDialTimeout    = 15 * time.Second
+	smtpSessionTimeout = 60 * time.Second
+)
+
 func newSMTPClient(addr string) (*smtp.Client, error) {
+	dialer := &net.Dialer{Timeout: smtpDialTimeout}
 	if SMTPSSLEnabled || (SMTPPort == 465 && !SMTPStartTLSEnabled) {
-		conn, err := tls.Dial("tcp", addr, smtpTLSConfig())
+		conn, err := tls.DialWithDialer(dialer, "tcp", addr, smtpTLSConfig())
 		if err != nil {
 			return nil, err
 		}
+		_ = conn.SetDeadline(time.Now().Add(smtpSessionTimeout))
 		client, err := smtp.NewClient(conn, SMTPServer)
 		if err != nil {
 			_ = conn.Close()
@@ -55,8 +67,14 @@ func newSMTPClient(addr string) (*smtp.Client, error) {
 		return client, nil
 	}
 
-	client, err := smtp.Dial(addr)
+	conn, err := dialer.Dial("tcp", addr)
 	if err != nil {
+		return nil, err
+	}
+	_ = conn.SetDeadline(time.Now().Add(smtpSessionTimeout))
+	client, err := smtp.NewClient(conn, SMTPServer)
+	if err != nil {
+		_ = conn.Close()
 		return nil, err
 	}
 

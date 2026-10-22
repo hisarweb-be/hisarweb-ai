@@ -261,7 +261,7 @@ const tr = {
   bonusHintEmail:
     'Güvenlik sayfasında e-posta adresinizi girin ve gelen doğrulama kodunu yazın.',
   bonusHintTelegram:
-    'Güvenlik sayfasında Telegram ile bağlan düğmesine basın ve Telegram’da onaylayın.',
+    'Telegram’ı bağla düğmesine basın, Telegram’da Başlat’a dokunun ve numaranızı botun düğmesiyle paylaşın.',
   bonusHintPhone:
     'Botu açın, Başlat’a basın ve Numaramı paylaş düğmesine dokunun.',
   noCreditTitle: 'Bakiyeniz bitti',
@@ -568,7 +568,7 @@ const en: Record<HwTextKey, string> = {
   bonusHintEmail:
     'On the security page, enter your e-mail address and type the code you receive.',
   bonusHintTelegram:
-    'On the security page, press the Telegram link button and confirm in Telegram.',
+    'Press Link Telegram, tap Start in Telegram and share your number with the bot’s button.',
   bonusHintPhone:
     'Open the bot, press Start and tap the Share my number button.',
   noCreditTitle: 'You are out of credit',

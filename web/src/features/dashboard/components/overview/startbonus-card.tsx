@@ -16,21 +16,42 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { Check, Gift, Wallet } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
-import { useHwPackages } from '@/features/hw/hooks/use-hw-packages'
+import {
+  hwPackagesQueryKey,
+  useHwPackages,
+} from '@/features/hw/hooks/use-hw-packages'
 import { type HwTextKey, useHwText } from '@/features/hw/texts'
 import { useStatus } from '@/hooks/use-status'
+import { api, getSelf } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { useAuthStore } from '@/stores/auth-store'
+import { type AuthUser, useAuthStore } from '@/stores/auth-store'
+
+/** Answer of `POST /api/hw/telegram/link`. */
+type TelegramLinkAnswer = {
+  success: boolean
+  message?: string
+  data?: {
+    linked?: boolean
+    url?: string
+    expires_at?: number
+  }
+}
 
 type BonusStepAction = {
-  label: HwTextKey
-  hint: HwTextKey
+  label: string
+  hint?: HwTextKey
   to?: string
   href?: string
+  /** Ask the server for a one-time Telegram deep link instead of navigating. */
+  linkTelegram?: boolean
 }
 
 type BonusStep = {
@@ -51,23 +72,83 @@ type BonusStep = {
  */
 export function StartbonusCard() {
   const hw = useHwText()
+  const { t } = useTranslation()
   const user = useAuthStore((state) => state.auth.user)
+  const setUser = useAuthStore((state) => state.auth.setUser)
   const { status } = useStatus()
   const packages = useHwPackages()
+  const queryClient = useQueryClient()
+  const [linking, setLinking] = useState(false)
+
+  /** Read the account and the packages again, without polling. */
+  const refreshAccount = useCallback(async () => {
+    try {
+      const self = await getSelf()
+      if (self.success && self.data) setUser(self.data as AuthUser)
+    } catch {
+      // Keep what is on screen; the next return to this window tries again.
+    }
+    await queryClient.refetchQueries({ queryKey: hwPackagesQueryKey })
+  }, [queryClient, setUser])
+
+  // Coming back to this window is the moment the customer may have finished
+  // the step in Telegram, so the account is read once more — no timer.
+  useEffect(() => {
+    const onFocus = () => {
+      void refreshAccount()
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [refreshAccount])
+
+  const linkTelegram = useCallback(async () => {
+    // Safari and in-app browsers only open a tab straight from the click, not
+    // after the request below, so the tab opens now and gets the link later.
+    const tab = window.open('', '_blank')
+    if (tab) tab.opener = null
+    let opened = false
+    setLinking(true)
+    try {
+      const answer = (
+        await api.post<TelegramLinkAnswer>('/api/hw/telegram/link')
+      ).data
+      if (!answer.success) {
+        toast.error(t(answer.message ?? 'Failed to create the Telegram link'))
+      } else if (answer.data?.url) {
+        opened = true
+        if (tab) tab.location.href = answer.data.url
+        else window.location.assign(answer.data.url)
+      } else if (answer.data?.linked) {
+        await refreshAccount()
+      } else {
+        toast.error(t('Failed to create the Telegram link'))
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Failed to create the Telegram link'
+      toast.error(t(message))
+    } finally {
+      if (!opened) tab?.close()
+      setLinking(false)
+    }
+  }, [refreshAccount, t])
 
   if (!user || !packages.isSuccess) return null
   const claimed = packages.data.packages.some((pkg) => pkg.source === 'free')
   if (claimed) return null
 
-  const telegramOpen = Boolean(status?.telegram_oauth_configured)
   const botName = String(status?.telegram_bot_name ?? '').replace(/^@/, '')
+  const telegramOpen =
+    Boolean(botName) || Boolean(status?.telegram_oauth_configured)
   const steps: BonusStep[] = [
     {
       key: 'bonusStepEmail',
       done: Boolean(user.email),
       closed: false,
       action: {
-        label: 'bonusButtonEmail',
+        label: hw('bonusButtonEmail'),
         hint: 'bonusHintEmail',
         to: '/security',
       },
@@ -78,9 +159,9 @@ export function StartbonusCard() {
       closed: !telegramOpen,
       action: telegramOpen
         ? {
-            label: 'bonusButtonTelegram',
+            label: t('Link Telegram'),
             hint: 'bonusHintTelegram',
-            to: '/security',
+            linkTelegram: true,
           }
         : undefined,
     },
@@ -91,7 +172,7 @@ export function StartbonusCard() {
       action:
         telegramOpen && botName
           ? {
-              label: 'bonusButtonPhone',
+              label: hw('bonusButtonPhone'),
               hint: 'bonusHintPhone',
               href: `https://t.me/${botName}`,
             }
@@ -103,11 +184,11 @@ export function StartbonusCard() {
 
   // The e-mail step can always be done, so its call to action stays visible
   // while Telegram verification is closed; the other two cannot work then.
-  let action: { label: string; to?: string; href?: string } | null = null
+  let action: BonusStepAction | null = null
   if (current === 0) {
     action = { label: hw('bonusButtonEmail'), to: '/security' }
   } else if (telegramOpen && current === 1) {
-    action = { label: hw('bonusButtonTelegram'), to: '/security' }
+    action = { label: t('Link Telegram'), linkTelegram: true }
   } else if (telegramOpen && current === 2 && botName) {
     action = { label: hw('bonusButtonPhone'), href: `https://t.me/${botName}` }
   }
@@ -147,6 +228,18 @@ export function StartbonusCard() {
             <Button
               size='sm'
               render={<a href={action.href} target='_blank' rel='noreferrer' />}
+            >
+              <Gift data-icon='inline-start' />
+              {action.label}
+            </Button>
+          )}
+          {action?.linkTelegram && (
+            <Button
+              size='sm'
+              onClick={() => {
+                void linkTelegram()
+              }}
+              disabled={linking}
             >
               <Gift data-icon='inline-start' />
               {action.label}
@@ -195,7 +288,7 @@ export function StartbonusCard() {
                 >
                   {hw(statusKey)}
                 </span>
-                {stepAction && (
+                {stepAction?.hint && (
                   <span className='text-muted-foreground text-xs leading-relaxed'>
                     {hw(stepAction.hint)}
                   </span>
@@ -207,7 +300,7 @@ export function StartbonusCard() {
                     className='self-start'
                     render={<Link to={stepAction.to} />}
                   >
-                    {hw(stepAction.label)}
+                    {stepAction.label}
                   </Button>
                 )}
                 {stepAction?.href && (
@@ -223,7 +316,20 @@ export function StartbonusCard() {
                       />
                     }
                   >
-                    {hw(stepAction.label)}
+                    {stepAction.label}
+                  </Button>
+                )}
+                {stepAction?.linkTelegram && (
+                  <Button
+                    variant='link'
+                    size='sm'
+                    className='self-start'
+                    onClick={() => {
+                      void linkTelegram()
+                    }}
+                    disabled={linking}
+                  >
+                    {stepAction.label}
                   </Button>
                 )}
               </div>

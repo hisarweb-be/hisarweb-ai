@@ -205,6 +205,7 @@ var userBindColumns = map[string]bool{
 	"oidc_id":     true,
 	"linux_do_id": true,
 	"wechat_id":   true,
+	"telegram_id": true,
 }
 
 // UpdateUserBindColumn 第三方账号绑定字段的专用更新。

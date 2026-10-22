@@ -419,6 +419,37 @@ func TestNewSMTPClientKeepsImplicitTLSForLegacyPort465(t *testing.T) {
 	defer client.Close()
 }
 
+func TestNewSMTPClientFailsFastWhenServerStaysSilent(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer listener.Close()
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		time.Sleep(5 * time.Second)
+	}()
+	withSMTPSettings(t)
+	previous := smtpSessionTimeout
+	smtpSessionTimeout = 300 * time.Millisecond
+	t.Cleanup(func() { smtpSessionTimeout = previous })
+
+	SMTPServer = "127.0.0.1"
+	SMTPPort = listener.Addr().(*net.TCPAddr).Port
+	SMTPSSLEnabled = false
+	SMTPStartTLSEnabled = false
+
+	started := time.Now()
+	client, err := newSMTPClient(listener.Addr().String())
+	if client != nil {
+		client.Close()
+	}
+	require.Error(t, err)
+	require.Less(t, time.Since(started), 3*time.Second)
+}
+
 func TestSendEmailSkipsAuthWhenCredentialsAreEmpty(t *testing.T) {
 	server := newFakeSMTPServerWithSTARTTLSAdvertisement(t, false)
 	defer server.close()

@@ -34,12 +34,12 @@ func hwPhoneStepTestSetup(t *testing.T) {
 	require.NoError(t, model.DB.AutoMigrate(
 		&model.HwCreditPackage{}, &model.HwUserSignal{}, &model.HwFirstPurchaseClaim{},
 		&model.HwFreeCreditClaim{}, &model.HwAccountFlag{}, &model.HwSignupIp{},
-		&model.HwTelegramUpdate{}, &model.HwCreditExtension{},
+		&model.HwTelegramUpdate{}, &model.HwTelegramLinkToken{}, &model.HwCreditExtension{},
 	))
 	for _, table := range []string{
 		"hw_credit_packages", "hw_user_signals", "hw_first_purchase_claims",
 		"hw_free_credit_claims", "hw_account_flags", "hw_signup_ips",
-		"hw_telegram_updates", "users",
+		"hw_telegram_updates", "hw_telegram_link_tokens", "users",
 	} {
 		require.NoError(t, model.DB.Exec("DELETE FROM "+table).Error)
 	}
@@ -47,7 +47,7 @@ func hwPhoneStepTestSetup(t *testing.T) {
 		for _, table := range []string{
 			"hw_credit_packages", "hw_user_signals", "hw_first_purchase_claims",
 			"hw_free_credit_claims", "hw_account_flags", "hw_signup_ips",
-			"hw_telegram_updates", "users",
+			"hw_telegram_updates", "hw_telegram_link_tokens", "users",
 		} {
 			model.DB.Exec("DELETE FROM " + table)
 		}
@@ -744,6 +744,84 @@ func TestHwTelegramWebhookPhoneStep(t *testing.T) {
 		assert.NotContains(t, logs, "5550001212")
 		assert.NotContains(t, logs, "+905550001212")
 		assert.NotRegexp(t, regexp.MustCompile(`[0-9a-f]{64}`), logs, "no keyed hash reaches a log line")
+	})
+}
+
+// hwTelegramLinkTokenFor makes the one-time token the dashboard would hand out
+// for a user, so the webhook test starts from the same state a customer is in.
+func hwTelegramLinkTokenFor(t *testing.T, userID int) string {
+	t.Helper()
+	raw, _, err := model.HwCreateTelegramLinkToken(userID, time.Now().Unix())
+	require.NoError(t, err)
+	return raw
+}
+
+func hwPhoneStepUserTelegramID(t *testing.T, userID int) string {
+	t.Helper()
+	var user model.User
+	require.NoError(t, model.DB.Where("id = ?", userID).First(&user).Error)
+	return user.TelegramId
+}
+
+func TestHwTelegramWebhookLinksAnAccount(t *testing.T) {
+	t.Run("a valid start link binds the account and asks for the number", func(t *testing.T) {
+		api, secret := hwTelegramTestSetup(t)
+		user := hwPhoneStepTestUser(t, "link@example.com")
+		body := hwTelegramTextUpdate(t, 21, 900021, "tr", "/start "+hwTelegramLinkTokenFor(t, user.Id))
+
+		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+		assert.Equal(t, http.StatusOK, outcome.HTTPStatus())
+		assert.Equal(t, "900021", hwPhoneStepUserTelegramID(t, user.Id))
+
+		sent := api.messages()
+		require.Len(t, sent, 1)
+		assert.Equal(t, hwTelegramTextsFor("tr").Prompt, sent[0].Text)
+		assert.Equal(t, hwTelegramTextsFor("tr").Button, sent[0].Button, "the prompt carries the share-contact button")
+	})
+
+	t.Run("an invalid link token binds nothing", func(t *testing.T) {
+		api, secret := hwTelegramTestSetup(t)
+		user := hwPhoneStepTestUser(t, "bad-link@example.com")
+		body := hwTelegramTextUpdate(t, 22, 900022, "en", "/start not-a-real-token")
+
+		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+		assert.Equal(t, http.StatusOK, outcome.HTTPStatus())
+		assert.Empty(t, hwPhoneStepUserTelegramID(t, user.Id))
+
+		sent := api.messages()
+		require.Len(t, sent, 1)
+		assert.Equal(t, hwTelegramTextsFor("en").LinkInvalid, sent[0].Text)
+	})
+
+	t.Run("a link is refused when the Telegram account belongs to another user", func(t *testing.T) {
+		api, secret := hwTelegramTestSetup(t)
+		hwPhoneStepTestTelegramUser(t, "holder@example.com", "900023")
+		user := hwPhoneStepTestUser(t, "second@example.com")
+		body := hwTelegramTextUpdate(t, 23, 900023, "tr", "/start "+hwTelegramLinkTokenFor(t, user.Id))
+
+		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+		assert.Equal(t, http.StatusOK, outcome.HTTPStatus())
+		assert.Empty(t, hwPhoneStepUserTelegramID(t, user.Id))
+
+		sent := api.messages()
+		require.Len(t, sent, 1)
+		assert.Equal(t, hwTelegramTextsFor("tr").LinkTaken, sent[0].Text)
+	})
+
+	t.Run("a bare start from an unknown account names the dashboard", func(t *testing.T) {
+		api, secret := hwTelegramTestSetup(t)
+		body := hwTelegramTextUpdate(t, 24, 900024, "tr", "/start")
+
+		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+		assert.Equal(t, http.StatusOK, outcome.HTTPStatus())
+
+		sent := api.messages()
+		require.Len(t, sent, 1)
+		assert.Equal(t, hwTelegramTextsFor("tr").LinkNeeded, sent[0].Text)
+		assert.Empty(t, sent[0].Button)
+		var linked int64
+		require.NoError(t, model.DB.Model(&model.User{}).Where("telegram_id <> ''").Count(&linked).Error)
+		assert.Zero(t, linked)
 	})
 }
 

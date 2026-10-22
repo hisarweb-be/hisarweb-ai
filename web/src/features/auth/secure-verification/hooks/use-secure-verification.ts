@@ -324,7 +324,17 @@ export function useSecureVerification() {
           cancel()
           return
         }
-        dispatch({ type: 'error', error: failure.message })
+        // The server answers a wrong password with the generic verification
+        // failure; customers read that as a broken dialog, so name the cause.
+        const wrongPassword =
+          input.method === 'password' &&
+          failure.code === 'SECURITY_VERIFICATION_FAILED'
+        dispatch({
+          type: 'error',
+          error: wrongPassword
+            ? 'The password is incorrect. Please try again.'
+            : failure.message,
+        })
       } finally {
         current.submitting = false
       }
