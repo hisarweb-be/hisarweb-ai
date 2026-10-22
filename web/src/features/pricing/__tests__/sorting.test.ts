@@ -124,3 +124,33 @@ describe('price sorting', () => {
     }
   )
 })
+
+describe('recommended sorting', () => {
+  const catalogue = [
+    'gemini-3.8-flash',
+    'zz-unknown',
+    'claude-opus-5-5',
+    'aa-unknown',
+    'claude-fable-5-1',
+    'gpt-6-luna',
+  ].map((name) => pricingModel(name, {}))
+
+  test('puts Fable first, then Opus, and unknown models last by name', () => {
+    expect(
+      sortModels(catalogue, SORT_OPTIONS.RECOMMENDED).map((m) => m.model_name)
+    ).toEqual([
+      'claude-fable-5-1',
+      'claude-opus-5-5',
+      'gpt-6-luna',
+      'gemini-3.8-flash',
+      'aa-unknown',
+      'zz-unknown',
+    ])
+  })
+
+  test('does not reorder the list it was given', () => {
+    const before = catalogue.map((m) => m.model_name)
+    sortModels(catalogue, SORT_OPTIONS.RECOMMENDED)
+    expect(catalogue.map((m) => m.model_name)).toEqual(before)
+  })
+})

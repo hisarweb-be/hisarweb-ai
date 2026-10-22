@@ -17,7 +17,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import i18next from 'i18next'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -130,7 +137,8 @@ describe('top-up page', () => {
     })
     renderPage(false)
 
-    await user.click(screen.getByRole('button', { name: /500/ }))
+    const presets = screen.getByRole('group', { name: tr.topUpPresetLabel })
+    await user.click(within(presets).getByRole('button', { name: /500/ }))
     await user.click(screen.getByRole('button', { name: tr.topUpSubmit }))
 
     await waitFor(() =>
@@ -140,9 +148,7 @@ describe('top-up page', () => {
       })
     )
     await waitFor(() =>
-      expect(assign).toHaveBeenCalledWith(
-        'https://pay.example.com/checkout/1'
-      )
+      expect(assign).toHaveBeenCalledWith('https://pay.example.com/checkout/1')
     )
   })
 

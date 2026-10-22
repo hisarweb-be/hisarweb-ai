@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 export HYPERFRAMES_NO_TELEMETRY=1 DO_NOT_TRACK=1 HYPERFRAMES_SKIP_SKILLS=1
-DOCS="../public/docs"
+DOCS="../public/rehber"   # the site serves these as /rehber/*
 for f in adim-1-kayit adim-2-startbonus adim-2-anahtar-olustur adim-3-anahtar-listesi adim-4-playground; do
   cp "$DOCS/$f.png" "assets/$f.png"      # the screenshots are not duplicated in git
 done

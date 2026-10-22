@@ -21,6 +21,8 @@ import { useTranslation } from 'react-i18next'
 
 import { PublicLayout } from '@/components/layout'
 import { PageTransition } from '@/components/page-transition'
+import { TokenExplainer } from '@/features/hw/components/token-explainer'
+import { toIntlLocale } from '@/i18n/languages'
 
 import {
   LoadingSkeleton,
@@ -38,7 +40,7 @@ import { usePricingData } from './hooks/use-pricing-data'
 import { visibleCustomerGroups } from './lib/customer-groups'
 
 export function Pricing() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [selectedModelName, setSelectedModelName] = useState<string | null>(
     null
   )
@@ -208,6 +210,11 @@ export function Pricing() {
               className='mx-auto mt-4 max-w-2xl sm:mt-6'
             />
           </header>
+
+          <TokenExplainer
+            locale={toIntlLocale(i18n.resolvedLanguage ?? i18n.language)}
+            className='mb-4'
+          />
 
           <div className='grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]'>
             <PricingSidebar

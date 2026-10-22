@@ -163,7 +163,8 @@ const tr = {
   compareOfficial: 'Resmî liste fiyatı',
   compareOfficialUsd: 'Resmî liste fiyatı (USD)',
   compareOfficialTry: 'Resmî liste fiyatı (TL)',
-  compareOursFirst: 'HisarWeb AI fiyatı (ilk alışveriş, hoş geldin indirimiyle)',
+  compareOursFirst:
+    'HisarWeb AI fiyatı (ilk alışveriş, hoş geldin indirimiyle)',
   compareOursRepeat: 'HisarWeb AI fiyatı (her alışverişte)',
   compareSavingFirst: 'İlk alışverişte tasarruf: {amount}',
   compareSavingRepeat: 'Her alışverişte tasarruf: {amount}',
@@ -243,8 +244,8 @@ const tr = {
   statusEmptyBody:
     'Durum ölçümü henüz başlamadı. İlk ölçümden sonra model durumları burada görünecek.',
 
-  bonusEyebrow: 'Startbonus',
-  bonusTitle: '250 TL startbonusunuzu alın',
+  bonusEyebrow: 'Başlangıç bonusu',
+  bonusTitle: '250 TL başlangıç bonusunuzu alın',
   bonusLead: 'Bonusu almak için 3 kısa adım var. Şu an {step}. adımdasınız.',
   bonusClosed:
     'Telefon doğrulaması şu anda açık değil, bu yüzden bonus henüz tanımlanamıyor. Doğrulama açıldığında bonusu buradan alabileceksiniz; beklemek istemezseniz TL ile bakiye yükleyebilirsiniz.',
@@ -256,8 +257,8 @@ const tr = {
   bonusButtonPhone: 'Telegram botunu aç',
   noCreditTitle: 'Bakiyeniz bitti',
   noCreditBody:
-    'Bu isteği göndermek için hesabınızda yeterli bakiye yok. Yeni hesaplar 250 TL startbonus alır; bonusu henüz almadıysanız aşağıdan talep edin ya da TL ile bakiye yükleyin.',
-  noCreditBonusButton: '250 TL startbonusu al',
+    'Bu isteği göndermek için hesabınızda yeterli bakiye yok. Yeni hesaplar 250 TL başlangıç bonusu alır; bonusu henüz almadıysanız aşağıdan talep edin ya da TL ile bakiye yükleyin.',
+  noCreditBonusButton: '250 TL başlangıç bonusunu al',
   noCreditBuyButton: 'Bakiye satın al',
   docsTitle: 'API belgeleri',
   docsLead:
@@ -302,6 +303,27 @@ const tr = {
   rateLimited:
     'Çok fazla istek gönderildi. Lütfen birkaç saniye sonra tekrar deneyin.',
   statusScrollHint: 'Tüm sütunlar için tabloyu yana kaydırın.',
+  explainTitle: 'Kredinizle ne alırsınız?',
+  explainLead:
+    'Yapay zekâ kullanımı token ile ölçülür. Aşağıdaki üç kısa not ve hesaplayıcı, bütçenizin ne kadar yeteceğini anlamanıza yardım eder.',
+  explainTokenTitle: 'Token nedir?',
+  explainTokenBody:
+    'Yapay zekâ metni token denilen küçük parçalar halinde okur. Bir token yaklaşık ¾ kelimedir: 1 milyon token yaklaşık 750.000 kelimeye denk gelir.',
+  explainIoTitle: 'Girdi ve çıktı',
+  explainIoBody:
+    'Girdi, modele gönderdiğiniz her şeydir (sorunuz, kodunuz, dosyalar). Çıktı, modelin yazdığı yanıttır. Çıktının fiyatı girdiden yüksektir.',
+  explainCodingTitle: 'Kodlama araçları neden çok girdi harcar?',
+  explainCodingBody:
+    'Cursor, Cline veya Claude Code gibi araçlar her adımda projenizdeki dosyaları ve önceki konuşmayı modele yeniden gönderir. Harcamanın büyük kısmı kısa komutunuzdan değil, bu gönderilen metinden gelir.',
+  calcTitle: 'Bütçem ne kadar yeter?',
+  calcBudgetLabel: 'Bütçe',
+  calcModelLabel: 'Model',
+  calcHoursResult: 'Yaklaşık {low} ile {high} saat aktif kodlama',
+  calcProjectsResult: 'Yaklaşık {low} ile {high} küçük proje',
+  calcUnavailable: 'Bu model için şu an hesap yapılamıyor.',
+  calcAssumption:
+    'Yaklaşık, varsayım: Anthropic’in yayımladığı rakamlara göre bir geliştirici ortalama günde yaklaşık {typical} dolar harcar ve kullanıcıların %90’ı günde {heavy} doların altında kalır (resmî liste fiyatıyla). Hesap, günde {hours} saat aktif kodlama, {reference} modelinin liste fiyatı ve küçük bir proje için {projectHours} saat varsayar; HisarWeb AI fiyatına göre yeniden hesaplanır. Gerçek harcama işinize göre değişir.',
+  calcSourceLabel: 'Kaynak: Anthropic, maliyet rehberi',
 } as const
 
 export type HwTextKey = keyof typeof tr
@@ -314,7 +336,8 @@ const en: Record<HwTextKey, string> = {
   navStatus: 'Status',
 
   landingBadge: 'For Turkey: prices in TRY, VAT included',
-  landingTitle: 'Claude, GPT and Gemini APIs at half the official price, paid in TRY',
+  landingTitle:
+    'Claude, GPT and Gemini APIs at half the official price, paid in TRY',
   landingLead:
     'HisarWeb AI gives your application one API key. Every model is 50% below the official list price and cheaper than other API routers. No monthly subscription; you only pay for what you use.',
   landingCtaPrimary: 'Create a free account',
@@ -576,6 +599,27 @@ const en: Record<HwTextKey, string> = {
   retry: 'Try again',
   rateLimited: 'Too many requests. Please try again in a few seconds.',
   statusScrollHint: 'Scroll the table sideways to see every column.',
+  explainTitle: 'What does your credit buy?',
+  explainLead:
+    'AI usage is measured in tokens. The three short notes and the calculator below help you see how far your budget goes.',
+  explainTokenTitle: 'What is a token?',
+  explainTokenBody:
+    'An AI reads text in small pieces called tokens. One token is about ¾ of a word: 1 million tokens is roughly 750,000 words.',
+  explainIoTitle: 'Input and output',
+  explainIoBody:
+    'Input is everything you send to the model (your question, your code, files). Output is the answer the model writes. Output costs more than input.',
+  explainCodingTitle: 'Why coding tools use a lot of input',
+  explainCodingBody:
+    'Tools such as Cursor, Cline or Claude Code send the files of your project and the earlier conversation to the model again at every step. Most of the spending comes from this sent text, not from your short command.',
+  calcTitle: 'How far does my budget go?',
+  calcBudgetLabel: 'Budget',
+  calcModelLabel: 'Model',
+  calcHoursResult: 'About {low} to {high} hours of active coding',
+  calcProjectsResult: 'About {low} to {high} small projects',
+  calcUnavailable: 'No estimate is available for this model right now.',
+  calcAssumption:
+    'Approximate, based on assumptions: according to figures published by Anthropic, a developer spends about {typical} dollars per active day on average, and 90% of users stay below {heavy} dollars per day (at official list prices). The estimate assumes {hours} hours of active coding per day, the list price of {reference} and {projectHours} hours for a small project, and is recalculated at the HisarWeb AI price. Real spending depends on your work.',
+  calcSourceLabel: 'Source: Anthropic, cost guide',
 }
 
 export const hwTexts: Record<HwLanguage, Record<HwTextKey, string>> = { tr, en }

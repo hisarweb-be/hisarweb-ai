@@ -25,7 +25,7 @@ import {
   StaticDataTable,
   staticDataTableClassNames as tableStyles,
 } from '@/components/data-table'
-import { GroupBadge } from '@/components/group-badge'
+import { Hint } from '@/features/hw/components/hint'
 import { getPerfMetrics } from '@/features/performance-metrics/api'
 import {
   formatLatency,
@@ -41,13 +41,18 @@ import { requireServerSuccess } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 
 import type { UptimeDayPoint } from '../lib/mock-stats'
+import {
+  averageResponseTimeMs,
+  plainGroupLabel,
+  wordsPerSecond,
+} from '../lib/plain-metrics'
 import type { PricingModel } from '../types'
 import { LatencyTrendChart, UptimeTrendChart } from './model-details-charts'
 import { UptimeSparkline } from './model-details-uptime-sparkline'
 
 function StatCard(props: {
   icon: React.ComponentType<{ className?: string }>
-  label: string
+  label: React.ReactNode
   value: React.ReactNode
   hint?: string
   valueClassName?: string
@@ -168,27 +173,41 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
   }
 
   const avgTps = summary?.avg_tps ?? 0
-  const avgLatency = summary?.avg_latency_ms ?? 0
+  const avgTtft = averageResponseTimeMs(groups)
   const successRate = summary?.success_rate ?? Number.NaN
   const incidentCount = uptimeSeries.reduce((s, p) => s + p.incidents, 0)
+  const writingSpeed = (tokensPerSecond: number) => {
+    const words = wordsPerSecond(tokensPerSecond)
+    return words === null
+      ? formatThroughput(tokensPerSecond)
+      : t('~{{words}} words per second', { words })
+  }
+  const writingSpeedHint = t(
+    'How fast the model writes its answer. A word is about 1.3 tokens.'
+  )
+  const responseTimeHint = t(
+    'How long you wait until the first words of the answer appear.'
+  )
+  const uptimeHint = t(
+    'The share of requests that worked in the last 24 hours. Higher is better.'
+  )
 
   return (
     <div className='flex flex-col gap-4'>
       <div className='grid grid-cols-1 gap-2 sm:grid-cols-3'>
         <StatCard
           icon={Timer}
-          label='TPS'
-          value={formatThroughput(avgTps)}
-          hint={t('Sustained tokens per second')}
+          label={<Hint hint={writingSpeedHint}>{t('Writing speed')}</Hint>}
+          value={writingSpeed(avgTps)}
         />
         <StatCard
           icon={Timer}
-          label={t('Average latency')}
-          value={formatLatency(avgLatency)}
+          label={<Hint hint={responseTimeHint}>{t('Response time')}</Hint>}
+          value={formatLatency(avgTtft)}
         />
         <StatCard
           icon={HeartPulse}
-          label={t('Success rate')}
+          label={<Hint hint={uptimeHint}>{t('Uptime (last 24 hours)')}</Hint>}
           value={formatUptimePct(successRate)}
           hint={
             incidentCount > 0
@@ -204,8 +223,10 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
       <section>
         <SectionHeader
           icon={HeartPulse}
-          title={t('Per-group performance')}
-          description={t('Average latency, TTFT, TPS, and success rate')}
+          title={t('Performance')}
+          description={t(
+            'Average response time, writing speed and uptime over the last 24 hours'
+          )}
         />
         <StaticDataTable
           className='rounded-lg'
@@ -216,35 +237,45 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
           columns={[
             {
               id: 'group',
-              header: t('Group'),
+              header: t('Available to'),
               className: tableStyles.compactHeaderCell,
               cellClassName: tableStyles.compactCell,
-              cell: (perf) => <GroupBadge group={perf.group} size='sm' />,
+              cell: (perf) => plainGroupLabel(perf.group, t),
             },
             {
               id: 'tps',
-              header: 'TPS',
+              header: <Hint hint={writingSpeedHint}>{t('Writing speed')}</Hint>,
               className: tableStyles.compactHeaderCellRight,
               cellClassName: tableStyles.compactNumericCell,
-              cell: (perf) => formatThroughput(perf.avg_tps),
+              cell: (perf) => writingSpeed(perf.avg_tps),
             },
             {
               id: 'ttft',
-              header: t('Average TTFT'),
+              header: <Hint hint={responseTimeHint}>{t('Response time')}</Hint>,
               className: tableStyles.compactHeaderCellRight,
               cellClassName: tableStyles.compactNumericCell,
               cell: (perf) => formatLatency(perf.avg_ttft_ms),
             },
             {
               id: 'latency',
-              header: t('Average latency'),
+              header: (
+                <Hint
+                  hint={t(
+                    'How long the whole answer takes, from sending your request until the last word.'
+                  )}
+                >
+                  {t('Full answer time')}
+                </Hint>
+              ),
               className: tableStyles.compactHeaderCellRight,
               cellClassName: tableStyles.compactMutedNumericCell,
               cell: (perf) => formatLatency(perf.avg_latency_ms),
             },
             {
               id: 'success',
-              header: t('Success rate'),
+              header: (
+                <Hint hint={uptimeHint}>{t('Uptime (last 24 hours)')}</Hint>
+              ),
               className: cn(tableStyles.compactHeaderCell, 'min-w-[180px]'),
               cellClassName: tableStyles.compactCell,
               cell: (perf) => (
@@ -262,8 +293,10 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
       <section>
         <SectionHeader
           icon={Timer}
-          title={t('Latency trend (last 24h)')}
-          description={t('Average TTFT')}
+          title={t('Response time (last 24 hours)')}
+          description={t(
+            'How long you wait for the first words, hour by hour.'
+          )}
         />
         <LatencyTrendChart series={latencySeries} />
       </section>
@@ -271,10 +304,8 @@ export function ModelDetailsPerformance(props: { model: PricingModel }) {
       <section>
         <SectionHeader
           icon={HeartPulse}
-          title={t('Availability (last 24h)')}
-          description={t(
-            'Success rate excludes business rejections and includes the current partial hour.'
-          )}
+          title={t('Uptime (last 24 hours)')}
+          description={t('The share of requests that worked, hour by hour.')}
           accent={
             incidentCount > 0 ? (
               <span className='inline-flex items-center gap-1 text-amber-600 dark:text-amber-400'>

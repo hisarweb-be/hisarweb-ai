@@ -23,6 +23,8 @@ import { useTranslation } from 'react-i18next'
 import { CopyButton } from '@/components/copy-button'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
+import { Hint } from '@/features/hw/components/hint'
+import { guideText, modelGuide } from '@/features/hw/data/model-guide'
 import { getLobeIcon } from '@/lib/lobe-icon'
 import { cn } from '@/lib/utils'
 import { useSystemConfigStore } from '@/stores/system-config-store'
@@ -30,16 +32,13 @@ import { useSystemConfigStore } from '@/stores/system-config-store'
 import { DEFAULT_TOKEN_UNIT } from '../constants'
 import { useBillingTime } from '../hooks/use-billing-time'
 import {
-  customerGroupLabel,
-  visibleCustomerGroups,
-} from '../lib/customer-groups'
-import {
   getCardExamplePrice,
   getDynamicDisplayGroupRatio,
   getDynamicPriceUnitLabelKey,
   getDynamicPricingSummary,
   isUnconfiguredTaskUsageModel,
 } from '../lib/dynamic-price'
+import { describeEndpoint } from '../lib/endpoint-labels'
 import { parseTags } from '../lib/filters'
 import { isTokenBasedModel } from '../lib/model-helpers'
 import { formatPrice, formatRequestPrice } from '../lib/price'
@@ -68,10 +67,14 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   const isTokenBased = isTokenBasedModel(props.model)
   const tokenUnitLabel = tokenUnit === 'K' ? '1K' : '1M'
   const tags = parseTags(props.model.tags)
-  const groups = visibleCustomerGroups(props.model.enable_groups || []).map(
-    (group) => customerGroupLabel(group, t)
+  const endpoints = (props.model.supported_endpoint_types || []).map(
+    (endpoint) => describeEndpoint(endpoint, t)
   )
-  const endpoints = props.model.supported_endpoint_types || []
+  const guide = modelGuide(props.model.model_name)
+  const description =
+    props.model.description ||
+    (guide ? guideText(guide.description, i18n.language) : '') ||
+    t('No description available.')
   const modelIconKey = props.model.icon || props.model.vendor_icon
   const modelIcon = modelIconKey ? getLobeIcon(modelIconKey, 28) : null
   const initial = props.model.model_name?.charAt(0).toUpperCase() || '?'
@@ -225,11 +228,46 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
       </span>
     )
   } else if (isTokenBased) {
-    const prices: { type: PriceType; label: string }[] = [
-      { type: 'input', label: t('Input') },
-      { type: 'output', label: t('Output') },
+    const prices: { type: PriceType; label: ReactNode }[] = [
+      {
+        type: 'input',
+        label: (
+          <Hint
+            hint={t(
+              'Everything you send to the model: your question, your instructions and the code it reads. Coding tools send a lot of it.'
+            )}
+          >
+            {t('Text you send')}
+          </Hint>
+        ),
+      },
+      {
+        type: 'output',
+        label: (
+          <Hint
+            hint={t(
+              'The answer the model writes back to you: text and code. It costs more per token than the text you send.'
+            )}
+          >
+            {t('Text the model writes')}
+          </Hint>
+        ),
+      },
       ...(props.model.cache_ratio != null
-        ? [{ type: 'cache' as const, label: t('Cached') }]
+        ? [
+            {
+              type: 'cache' as const,
+              label: (
+                <Hint
+                  hint={t(
+                    'Text the model already read earlier in the same conversation. It is billed at a lower price when it is reused.'
+                  )}
+                >
+                  {t('Reused text (cache)')}
+                </Hint>
+              ),
+            },
+          ]
         : []),
     ]
     priceSummary = prices.map((price) => (
@@ -300,6 +338,11 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
               {props.model.vendor_name}
             </p>
           )}
+          {guide && (
+            <span className='bg-primary/10 text-primary mt-1.5 inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[11px] font-medium'>
+              {guideText(guide.tag, i18n.language)}
+            </span>
+          )}
         </div>
         <CopyButton
           value={props.model.model_name}
@@ -311,7 +354,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
       <CardContent className='flex flex-1 flex-col gap-3'>
         <div className='flex min-w-0 flex-col gap-1.5'>
           <p className='text-muted-foreground line-clamp-2 text-[13px] leading-5 break-words'>
-            {props.model.description || t('No description available.')}
+            {description}
           </p>
           {tags.length > 0 && (
             <div
@@ -349,55 +392,21 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
           <div className='grid grid-cols-[repeat(auto-fit,minmax(88px,1fr))] gap-x-3 gap-y-2'>
             {priceSummary}
           </div>
+          {isTokenBased && !dynamicSummary && (
+            <span className='text-muted-foreground text-xs'>
+              {tokenUnit === 'K'
+                ? t('1,000 tokens ≈ 750 words')
+                : t('1 million tokens ≈ 750,000 words')}
+            </span>
+          )}
         </div>
-        {(groups.length > 0 || endpoints.length > 0) && (
-          <dl
-            className={cn(
-              'grid min-w-0 grid-cols-2 gap-3 text-xs',
-              (groups.length === 0 || endpoints.length === 0) && 'grid-cols-1'
-            )}
-          >
-            {groups.length > 0 && (
-              <div className='flex min-w-0 items-baseline gap-1.5'>
-                <dt className='text-muted-foreground shrink-0'>
-                  {t('Groups')}
-                </dt>
-                <dd className='flex min-w-0 items-baseline gap-1'>
-                  <span className='truncate' title={groups.join(', ')}>
-                    {groups[0]}
-                  </span>
-                  {groups.length > 1 && (
-                    <span
-                      className='text-muted-foreground shrink-0'
-                      title={groups.slice(1).join(', ')}
-                    >
-                      +{groups.length - 1}
-                    </span>
-                  )}
-                </dd>
-              </div>
-            )}
-            {endpoints.length > 0 && (
-              <div className='flex min-w-0 items-baseline gap-1.5'>
-                <dt className='text-muted-foreground shrink-0'>
-                  {t('Endpoints')}
-                </dt>
-                <dd className='flex min-w-0 items-baseline gap-1'>
-                  <span className='truncate' title={endpoints.join(', ')}>
-                    {endpoints.slice(0, 2).join(', ')}
-                  </span>
-                  {endpoints.length > 2 && (
-                    <span
-                      className='text-muted-foreground shrink-0'
-                      title={endpoints.slice(2).join(', ')}
-                    >
-                      +{endpoints.length - 2}
-                    </span>
-                  )}
-                </dd>
-              </div>
-            )}
-          </dl>
+        {endpoints.length > 0 && (
+          <p className='text-muted-foreground min-w-0 text-xs break-words'>
+            <Hint hint={endpoints.map((endpoint) => endpoint.hint).join(' ')}>
+              {t('Works with')}
+            </Hint>
+            : {endpoints.map((endpoint) => endpoint.label).join(', ')}
+          </p>
         )}
       </CardContent>
       <CardFooter className='mt-auto border-0 bg-transparent pt-0'>

@@ -128,7 +128,7 @@ export function LatencyTrendChart(props: {
           title: { value: (d: { time: string }) => d.time },
           content: [
             {
-              key: t('Average TTFT'),
+              key: t('Response time'),
               value: (d: { ttft: number }) => `${Math.round(d.ttft)} ms`,
             },
           ],

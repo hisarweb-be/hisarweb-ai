@@ -16,37 +16,47 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { Link } from '@tanstack/react-router'
 import {
   ChevronRight,
   Gauge,
   KeyRound,
+  PlugZap,
   ScrollText,
   Sigma,
   Zap,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import type { BundledLanguage } from 'shiki/bundle/web'
 
 import {
   CodeBlock,
   CodeBlockCopyButton,
 } from '@/components/ai-elements/code-block'
+import { CopyButton } from '@/components/copy-button'
 import {
   StaticDataTable,
   staticDataTableClassNames as tableStyles,
 } from '@/components/data-table'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Hint } from '@/features/hw/components/hint'
 import { useStatus } from '@/hooks/use-status'
+import { toIntlLocale } from '@/i18n/languages'
+import { formatNumber } from '@/lib/format'
 
+import { HIDDEN_CUSTOMER_GROUPS } from '../lib/customer-groups'
+import { describeEndpoint } from '../lib/endpoint-labels'
 import {
   buildRateLimits,
   buildSupportedParameters,
-  formatRateLimit,
+  type RateLimit,
   type SupportedParameter,
 } from '../lib/mock-stats'
 import { replaceModelInPath } from '../lib/model-helpers'
+import { plainGroupLabel, plainParamDescriptionKey } from '../lib/plain-metrics'
 import type { PricingModel } from '../types'
 
 // ---------------------------------------------------------------------------
@@ -74,9 +84,12 @@ const LANG_HIGHLIGHT: Record<Lang, BundledLanguage> = {
   javascript: 'javascript',
 }
 
+/** The one key placeholder every sample and every sentence about it uses. */
+const API_KEY_PLACEHOLDER = 'YOUR_API_KEY'
+
 type SampleContext = {
   baseUrl: string
-  apiKeyEnv: string
+  apiKey: string
   modelName: string
   endpointType: string
   endpointPath: string
@@ -107,7 +120,7 @@ function buildChatSample(lang: Lang, ctx: SampleContext): string {
   if (lang === 'curl') {
     return [
       `curl ${url} \\`,
-      `  -H "Authorization: Bearer $${ctx.apiKeyEnv}" \\`,
+      `  -H "Authorization: Bearer ${ctx.apiKey}" \\`,
       `  -H "Content-Type: application/json" \\`,
       `  -d '${bodyJson.replace(/\n/g, '\n     ')}'`,
     ].join('\n')
@@ -119,7 +132,7 @@ function buildChatSample(lang: Lang, ctx: SampleContext): string {
       '',
       'client = OpenAI(',
       `    base_url="${ctx.baseUrl}/v1",`,
-      `    api_key="<YOUR_API_KEY>",`,
+      `    api_key="${ctx.apiKey}",`,
       ')',
       '',
       isResponses
@@ -134,7 +147,7 @@ function buildChatSample(lang: Lang, ctx: SampleContext): string {
       '',
       `const client = new OpenAI({`,
       `  baseURL: '${ctx.baseUrl}/v1',`,
-      `  apiKey: process.env.${ctx.apiKeyEnv},`,
+      `  apiKey: '${ctx.apiKey}',`,
       `})`,
       '',
       isResponses
@@ -147,7 +160,7 @@ function buildChatSample(lang: Lang, ctx: SampleContext): string {
     `const response = await fetch('${url}', {`,
     `  method: 'POST',`,
     `  headers: {`,
-    `    Authorization: \`Bearer \${process.env.${ctx.apiKeyEnv}}\`,`,
+    `    Authorization: 'Bearer ${ctx.apiKey}',`,
     `    'Content-Type': 'application/json',`,
     `  },`,
     `  body: JSON.stringify(${bodyJson}),`,
@@ -174,7 +187,7 @@ function buildAnthropicSample(lang: Lang, ctx: SampleContext): string {
     )
     return [
       `curl ${url} \\`,
-      `  -H "x-api-key: $${ctx.apiKeyEnv}" \\`,
+      `  -H "x-api-key: ${ctx.apiKey}" \\`,
       `  -H "anthropic-version: 2023-06-01" \\`,
       `  -H "Content-Type: application/json" \\`,
       `  -d '${body.replace(/\n/g, '\n     ')}'`,
@@ -186,7 +199,7 @@ function buildAnthropicSample(lang: Lang, ctx: SampleContext): string {
       '',
       'client = anthropic.Anthropic(',
       `    base_url="${ctx.baseUrl}",`,
-      `    api_key="<YOUR_API_KEY>",`,
+      `    api_key="${ctx.apiKey}",`,
       ')',
       '',
       `message = client.messages.create(`,
@@ -204,7 +217,7 @@ function buildAnthropicSample(lang: Lang, ctx: SampleContext): string {
       '',
       `const client = new Anthropic({`,
       `  baseURL: '${ctx.baseUrl}',`,
-      `  apiKey: process.env.${ctx.apiKeyEnv},`,
+      `  apiKey: '${ctx.apiKey}',`,
       `})`,
       '',
       `const message = await client.messages.create({`,
@@ -220,7 +233,7 @@ function buildAnthropicSample(lang: Lang, ctx: SampleContext): string {
     `const response = await fetch('${url}', {`,
     `  method: 'POST',`,
     `  headers: {`,
-    `    'x-api-key': process.env.${ctx.apiKeyEnv},`,
+    `    'x-api-key': '${ctx.apiKey}',`,
     `    'anthropic-version': '2023-06-01',`,
     `    'Content-Type': 'application/json',`,
     `  },`,
@@ -237,7 +250,7 @@ function buildAnthropicSample(lang: Lang, ctx: SampleContext): string {
 }
 
 function buildGeminiSample(lang: Lang, ctx: SampleContext): string {
-  const url = `${ctx.baseUrl}${ctx.endpointPath}?key=$${ctx.apiKeyEnv}`
+  const url = `${ctx.baseUrl}${ctx.endpointPath}?key=${ctx.apiKey}`
   const userMessage = 'Explain quantum entanglement in one paragraph.'
 
   if (lang === 'curl') {
@@ -256,7 +269,7 @@ function buildGeminiSample(lang: Lang, ctx: SampleContext): string {
     return [
       'import google.generativeai as genai',
       '',
-      `genai.configure(api_key="<YOUR_API_KEY>")`,
+      `genai.configure(api_key="${ctx.apiKey}")`,
       '',
       `model = genai.GenerativeModel("${ctx.modelName}")`,
       `response = model.generate_content("${userMessage}")`,
@@ -268,7 +281,7 @@ function buildGeminiSample(lang: Lang, ctx: SampleContext): string {
     return [
       `import { GoogleGenerativeAI } from '@google/generative-ai'`,
       '',
-      `const genAI = new GoogleGenerativeAI(process.env.${ctx.apiKeyEnv}!)`,
+      `const genAI = new GoogleGenerativeAI('${ctx.apiKey}')`,
       `const model = genAI.getGenerativeModel({ model: '${ctx.modelName}' })`,
       '',
       `const result = await model.generateContent('${userMessage}')`,
@@ -297,7 +310,7 @@ function buildEmbeddingSample(lang: Lang, ctx: SampleContext): string {
     const body = JSON.stringify({ model: ctx.modelName, input: text }, null, 2)
     return [
       `curl ${url} \\`,
-      `  -H "Authorization: Bearer $${ctx.apiKeyEnv}" \\`,
+      `  -H "Authorization: Bearer ${ctx.apiKey}" \\`,
       `  -H "Content-Type: application/json" \\`,
       `  -d '${body.replace(/\n/g, '\n     ')}'`,
     ].join('\n')
@@ -306,7 +319,7 @@ function buildEmbeddingSample(lang: Lang, ctx: SampleContext): string {
     return [
       'from openai import OpenAI',
       '',
-      `client = OpenAI(base_url="${ctx.baseUrl}/v1", api_key="<YOUR_API_KEY>")`,
+      `client = OpenAI(base_url="${ctx.baseUrl}/v1", api_key="${ctx.apiKey}")`,
       '',
       'response = client.embeddings.create(',
       `    model="${ctx.modelName}",`,
@@ -322,7 +335,7 @@ function buildEmbeddingSample(lang: Lang, ctx: SampleContext): string {
       '',
       `const client = new OpenAI({`,
       `  baseURL: '${ctx.baseUrl}/v1',`,
-      `  apiKey: process.env.${ctx.apiKeyEnv},`,
+      `  apiKey: '${ctx.apiKey}',`,
       `})`,
       '',
       `const response = await client.embeddings.create({`,
@@ -337,7 +350,7 @@ function buildEmbeddingSample(lang: Lang, ctx: SampleContext): string {
     `const response = await fetch('${url}', {`,
     `  method: 'POST',`,
     `  headers: {`,
-    `    Authorization: \`Bearer \${process.env.${ctx.apiKeyEnv}}\`,`,
+    `    Authorization: 'Bearer ${ctx.apiKey}',`,
     `    'Content-Type': 'application/json',`,
     `  },`,
     `  body: JSON.stringify({`,
@@ -363,7 +376,7 @@ function buildImageSample(lang: Lang, ctx: SampleContext): string {
     )
     return [
       `curl ${url} \\`,
-      `  -H "Authorization: Bearer $${ctx.apiKeyEnv}" \\`,
+      `  -H "Authorization: Bearer ${ctx.apiKey}" \\`,
       `  -H "Content-Type: application/json" \\`,
       `  -d '${body.replace(/\n/g, '\n     ')}'`,
     ].join('\n')
@@ -372,7 +385,7 @@ function buildImageSample(lang: Lang, ctx: SampleContext): string {
     return [
       'from openai import OpenAI',
       '',
-      `client = OpenAI(base_url="${ctx.baseUrl}/v1", api_key="<YOUR_API_KEY>")`,
+      `client = OpenAI(base_url="${ctx.baseUrl}/v1", api_key="${ctx.apiKey}")`,
       '',
       'response = client.images.generate(',
       `    model="${ctx.modelName}",`,
@@ -390,7 +403,7 @@ function buildImageSample(lang: Lang, ctx: SampleContext): string {
       '',
       `const client = new OpenAI({`,
       `  baseURL: '${ctx.baseUrl}/v1',`,
-      `  apiKey: process.env.${ctx.apiKeyEnv},`,
+      `  apiKey: '${ctx.apiKey}',`,
       `})`,
       '',
       `const response = await client.images.generate({`,
@@ -407,7 +420,7 @@ function buildImageSample(lang: Lang, ctx: SampleContext): string {
     `const response = await fetch('${url}', {`,
     `  method: 'POST',`,
     `  headers: {`,
-    `    Authorization: \`Bearer \${process.env.${ctx.apiKeyEnv}}\`,`,
+    `    Authorization: 'Bearer ${ctx.apiKey}',`,
     `    'Content-Type': 'application/json',`,
     `  },`,
     `  body: JSON.stringify({`,
@@ -434,6 +447,70 @@ function buildSample(
     return buildEmbeddingSample(lang, ctx)
   if (endpointType === 'image-generation') return buildImageSample(lang, ctx)
   return buildChatSample(lang, ctx)
+}
+
+// ---------------------------------------------------------------------------
+// How do I connect
+// ---------------------------------------------------------------------------
+
+function ConnectStep(props: { number: number; children: React.ReactNode }) {
+  return (
+    <li className='flex items-start gap-3'>
+      <span className='bg-primary/10 text-primary flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold'>
+        {props.number}
+      </span>
+      <div className='min-w-0 flex-1 space-y-1.5 pt-0.5 text-sm'>
+        {props.children}
+      </div>
+    </li>
+  )
+}
+
+function ConnectSection(props: { connectUrl: string }) {
+  const { t } = useTranslation()
+  return (
+    <section>
+      <SectionTitle icon={PlugZap}>{t('How do I connect')}</SectionTitle>
+      <ol className='border-border/60 bg-muted/20 space-y-4 rounded-lg border p-4'>
+        <ConnectStep number={1}>
+          <p>
+            {t(
+              'Create an API key. It works like a password that your tool uses to talk to the model.'
+            )}
+          </p>
+          <Button size='sm' variant='outline' render={<Link to='/keys' />}>
+            {t('Open the API keys page')}
+          </Button>
+        </ConnectStep>
+        <ConnectStep number={2}>
+          <p>
+            {t(
+              'Copy this address. Some tools call it the base URL or the endpoint.'
+            )}
+          </p>
+          <div className='flex items-center gap-1'>
+            <code className='bg-muted min-w-0 truncate rounded px-2 py-1 font-mono text-xs'>
+              {props.connectUrl}
+            </code>
+            <CopyButton
+              value={props.connectUrl}
+              size='icon'
+              variant='ghost'
+              className='size-7'
+              tooltip={t('Copy the address')}
+            />
+          </div>
+        </ConnectStep>
+        <ConnectStep number={3}>
+          <p>
+            {t(
+              'Paste the key and the address into your tool, for example Cursor, Cline or Claude Code, and pick this model.'
+            )}
+          </p>
+        </ConnectStep>
+      </ol>
+    </section>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -489,62 +566,78 @@ function CodeSamplesSection(props: {
 
   const code = buildSample(lang, activeEndpoint.type, {
     baseUrl,
-    apiKeyEnv: 'NEW_API_KEY',
+    apiKey: API_KEY_PLACEHOLDER,
     modelName: props.model.model_name || '',
     endpointType: activeEndpoint.type,
     endpointPath: activeEndpoint.path,
   })
+  // The tools a beginner uses (Cursor, Cline) want the address with /v1;
+  // Anthropic-compatible tools (Claude Code) want the bare address.
+  const connectUrl =
+    activeEndpoint.type === 'anthropic' ? baseUrl : `${baseUrl}/v1`
 
   return (
-    <section>
-      <SectionTitle icon={ScrollText}>{t('Code samples')}</SectionTitle>
+    <>
+      <ConnectSection connectUrl={connectUrl} />
+      <section>
+        <SectionTitle icon={ScrollText}>{t('Code samples')}</SectionTitle>
+        <p className='text-muted-foreground mb-3 text-xs'>
+          {t(
+            'Only needed if you write code yourself. Tools like Cursor, Cline and Claude Code just need the three steps above.'
+          )}
+        </p>
 
-      <div className='flex flex-wrap items-center gap-2'>
-        {endpoints.length > 1 && (
-          <Tabs value={endpointType} onValueChange={setEndpointType}>
+        <div className='flex flex-wrap items-center gap-2'>
+          {endpoints.length > 1 && (
+            <Tabs value={endpointType} onValueChange={setEndpointType}>
+              <TabsList className='bg-muted/40 h-auto flex-wrap p-0.5'>
+                {endpoints.map((ep) => (
+                  <TabsTrigger
+                    key={ep.type}
+                    value={ep.type}
+                    className='h-auto min-h-7 px-2.5 text-xs whitespace-normal'
+                  >
+                    {describeEndpoint(ep.type, t).label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          )}
+
+          <Tabs
+            value={lang}
+            onValueChange={(v) => setLang(v as Lang)}
+            className='ml-auto'
+          >
             <TabsList className='bg-muted/40 h-8 p-0.5'>
-              {endpoints.map((ep) => (
-                <TabsTrigger
-                  key={ep.type}
-                  value={ep.type}
-                  className='h-7 px-2.5 text-xs'
-                >
-                  {ep.type}
+              {(Object.keys(LANG_LABELS) as Lang[]).map((l) => (
+                <TabsTrigger key={l} value={l} className='h-7 px-2.5 text-xs'>
+                  {LANG_LABELS[l]}
                 </TabsTrigger>
               ))}
             </TabsList>
           </Tabs>
-        )}
+        </div>
 
-        <Tabs
-          value={lang}
-          onValueChange={(v) => setLang(v as Lang)}
-          className='ml-auto'
-        >
-          <TabsList className='bg-muted/40 h-8 p-0.5'>
-            {(Object.keys(LANG_LABELS) as Lang[]).map((l) => (
-              <TabsTrigger key={l} value={l} className='h-7 px-2.5 text-xs'>
-                {LANG_LABELS[l]}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      </div>
+        <div className='mt-3'>
+          <CodeBlock code={code} language={LANG_HIGHLIGHT[lang]}>
+            <CodeBlockCopyButton />
+          </CodeBlock>
+        </div>
 
-      <div className='mt-3'>
-        <CodeBlock code={code} language={LANG_HIGHLIGHT[lang]}>
-          <CodeBlockCopyButton />
-        </CodeBlock>
-      </div>
-
-      <p className='text-muted-foreground mt-2 text-xs'>
-        {t('Replace')}{' '}
-        <code className='bg-muted rounded px-1 py-0.5 font-mono text-[11px]'>
-          {'<YOUR_API_KEY>'}
-        </code>{' '}
-        {t('with the API key from your token settings.')}
-      </p>
-    </section>
+        <p className='text-muted-foreground mt-2 text-xs'>
+          <Trans
+            t={t}
+            i18nKey='In the examples, <code>YOUR_API_KEY</code> stands for your own API key from step 1.'
+            components={{
+              code: (
+                <code className='bg-muted rounded px-1 py-0.5 font-mono text-[11px]' />
+              ),
+            }}
+          />
+        </p>
+      </section>
+    </>
   )
 }
 
@@ -564,6 +657,11 @@ function SupportedParametersSection(props: { model: PricingModel }) {
   return (
     <section>
       <SectionTitle icon={Sigma}>{t('Supported parameters')}</SectionTitle>
+      <p className='text-muted-foreground mb-3 text-xs'>
+        {t(
+          'Settings you can add to your request. Only the ones marked required must be sent; the rest are optional.'
+        )}
+      </p>
       <StaticDataTable
         className={tableStyles.sectionContainer}
         headerRowClassName={tableStyles.mutedHeaderRow}
@@ -573,7 +671,15 @@ function SupportedParametersSection(props: { model: PricingModel }) {
         columns={[
           {
             id: 'parameter',
-            header: t('Parameter'),
+            header: (
+              <Hint
+                hint={t(
+                  'The name of the setting, as you write it in your request.'
+                )}
+              >
+                {t('Parameter')}
+              </Hint>
+            ),
             className: 'h-9 w-44',
             cellClassName: tableStyles.topCell,
             cell: (p) => (
@@ -592,7 +698,15 @@ function SupportedParametersSection(props: { model: PricingModel }) {
           },
           {
             id: 'type',
-            header: t('Type'),
+            header: (
+              <Hint
+                hint={t(
+                  'What kind of value the setting takes: a number, true or false, text, or a list.'
+                )}
+              >
+                {t('Type')}
+              </Hint>
+            ),
             className: 'h-9 w-24',
             cellClassName: tableStyles.topCell,
             cell: (p) => (
@@ -606,17 +720,25 @@ function SupportedParametersSection(props: { model: PricingModel }) {
           },
           {
             id: 'range',
-            header: t('Default / range'),
+            header: (
+              <Hint
+                hint={t(
+                  'The value used when you leave the setting out, and the values that are allowed.'
+                )}
+              >
+                {t('Default / range')}
+              </Hint>
+            ),
             className: 'h-9 w-32',
             cellClassName: tableStyles.topCell,
             cell: (p) => <ParamRangeCell param={p} />,
           },
           {
             id: 'description',
-            header: t('Description'),
+            header: t('What it does'),
             className: 'h-9',
             cellClassName: tableStyles.topMutedCell,
-            cell: (p) => t(p.descriptionKey),
+            cell: (p) => t(plainParamDescriptionKey(p.descriptionKey)),
           },
         ]}
       />
@@ -662,60 +784,84 @@ function ParamRangeCell(props: { param: SupportedParameter }) {
 }
 
 // ---------------------------------------------------------------------------
-// Rate-limits table
+// Usage limits
 // ---------------------------------------------------------------------------
 
-function RateLimitsSection(props: { model: PricingModel }) {
+function RateLimitSentences(props: { limit: RateLimit; locale?: string }) {
   const { t } = useTranslation()
-  const limits = useMemo(() => buildRateLimits(props.model), [props.model])
+  const { limit, locale } = props
+  return (
+    <ul className='list-inside list-disc space-y-0.5 text-sm'>
+      {limit.rpm > 0 && (
+        <li>
+          {t('Up to {{count}} requests per minute', {
+            count: formatNumber(limit.rpm, locale),
+          })}
+        </li>
+      )}
+      {limit.tpm > 0 && (
+        <li>
+          {t('Up to {{count}} tokens per minute', {
+            count: formatNumber(limit.tpm, locale),
+          })}
+        </li>
+      )}
+      {limit.rpd > 0 && (
+        <li>
+          {t('Up to {{count}} requests per day', {
+            count: formatNumber(limit.rpd, locale),
+          })}
+        </li>
+      )}
+    </ul>
+  )
+}
+
+function RateLimitsSection(props: { model: PricingModel }) {
+  const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
+  // A customer cannot pick a group, so only the groups that are on sale count,
+  // and groups that read the same ("Everyone") are shown once.
+  const limits = useMemo(() => {
+    const all = buildRateLimits(props.model)
+    const sold = all.filter(
+      (limit) => !HIDDEN_CUSTOMER_GROUPS.includes(limit.group)
+    )
+    const rows = sold.length > 0 ? sold : all.slice(0, 1)
+    const seen = new Set<string>()
+    return rows.filter((limit) => {
+      const key = plainGroupLabel(limit.group, t)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }, [props.model, t])
 
   if (limits.length === 0) return null
 
   return (
     <section>
-      <SectionTitle icon={Gauge}>{t('Rate limits')}</SectionTitle>
-      <StaticDataTable
-        className={tableStyles.sectionContainer}
-        headerRowClassName={tableStyles.mutedHeaderRow}
-        data={limits}
-        getRowKey={(limit) => limit.group}
-        getRowClassName={() => 'hover:bg-muted/20'}
-        columns={[
-          {
-            id: 'group',
-            header: t('Group'),
-            className: 'h-9',
-            cellClassName: 'py-2 font-mono',
-            cell: (limit) => limit.group,
-          },
-          {
-            id: 'rpm',
-            header: 'RPM',
-            className: 'h-9 text-right',
-            cellClassName: tableStyles.topNumericCell,
-            cell: (limit) => formatRateLimit(limit.rpm),
-          },
-          {
-            id: 'tpm',
-            header: 'TPM',
-            className: 'h-9 text-right',
-            cellClassName: tableStyles.topNumericCell,
-            cell: (limit) => formatRateLimit(limit.tpm),
-          },
-          {
-            id: 'rpd',
-            header: 'RPD',
-            className: 'h-9 text-right',
-            cellClassName: tableStyles.topNumericCell,
-            cell: (limit) => formatRateLimit(limit.rpd),
-          },
-        ]}
-      />
-      <p className='text-muted-foreground mt-2 text-[11px] leading-relaxed'>
-        {t(
-          'RPM = requests per minute, TPM = tokens per minute, RPD = requests per day. Limits apply per token group.'
-        )}
-      </p>
+      <SectionTitle icon={Gauge}>
+        <Hint
+          hint={t(
+            'How much you can send in a given time, so that nobody overloads the service.'
+          )}
+        >
+          {t('Rate limits')}
+        </Hint>
+      </SectionTitle>
+      <div className='border-border/60 bg-muted/20 space-y-3 rounded-lg border p-3'>
+        {limits.map((limit) => (
+          <div key={limit.group} className='space-y-1'>
+            {limits.length > 1 && (
+              <div className='text-muted-foreground text-xs font-medium'>
+                {plainGroupLabel(limit.group, t)}
+              </div>
+            )}
+            <RateLimitSentences limit={limit} locale={locale} />
+          </div>
+        ))}
+      </div>
     </section>
   )
 }
@@ -726,27 +872,44 @@ function RateLimitsSection(props: { model: PricingModel }) {
 
 function AuthSection() {
   const { t } = useTranslation()
+  const codeClass = 'bg-muted rounded px-1 py-0.5 font-mono text-[11px]'
   return (
     <section>
-      <SectionTitle icon={KeyRound}>{t('Authentication')}</SectionTitle>
+      <SectionTitle icon={KeyRound}>
+        <Hint
+          hint={t(
+            'The proof that a request comes from you, so only you can use your credit.'
+          )}
+        >
+          {t('Authentication')}
+        </Hint>
+      </SectionTitle>
       <div className='border-border/60 bg-muted/20 flex items-start gap-2 rounded-lg border p-3'>
         <ChevronRight className='text-muted-foreground mt-0.5 size-3.5 shrink-0' />
         <div className='space-y-1.5 text-xs leading-relaxed'>
           <p>
-            {t('All requests must include')}{' '}
-            <code className='bg-muted rounded px-1 py-0.5 font-mono text-[11px]'>
-              Authorization: Bearer &lt;TOKEN&gt;
-            </code>{' '}
-            {t('header. Anthropic-formatted endpoints accept the')}{' '}
-            <code className='bg-muted rounded px-1 py-0.5 font-mono text-[11px]'>
-              x-api-key
-            </code>{' '}
-            {t('header instead.')}
+            {t(
+              'Every request must prove it comes from you. Your tool does this for you once you paste your API key. If you write your own code, send the key in a header, an extra line of information that travels with your request, like this:'
+            )}{' '}
+            <code className={codeClass}>
+              {`Authorization: Bearer ${API_KEY_PLACEHOLDER}`}
+            </code>
+          </p>
+          <p>
+            <Trans
+              t={t}
+              i18nKey='Anthropic-compatible connections (Claude Code) send it as <code>x-api-key: YOUR_API_KEY</code> instead.'
+              components={{ code: <code className={codeClass} /> }}
+            />
           </p>
           <p className='text-muted-foreground'>
-            {t(
-              'Generate tokens from the Tokens page; you can scope them to specific models, groups, IPs, and rate-limits.'
-            )}
+            <Trans
+              t={t}
+              i18nKey='You can create and manage your keys on the <link>API keys page</link>.'
+              components={{
+                link: <Link to='/keys' className='underline' />,
+              }}
+            />
           </p>
         </div>
       </div>

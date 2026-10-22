@@ -32,7 +32,7 @@ const tr = {
   whatBody:
     'HisarWeb AI, Claude ve GPT gibi yapay zekâ modellerini tek bir yerden, TL ile ve kredi kartı olmadan kullanmanızı sağlar. Bir hesap açarsınız, bir anahtar oluşturursunuz ve modeli kendi araçlarınızda, örneğin Claude Code’da, kullanırsınız. Kod bilmeniz gerekmez.',
   whatFree:
-    'Yeni hesaplar 250 TL startbonus alır; bonus 14 gün geçerlidir. Aşağıdaki adımlarla ilk yanıtınızı birkaç dakikada görürsünüz.',
+    'Yeni hesaplar 250 TL başlangıç bonusu alır; bonus 14 gün geçerlidir. Aşağıdaki adımlarla ilk yanıtınızı birkaç dakikada görürsünüz.',
 
   videoTitle: 'Video rehber',
   videoBody:
@@ -47,10 +47,10 @@ const tr = {
     'Sağ üstteki “Deneme hesabı aç” düğmesine basın. Bir kullanıcı adı ve en az 8 karakterlik bir parola seçin, sözleşmeyi onaylayın ve “Hesap oluştur” düğmesine basın.',
   step1Alt: 'Hesap oluşturma formu: kullanıcı adı, parola ve onay kutusu',
 
-  step2Title: '250 TL startbonusunu alın',
+  step2Title: '250 TL başlangıç bonusunu alın',
   step2Body:
-    'Giriş yaptığınızda Genel Bakış sayfasının en üstünde “250 TL startbonusunu al” kartı görünür ve hangi adımın kaldığını yazar: e-posta adresinizi ekleyin ve onaylayın, Telegram hesabınızı bağlayın, telefon numaranızı HisarWeb botuyla paylaşın. Son adım bitince bakiyeniz 250 TL olarak görünür. Doğrulama henüz açık değilse kart bunu açıkça yazar; o zaman bakiyeyi “Satın al” sayfasından yükleyebilirsiniz.',
-  step2Alt: 'Genel Bakış sayfasında startbonus kartı ve üç adım',
+    'Giriş yaptığınızda Genel Bakış sayfasının en üstünde “250 TL başlangıç bonusunuzu alın” kartı görünür ve hangi adımın kaldığını yazar: e-posta adresinizi ekleyin ve onaylayın, Telegram hesabınızı bağlayın, telefon numaranızı HisarWeb botuyla paylaşın. Son adım bitince bakiyeniz 250 TL olarak görünür. Doğrulama henüz açık değilse kart bunu açıkça yazar; o zaman bakiyeyi “Satın al” sayfasından yükleyebilirsiniz.',
+  step2Alt: 'Genel Bakış sayfasında başlangıç bonusu kartı ve üç adım',
 
   step3Title: 'API anahtarı oluşturun',
   step3Body:
@@ -62,7 +62,7 @@ const tr = {
 
   step4Title: 'Bakiye yükleyin (isteğe bağlı)',
   step4Body:
-    'Startbonus bittiğinde soldaki menüden “Satın al” sayfasını açın. Ödeme TL ile yapılır. Token fiyatları her zaman resmî fiyatın yarısıdır; ilk alışverişte 1000 TL değerine kadar ayrıca %50 hoş geldin indirimi vardır. Yüklediğiniz bakiye 30 gün geçerlidir; aylık abonelik ücreti yoktur.',
+    'Başlangıç bonusu bittiğinde soldaki menüden “Satın al” sayfasını açın. Ödeme TL ile yapılır. Token fiyatları her zaman resmî fiyatın yarısıdır; ilk alışverişte 1000 TL değerine kadar ayrıca %50 hoş geldin indirimi vardır. Yüklediğiniz bakiye 30 gün geçerlidir; aylık abonelik ücreti yoktur.',
   step4Link: 'Satın al sayfasına git',
 
   step5Title: 'Playground’da deneyin',
