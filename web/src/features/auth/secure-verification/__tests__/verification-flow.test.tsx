@@ -365,6 +365,30 @@ it('returns a proof only after successful verification and clears a rejected pas
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 })
 
+it('names the wrong password when the server rejects the password verification', async () => {
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: { success: true, data: passwordRequirements },
+  })
+  vi.spyOn(api, 'post').mockResolvedValueOnce({
+    data: {
+      success: false,
+      code: 'SECURITY_VERIFICATION_FAILED',
+      message: 'Verification failed. Please try again.',
+    },
+  })
+  const user = userEvent.setup()
+  render(<Harness onResult={vi.fn()} />)
+  await user.click(screen.getByText('Protected action'))
+  await user.type(
+    await screen.findByLabelText('Password', { selector: 'input' }),
+    'incorrect'
+  )
+  await user.click(screen.getByRole('button', { name: 'Verify' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'The password is incorrect. Please try again.'
+  )
+})
+
 it('discards a late proof after cancellation and prevents a duplicate submission', async () => {
   vi.spyOn(api, 'get').mockResolvedValue({
     data: { success: true, data: passwordRequirements },

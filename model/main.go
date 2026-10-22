@@ -397,6 +397,7 @@ func migrateDB() error {
 		&HwSignupIp{},
 		&HwAccountFlag{},
 		&HwTelegramUpdate{},
+		&HwTelegramLinkToken{},
 		&HwOrder{},
 		&HwMailLog{},
 		&HwAffiliateRetry{},

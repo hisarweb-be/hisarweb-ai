@@ -1,13 +1,19 @@
 package controller
 
 import (
+	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // hwTelegramWebhookMaxBodyBytes caps the update body this handler reads itself;
@@ -30,4 +36,59 @@ func HwTelegramWebhook(c *gin.Context) {
 		time.Now(),
 	)
 	c.Status(outcome.HTTPStatus())
+}
+
+// HwTelegramLinkStart hands a logged-in user a one-time deep link to the bot.
+// Opening it makes Telegram send "/start <token>" to the webhook, which links
+// the sender's Telegram account to this user. Only the link is returned; the
+// token behind it is never logged and only its hash is stored.
+func HwTelegramLinkStart(c *gin.Context) {
+	botName := hwTelegramBotName()
+	if botName == "" || !service.HwTelegramBotConfigured() {
+		common.ApiErrorT(c, "Telegram bot is not configured.")
+		return
+	}
+	userID := c.GetInt("id")
+	user, err := model.GetUserById(userID, false)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			common.ApiErrorStatus(c, http.StatusNotFound, common.NewMessage("User not found"))
+			return
+		}
+		logger.LogError(c.Request.Context(), common.LogText("reading the user for a Telegram link failed"))
+		common.ApiError(c, common.NewMessage("Failed to create the Telegram link"))
+		return
+	}
+	if strings.TrimSpace(user.TelegramId) != "" {
+		common.ApiSuccess(c, gin.H{"linked": true})
+		return
+	}
+	raw, expiresAt, err := model.HwCreateTelegramLinkToken(userID, time.Now().Unix())
+	if err != nil {
+		logger.LogError(c.Request.Context(), common.LogText("creating a Telegram link token failed"))
+		common.ApiError(c, common.NewMessage("Failed to create the Telegram link"))
+		return
+	}
+	common.ApiSuccess(c, gin.H{
+		"url":        "https://t.me/" + botName + "?start=" + raw,
+		"expires_at": expiresAt,
+	})
+}
+
+// hwTelegramBotName is the configured bot user name without its leading @, or
+// empty when it is missing or not a name Telegram can carry. Refusing a bad
+// value keeps it out of the URL the customer receives.
+func hwTelegramBotName() string {
+	name := strings.TrimPrefix(strings.TrimSpace(common.TelegramBotName), "@")
+	if len(name) < 5 || len(name) > 32 {
+		return ""
+	}
+	for i := range len(name) {
+		switch c := name[i]; {
+		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9', c == '_':
+		default:
+			return ""
+		}
+	}
+	return name
 }

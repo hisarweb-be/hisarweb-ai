@@ -72,6 +72,12 @@ type hwTelegramTexts struct {
 	Button   string
 	Accepted string
 	Rejected string
+	// LinkInvalid, LinkTaken and LinkNeeded answer the one-time link that the
+	// dashboard hands out, so a customer who opens the bot without a working
+	// link is told what to do instead of being ignored.
+	LinkInvalid string
+	LinkTaken   string
+	LinkNeeded  string
 }
 
 // hwTelegramTextsFor picks Turkish for a Turkish Telegram account and English
@@ -79,38 +85,47 @@ type hwTelegramTexts struct {
 func hwTelegramTextsFor(languageCode string) hwTelegramTexts {
 	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(languageCode)), "tr") {
 		return hwTelegramTexts{
-			Prompt:   "Ücretsiz deneme krediniz için kendi telefon numaranızı paylaşın.",
-			Button:   "Telefon numaramı paylaş",
-			Accepted: "Telefon numaranız kaydedildi.",
-			Rejected: "Bu telefon numarası kabul edilmiyor.",
+			Prompt:      "Ücretsiz deneme krediniz için kendi telefon numaranızı paylaşın.",
+			Button:      "Telefon numaramı paylaş",
+			Accepted:    "Telefon numaranız kaydedildi.",
+			Rejected:    "Bu telefon numarası kabul edilmiyor.",
+			LinkInvalid: "Bu bağlantının süresi dolmuş veya zaten kullanılmış. Panelinizden yeni bir bağlantı isteyin.",
+			LinkTaken:   "Bu Telegram hesabı zaten başka bir hesaba bağlı.",
+			LinkNeeded:  "Panelinizi https://api.hisarweb.be adresinde açın ve Telegram'ı bağla düğmesine basın.",
 		}
 	}
 	return hwTelegramTexts{
-		Prompt:   "Share your own phone number to claim your free trial credit.",
-		Button:   "Share my phone number",
-		Accepted: "Your phone number has been recorded.",
-		Rejected: "This phone number cannot be accepted.",
+		Prompt:      "Share your own phone number to claim your free trial credit.",
+		Button:      "Share my phone number",
+		Accepted:    "Your phone number has been recorded.",
+		Rejected:    "This phone number cannot be accepted.",
+		LinkInvalid: "This link has expired or has already been used. Ask for a new one in your dashboard.",
+		LinkTaken:   "This Telegram account is already linked to another account.",
+		LinkNeeded:  "Open your dashboard at https://api.hisarweb.be and press the Link Telegram button.",
 	}
 }
 
 // hwTelegramUpdate is the part of a bot update this webhook reads. The message
 // body is never logged or stored.
 type hwTelegramUpdate struct {
-	UpdateId int64 `json:"update_id"`
-	Message  *struct {
-		From *struct {
-			Id           int64  `json:"id"`
-			LanguageCode string `json:"language_code"`
-		} `json:"from"`
-		Chat struct {
-			Id int64 `json:"id"`
-		} `json:"chat"`
-		Text    string `json:"text"`
-		Contact *struct {
-			PhoneNumber string `json:"phone_number"`
-			UserId      *int64 `json:"user_id"`
-		} `json:"contact"`
-	} `json:"message"`
+	UpdateId int64              `json:"update_id"`
+	Message  *hwTelegramMessage `json:"message"`
+}
+
+// hwTelegramMessage is one message of the update.
+type hwTelegramMessage struct {
+	From *struct {
+		Id           int64  `json:"id"`
+		LanguageCode string `json:"language_code"`
+	} `json:"from"`
+	Chat struct {
+		Id int64 `json:"id"`
+	} `json:"chat"`
+	Text    string `json:"text"`
+	Contact *struct {
+		PhoneNumber string `json:"phone_number"`
+		UserId      *int64 `json:"user_id"`
+	} `json:"contact"`
 }
 
 // HwHandleTelegramWebhook verifies and processes one bot update. Without a
@@ -150,7 +165,7 @@ func HwHandleTelegramWebhook(ctx context.Context, rawBody []byte, secretHeader s
 		// Telegram repeated a delivery we already handled.
 		return HwWebhookAccepted
 	}
-	outcome := hwProcessTelegramUpdate(ctx, update)
+	outcome := hwProcessTelegramUpdate(ctx, update, now.Unix())
 	if outcome == HwWebhookUnavailable {
 		// Give the claim back so the retry of a failed delivery can do the work.
 		if err := model.HwReleaseTelegramUpdate(update.UpdateId); err != nil {
@@ -161,15 +176,25 @@ func HwHandleTelegramWebhook(ctx context.Context, rawBody []byte, secretHeader s
 }
 
 // hwProcessTelegramUpdate handles one claimed update and answers the customer.
-// Log lines carry user ids, outcomes and counts only: no phone number, no chat
-// id and no message body.
-func hwProcessTelegramUpdate(ctx context.Context, update hwTelegramUpdate) HwWebhookOutcome {
+// Log lines carry user ids, outcomes and counts only: no link token, no phone
+// number, no chat id and no message body.
+func hwProcessTelegramUpdate(ctx context.Context, update hwTelegramUpdate, now int64) HwWebhookOutcome {
 	message := update.Message
 	if message == nil || message.From == nil {
 		return HwWebhookIgnored
 	}
+	texts := hwTelegramTextsFor(message.From.LanguageCode)
+	if payload, ok := hwTelegramLinkPayload(message.Text); ok {
+		return hwLinkTelegramAccount(ctx, message, payload, texts, now)
+	}
 	user, err := model.GetUserByTelegramID(strconv.FormatInt(message.From.Id, 10))
 	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// Someone who opens the bot without a link gets told where the link
+		// lives; every other message of an unknown account stays ignored.
+		if strings.HasPrefix(strings.TrimSpace(message.Text), "/start") {
+			hwAnswerTelegramChat(ctx, strconv.FormatInt(message.Chat.Id, 10), texts.LinkNeeded, "")
+			return HwWebhookAccepted
+		}
 		common.SysLog(common.LogText("telegram webhook ignored a message from a Telegram account that is linked to no user"))
 		return HwWebhookIgnored
 	}
@@ -177,7 +202,6 @@ func hwProcessTelegramUpdate(ctx context.Context, update hwTelegramUpdate) HwWeb
 		common.SysError(common.LogText("telegram webhook could not look up the linked user"))
 		return HwWebhookUnavailable
 	}
-	texts := hwTelegramTextsFor(message.From.LanguageCode)
 	if message.Contact == nil {
 		// A bot may only write to a chat the customer opened, so the request for
 		// the number answers the /start that opened it; pushing it after the
@@ -216,6 +240,70 @@ func hwProcessTelegramUpdate(ctx context.Context, update hwTelegramUpdate) HwWeb
 		return HwWebhookAccepted
 	}
 	hwAnswerTelegramChat(ctx, strconv.FormatInt(message.Chat.Id, 10), texts.Accepted, "")
+	return HwWebhookAccepted
+}
+
+// hwTelegramLinkPayload reads the token out of "/start <token>", the message
+// Telegram sends when a customer opens the bot through the dashboard link.
+// A bare /start carries no payload and is answered elsewhere.
+func hwTelegramLinkPayload(text string) (string, bool) {
+	fields := strings.Fields(strings.TrimSpace(text))
+	if len(fields) < 2 || fields[0] != "/start" {
+		return "", false
+	}
+	return fields[1], true
+}
+
+// hwLinkTelegramAccount spends a link token and ties the sender's Telegram
+// account to the user the token was made for, then asks for the number in the
+// same chat so the second and third start-bonus step happen in one conversation.
+// The token is single use; a failed attempt always ends the link, so the
+// customer asks the dashboard for a new one instead of retrying an old URL.
+func hwLinkTelegramAccount(ctx context.Context, message *hwTelegramMessage, payload string, texts hwTelegramTexts, now int64) HwWebhookOutcome {
+	chatID := strconv.FormatInt(message.Chat.Id, 10)
+	telegramID := strconv.FormatInt(message.From.Id, 10)
+	userID, err := model.HwConsumeTelegramLinkToken(payload, now)
+	if err != nil {
+		if errors.Is(err, model.ErrHwTelegramLinkInvalid) {
+			common.SysLog(common.LogText("telegram webhook refused an unusable link token"))
+			hwAnswerTelegramChat(ctx, chatID, texts.LinkInvalid, "")
+			return HwWebhookAccepted
+		}
+		common.SysError(common.LogText("telegram webhook could not spend its link token"))
+		return HwWebhookUnavailable
+	}
+	// An account that already belongs to this user is linked: answer with the
+	// prompt, not with an error.
+	linked, lookupErr := model.GetUserByTelegramID(telegramID)
+	switch {
+	case lookupErr == nil && linked.Id == userID:
+		hwAnswerTelegramChat(ctx, chatID, texts.Prompt, texts.Button)
+		return HwWebhookAccepted
+	case lookupErr != nil && !errors.Is(lookupErr, gorm.ErrRecordNotFound):
+		common.SysError(common.LogText("telegram webhook could not look up the linked user"))
+		return HwWebhookUnavailable
+	}
+	if model.IsTelegramIdAlreadyTaken(telegramID) {
+		common.SysLog(common.LogText("telegram webhook refused a link for a Telegram account that another user holds"))
+		hwAnswerTelegramChat(ctx, chatID, texts.LinkTaken, "")
+		return HwWebhookAccepted
+	}
+	target, err := model.GetUserById(userID, false)
+	if err != nil {
+		common.SysError(common.LogText("telegram webhook could not read the user of its link token"))
+		return HwWebhookUnavailable
+	}
+	if strings.TrimSpace(target.TelegramId) != "" {
+		common.SysLog(common.LogText("telegram webhook refused a link for user %d that already holds a Telegram account", userID))
+		hwAnswerTelegramChat(ctx, chatID, texts.LinkTaken, "")
+		return HwWebhookAccepted
+	}
+	if err := model.UpdateUserBindColumn(userID, "telegram_id", telegramID); err != nil {
+		common.SysError(common.LogText("telegram webhook could not link a Telegram account to user %d", userID))
+		return HwWebhookUnavailable
+	}
+	common.SysLog(common.LogText("telegram webhook linked a Telegram account to user %d", userID))
+	hwAnswerTelegramChat(ctx, chatID, texts.Prompt, texts.Button)
 	return HwWebhookAccepted
 }
 
@@ -260,6 +348,12 @@ func hwTelegramBotToken() string {
 		return token
 	}
 	return strings.TrimSpace(common.TelegramBotToken)
+}
+
+// HwTelegramBotConfigured says a bot token is set, so the dashboard link the
+// customer receives will actually reach this webhook.
+func HwTelegramBotConfigured() bool {
+	return hwTelegramBotToken() != ""
 }
 
 // hwTelegramWebhookSecret is TELEGRAM_WEBHOOK_SECRET, or else a secret derived
