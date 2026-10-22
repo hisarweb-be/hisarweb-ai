@@ -2754,7 +2754,7 @@
     "How often requests to this model worked in the last 24 hours. Each bar is one hour; green means everything worked.": "Bu modele gönderilen isteklerin son 24 saatte ne sıklıkla çalıştığı. Her çubuk bir saattir; yeşil her şeyin çalıştığı anlamına gelir.",
     "The average time a request takes to come back. Lower is faster.": "Bir isteğin yanıtının gelmesi için geçen ortalama süre. Düşük olması daha hızlı demektir.",
     "How fast the model writes its answer. A fast model fills the screen quickly; a slow one types word by word.": "Modelin yanıtı ne kadar hızlı yazdığı. Hızlı bir model ekranı çabuk doldurur; yavaş olan kelime kelime yazar.",
-    "OpenAI-compatible (Cursor, Cline…)": "OpenAI uyumlu (Cursor, Cline…)",
+    "OpenAI-compatible (Cursor, Cline, Codex and more)": "OpenAI uyumlu (Cursor, Cline, Codex ve diğerleri)",
     "Works with tools that speak the OpenAI format, such as Cursor and Cline. You only change the address and the key in the tool.": "OpenAI biçimini konuşan araçlarla çalışır, örneğin Cursor ve Cline. Araçta yalnızca adresi ve anahtarı değiştirirsiniz.",
     "Anthropic-compatible (Claude Code)": "Anthropic uyumlu (Claude Code)",
     "Works with tools that speak the Anthropic format, such as Claude Code. You only change the address and the key in the tool.": "Anthropic biçimini konuşan araçlarla çalışır, örneğin Claude Code. Araçta yalnızca adresi ve anahtarı değiştirirsiniz.",

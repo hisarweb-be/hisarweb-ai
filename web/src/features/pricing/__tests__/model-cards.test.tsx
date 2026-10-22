@@ -282,7 +282,7 @@ describe('model cards', () => {
     expect(screen.getByText('Works with')).toBeVisible()
     expect(
       screen.getByText(
-        /OpenAI-compatible \(Cursor, Cline…\), Anthropic-compatible \(Claude Code\)/
+        /OpenAI-compatible \(Cursor, Cline, Codex and more\), Anthropic-compatible \(Claude Code\)/
       )
     ).toBeVisible()
     const tagField = screen.getByRole('group', { name: 'Tags' })
@@ -327,6 +327,18 @@ describe('model cards', () => {
     )
 
     expect(screen.getByText('Written by the operator')).toBeVisible()
+  })
+
+  it('shows a long description in full instead of clipping it after two lines', () => {
+    const description =
+      'For the hardest jobs. Use it for problems that need deep thinking and for long multi-step tasks, for example designing a large application from scratch.'
+    render(
+      <ModelCard model={pricingModel({ description })} onClick={vi.fn()} />
+    )
+
+    const paragraph = screen.getByText(description)
+    expect(paragraph).toBeVisible()
+    expect(paragraph.className).not.toMatch(/line-clamp|truncate/)
   })
 
   it('omits metadata fields when the model has no groups, endpoints or tags', () => {

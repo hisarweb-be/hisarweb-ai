@@ -27,7 +27,7 @@ const t = ((key: string, options?: { name?: string }) =>
 describe('describeEndpoint', () => {
   it('names the tools behind the OpenAI and Anthropic formats', () => {
     expect(describeEndpoint('openai', t).label).toBe(
-      'OpenAI-compatible (Cursor, Cline…)'
+      'OpenAI-compatible (Cursor, Cline, Codex and more)'
     )
     expect(describeEndpoint('anthropic', t).label).toBe(
       'Anthropic-compatible (Claude Code)'

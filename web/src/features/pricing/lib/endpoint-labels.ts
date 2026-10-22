@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import type { TFunction } from 'i18next'
 
 export type EndpointDescription = {
-  /** Short plain-language name, e.g. "OpenAI-compatible (Cursor, Cline…)". */
+  /** Short plain-language name, e.g. "OpenAI-compatible (Cursor, Cline, Codex and more)". */
   label: string
   /** One sentence for the hover hint. */
   hint: string
@@ -38,7 +38,7 @@ export function describeEndpoint(
   switch (endpoint) {
     case 'openai':
       return {
-        label: t('OpenAI-compatible (Cursor, Cline…)'),
+        label: t('OpenAI-compatible (Cursor, Cline, Codex and more)'),
         hint: t(
           'Works with tools that speak the OpenAI format, such as Cursor and Cline. You only change the address and the key in the tool.'
         ),

@@ -7434,7 +7434,7 @@
     "How often requests to this model worked in the last 24 hours. Each bar is one hour; green means everything worked.": "How often requests to this model worked in the last 24 hours. Each bar is one hour; green means everything worked.",
     "The average time a request takes to come back. Lower is faster.": "The average time a request takes to come back. Lower is faster.",
     "How fast the model writes its answer. A fast model fills the screen quickly; a slow one types word by word.": "How fast the model writes its answer. A fast model fills the screen quickly; a slow one types word by word.",
-    "OpenAI-compatible (Cursor, Cline…)": "OpenAI-compatible (Cursor, Cline…)",
+    "OpenAI-compatible (Cursor, Cline, Codex and more)": "OpenAI-compatible (Cursor, Cline, Codex and more)",
     "Works with tools that speak the OpenAI format, such as Cursor and Cline. You only change the address and the key in the tool.": "Works with tools that speak the OpenAI format, such as Cursor and Cline. You only change the address and the key in the tool.",
     "Anthropic-compatible (Claude Code)": "Anthropic-compatible (Claude Code)",
     "Works with tools that speak the Anthropic format, such as Claude Code. You only change the address and the key in the tool.": "Works with tools that speak the Anthropic format, such as Claude Code. You only change the address and the key in the tool.",
