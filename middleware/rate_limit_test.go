@@ -290,3 +290,33 @@ func TestGlobalWebRateLimitCountsFrontendFilesInStaticBucket(t *testing.T) {
 		assert.Equal(t, "1", webCount)
 	})
 }
+
+func TestSessionRefreshRateLimitHasOwnBucket(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	previousEnable, previousNum, previousDuration := common.CriticalRateLimitEnable, common.CriticalRateLimitNum, common.CriticalRateLimitDuration
+	t.Cleanup(func() {
+		common.CriticalRateLimitEnable, common.CriticalRateLimitNum, common.CriticalRateLimitDuration = previousEnable, previousNum, previousDuration
+	})
+	common.CriticalRateLimitEnable, common.CriticalRateLimitNum, common.CriticalRateLimitDuration = true, 1, 47
+	redisServer, _ := useRateLimitMiniRedis(t)
+
+	router := gin.New()
+	require.NoError(t, router.SetTrustedProxies(nil))
+	ok := func(c *gin.Context) { c.Status(http.StatusNoContent) }
+	router.GET("/login", CriticalRateLimit(), ok)
+	router.GET("/refresh", SessionRefreshRateLimit(), ok)
+
+	const clientIP = "192.0.2.80"
+	const remoteAddr = clientIP + ":12345"
+	assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/login", remoteAddr).Code)
+	assert.Equal(t, http.StatusTooManyRequests, performRateLimitRequest(router, "/login", remoteAddr).Code)
+
+	// An exhausted login bucket must not lock a signed-in customer out of the silent refresh.
+	for range sessionRefreshLimitFactor {
+		assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/refresh", remoteAddr).Code)
+	}
+	limited := performRateLimitRequest(router, "/refresh", remoteAddr)
+	assert.Equal(t, http.StatusTooManyRequests, limited.Code)
+	assert.Equal(t, "47", limited.Header().Get("Retry-After"))
+	assert.True(t, redisServer.Exists(redisIPRateLimitKey("RF", clientIP)))
+}
