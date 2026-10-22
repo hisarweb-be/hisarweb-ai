@@ -78,12 +78,29 @@ type HwSoldModel struct {
 var hwSoldModels = []HwSoldModel{
 	{Name: "claude-opus-5-5", PriceKey: "claude-opus-5-5", InputMicroUsd: 4_000_000, OutputMicroUsd: 20_000_000},
 	{Name: "claude-sonnet-5-5", PriceKey: "claude-sonnet-5-5", InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000},
+	{Name: "claude-haiku-5-5", PriceKey: "claude-haiku-5-5", InputMicroUsd: 100_000, OutputMicroUsd: 500_000},
 	{Name: "claude-sonnet-5", PriceKey: "claude-sonnet-5", InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000},
 	{Name: "claude-haiku-4-5", PriceKey: "claude-haiku-4-5", InputMicroUsd: 1_000_000, OutputMicroUsd: 5_000_000},
-	{Name: "gpt-5.2", PriceKey: "gpt-5.2", InputMicroUsd: 1_750_000, OutputMicroUsd: 14_000_000},
-	{Name: "gpt-5.4", PriceKey: "gpt-5.4", InputMicroUsd: 2_500_000, OutputMicroUsd: 15_000_000},
-	{Name: "gpt-5.4-mini", PriceKey: "gpt-5.4-mini", InputMicroUsd: 750_000, OutputMicroUsd: 4_500_000},
-	{Name: "gemini-3.5-flash", PriceKey: "gemini-3.5-flash", InputMicroUsd: 1_500_000, OutputMicroUsd: 9_000_000},
+	{Name: "claude-fable-5-1", PriceKey: "claude-fable-5-1", InputMicroUsd: 10_000_000, OutputMicroUsd: 50_000_000},
+	{Name: "gpt-6-astra", PriceKey: "gpt-6-astra", InputMicroUsd: 10_000_000, OutputMicroUsd: 50_000_000},
+	{Name: "gpt-6.1-sol", PriceKey: "gpt-6.1-sol", InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000},
+	{Name: "gpt-6-luna", PriceKey: "gpt-6-luna", InputMicroUsd: 100_000, OutputMicroUsd: 500_000},
+	{Name: "gemini-3.8-flash", PriceKey: "gemini-3.8-flash", InputMicroUsd: 750_000, OutputMicroUsd: 3_750_000},
+}
+
+// HwListPriceDiscountPercent is how far below the official list price every
+// sold model is billed. Routers such as OpenRouter bill the list price or more,
+// and the prepaid usage credits of Anthropic give at most 30 %, so 50 % keeps
+// us the cheapest real-time option for every model in the catalog.
+const HwListPriceDiscountPercent = 50
+
+// hwListPricePayable is the share of the list price a customer pays.
+var hwListPricePayable = decimal.NewFromInt(100 - HwListPriceDiscountPercent).Div(decimal.NewFromInt(100))
+
+// HwOurUsd is the dollar amount we bill for a usage the provider lists at
+// listUsd.
+func HwOurUsd(listUsd decimal.Decimal) decimal.Decimal {
+	return listUsd.Mul(hwListPricePayable)
 }
 
 // hwSoldModelFallbackPrices exposes the catalog prices in the shape of a price
@@ -98,9 +115,10 @@ func hwSoldModelFallbackPrices() map[string]model.HwModelPrice {
 
 // hwModelRatioFromInputPrice converts an input list price (micro-dollars per
 // million tokens) into the model ratio the billing engine multiplies tokens by:
-// ratio 1 is $2 per million tokens.
+// ratio 1 is $2 per million tokens, and the list price discount is applied here
+// so the seeding and the daily refresh bill the same price.
 func hwModelRatioFromInputPrice(inputMicroUsd int64) float64 {
-	return decimal.New(inputMicroUsd, 0).Div(decimal.NewFromInt(2_000_000)).InexactFloat64()
+	return HwOurUsd(decimal.New(inputMicroUsd, 0)).Div(decimal.NewFromInt(2_000_000)).InexactFloat64()
 }
 
 // hwCompletionRatioFromPrice is the output price in units of the input price.
@@ -124,7 +142,8 @@ func hwWriteRatioOption(key string, values map[string]float64) error {
 }
 
 // HwApplySnapshotModelRatios aligns the billing ratios of the sold models with
-// the newest price snapshot, so a request is billed at the day's list price.
+// the newest price snapshot, so a request is billed at the day's list price
+// minus HwListPriceDiscountPercent.
 // Only the entries of the sold models are touched; every other ratio the
 // operator configured stays exactly as it is.
 func HwApplySnapshotModelRatios(snapshot *model.HwPriceSnapshot) error {
@@ -547,9 +566,10 @@ type HwPriceComparison struct {
 	OutputTokens int64
 	OfficialUsd  decimal.Decimal
 	OfficialTry  decimal.Decimal
-	// FirstPurchaseTry is the payable amount for a first purchase (50 % off
-	// the first 1000 TRY of value), RepeatPurchaseTry for every later one
-	// (15 % off), both from the purchase pricing of the credit ledger.
+	// FirstPurchaseTry is the payable amount for a first purchase at our price
+	// (HwListPriceDiscountPercent below the list price, plus the first-purchase
+	// discount on the first 1000 TRY of value), RepeatPurchaseTry for every
+	// later one, both from the purchase pricing of the credit ledger.
 	FirstPurchaseTry  decimal.Decimal
 	RepeatPurchaseTry decimal.Decimal
 	SavingsFirstTry   decimal.Decimal
@@ -601,11 +621,15 @@ func HwComparePrice(snapshot *model.HwPriceSnapshot, input HwComparePriceInput) 
 	if err != nil {
 		return nil, err
 	}
-	firstQuote, err := model.HwComputePurchase(officialTry, true)
+	ourTry, err := HwTryPrice(HwOurUsd(officialUsd), rate)
 	if err != nil {
 		return nil, err
 	}
-	repeatQuote, err := model.HwComputePurchase(officialTry, false)
+	firstQuote, err := model.HwComputePurchase(ourTry, true)
+	if err != nil {
+		return nil, err
+	}
+	repeatQuote, err := model.HwComputePurchase(ourTry, false)
 	if err != nil {
 		return nil, err
 	}

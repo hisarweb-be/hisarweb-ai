@@ -76,7 +76,7 @@ test('shows the HisarWeb landing page when no custom home page is configured', a
   expect(
     await screen.findByRole('heading', {
       level: 1,
-      name: /uygun fiyatlı API erişimi/,
+      name: /resmî fiyatın yarısına/,
     })
   ).toBeInTheDocument()
 })

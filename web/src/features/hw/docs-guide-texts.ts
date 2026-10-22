@@ -62,7 +62,7 @@ const tr = {
 
   step4Title: 'Bakiye yükleyin (isteğe bağlı)',
   step4Body:
-    'Startbonus bittiğinde soldaki menüden “Satın al” sayfasını açın. Ödeme TL ile yapılır. İlk alışverişte 1000 TL değerine kadar %50, üzerindeki kısımda ve sonraki alışverişlerde %15 indirim vardır. Yüklediğiniz bakiye 30 gün geçerlidir; aylık abonelik ücreti yoktur.',
+    'Startbonus bittiğinde soldaki menüden “Satın al” sayfasını açın. Ödeme TL ile yapılır. Token fiyatları her zaman resmî fiyatın yarısıdır; ilk alışverişte 1000 TL değerine kadar ayrıca %50 hoş geldin indirimi vardır. Yüklediğiniz bakiye 30 gün geçerlidir; aylık abonelik ücreti yoktur.',
   step4Link: 'Satın al sayfasına git',
 
   step5Title: 'Playground’da deneyin',
@@ -143,7 +143,7 @@ const en: typeof tr = {
 
   step4Title: 'Add credit (optional)',
   step4Body:
-    'When the start bonus is used up, open “Buy” in the left menu. You pay in Turkish lira. Your first purchase gets 50% off up to 1000 TL, the part above that and later purchases get 15% off. Credit stays valid for 30 days; there is no monthly fee.',
+    'When the start bonus is used up, open “Buy” in the left menu. You pay in Turkish lira. Token prices are always half the official price, and your first purchase gets an extra 50% welcome discount on up to 1000 TL. Credit stays valid for 30 days; there is no monthly fee.',
   step4Link: 'Go to the buy page',
 
   step5Title: 'Try it in the Playground',

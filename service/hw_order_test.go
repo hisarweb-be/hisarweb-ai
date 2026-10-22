@@ -798,7 +798,7 @@ func TestHwFirstPurchaseDiscountIsClaimedOnce(t *testing.T) {
 	}
 	assert.Equal(t, map[string]int64{
 		model.HwDiscountFirstPurchase: 30000,
-		model.HwDiscountReturning:     51000,
+		model.HwDiscountReturning:     60000,
 	}, discounts, "exactly one of two concurrent orders gets the first-purchase price")
 
 	// Cancelling the discounted order gives the discount back: the provider
@@ -829,13 +829,13 @@ func TestHwFirstPurchaseDiscountIsClaimedOnce(t *testing.T) {
 	require.NoError(t, model.DB.Where("merchant_ref = ?", afterExpiry.MerchantRef).First(&afterExpiryOrder).Error)
 	assert.Equal(t, model.HwDiscountFirstPurchase, afterExpiryOrder.DiscountKind)
 
-	// A second paid purchase gets the standard discount.
+	// A second paid purchase pays our price without a purchase discount.
 	require.Equal(t, HwWebhookAccepted, hwOrderTestPaidWebhook(t, fake, afterExpiry.MerchantRef, now))
 	next := hwOrderTestCreate(t, buyer.Id, 600)
 	var nextOrder model.HwOrder
 	require.NoError(t, model.DB.Where("merchant_ref = ?", next.MerchantRef).First(&nextOrder).Error)
 	assert.Equal(t, model.HwDiscountReturning, nextOrder.DiscountKind)
-	assert.EqualValues(t, 51000, nextOrder.PayableTryMinor)
+	assert.EqualValues(t, 60000, nextOrder.PayableTryMinor)
 }
 
 func TestHwTopUpClosedOrdersNeverCredit(t *testing.T) {

@@ -18,7 +18,9 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 /**
- * Price table of the HisarWeb AI channel-1 models, measured on 2026-10-21.
+ * Price table of the HisarWeb AI channel-1 models, measured on 2026-10-22.
+ * HisarWeb bills every model at half the official list price
+ * (`HwListPriceDiscountPercent` in `service/hw_pricing.go`).
  *
  * Every amount is USD per 1 million tokens, copied from the verified
  * measurement (`prijzen.json`): the providers' own pricing pages, the
@@ -58,7 +60,7 @@ export type PriceSource = {
   measuredAt: string
 }
 
-export const MODEL_PRICES_MEASURED_AT = '2026-10-21'
+export const MODEL_PRICES_MEASURED_AT = '2026-10-22'
 
 /** TRY per 1 USD (TCMB, without KDV): `custom_currency_exchange_rate`. */
 export const MODEL_PRICES_TRY_PER_USD = 49.578
@@ -103,71 +105,63 @@ export const MODEL_PRICES: readonly ModelPrice[] = [
     provider: 'Anthropic',
     official: { input: 4, output: 20 },
     openrouter: { input: 4, output: 20 },
-    hisarweb: { input: 4, output: 20 },
+    hisarweb: { input: 2, output: 10 },
   },
   {
     model: 'claude-sonnet-5-5',
     provider: 'Anthropic',
     official: { input: 2, output: 10 },
     openrouter: { input: 2, output: 10 },
-    hisarweb: { input: 2, output: 10 },
+    hisarweb: { input: 1, output: 5 },
   },
   {
     model: 'claude-haiku-5-5',
     provider: 'Anthropic',
     official: { input: 0.1, output: 0.5 },
     openrouter: { input: 0.1, output: 0.5 },
-    hisarweb: { input: 0.1, output: 0.5 },
+    hisarweb: { input: 0.05, output: 0.25 },
   },
   {
     model: 'claude-sonnet-5',
     provider: 'Anthropic',
     official: { input: 2, output: 10 },
     openrouter: { input: 2, output: 10 },
-    hisarweb: { input: 2, output: 10 },
+    hisarweb: { input: 1, output: 5 },
   },
   {
     model: 'claude-haiku-4-5',
     provider: 'Anthropic',
     official: { input: 1, output: 5 },
     openrouter: { input: 1, output: 5 },
-    hisarweb: { input: 1, output: 5 },
+    hisarweb: { input: 0.5, output: 2.5 },
   },
   {
     model: 'claude-fable-5-1',
     provider: 'Anthropic',
     official: { input: 10, output: 50 },
     openrouter: { input: 10, output: 50 },
-    hisarweb: { input: 10, output: 50 },
+    hisarweb: { input: 5, output: 25 },
   },
   {
     model: 'gpt-6-astra',
     provider: 'OpenAI',
     official: { input: 10, output: 50 },
     openrouter: { input: 10, output: 50 },
-    hisarweb: { input: 10, output: 50 },
+    hisarweb: { input: 5, output: 25 },
   },
   {
     model: 'gpt-6.1-sol',
     provider: 'OpenAI',
     official: { input: 2, output: 10 },
     openrouter: { input: 2, output: 10 },
-    hisarweb: { input: 2, output: 10 },
+    hisarweb: { input: 1, output: 5 },
   },
   {
     model: 'gpt-6-luna',
     provider: 'OpenAI',
     official: { input: 0.1, output: 0.5 },
     openrouter: { input: 0.1, output: 0.5 },
-    hisarweb: { input: 0.1, output: 0.5 },
-  },
-  {
-    // HisarWeb lists this model at 5x the official price; shown as measured.
-    model: 'gpt-5.6-luna',
-    provider: 'OpenAI',
-    official: { input: 0.2, output: 1.2 },
-    openrouter: { input: 0.2, output: 1.2 },
-    hisarweb: { input: 1, output: 6 },
+    hisarweb: { input: 0.05, output: 0.25 },
   },
   {
     // OpenRouter charges 10% above the official price for this model.
@@ -175,7 +169,7 @@ export const MODEL_PRICES: readonly ModelPrice[] = [
     provider: 'Google',
     official: { input: 0.75, output: 3.75 },
     openrouter: { input: 0.825, output: 4.125 },
-    hisarweb: { input: 0.75, output: 3.75 },
+    hisarweb: { input: 0.375, output: 1.875 },
   },
 ]
 

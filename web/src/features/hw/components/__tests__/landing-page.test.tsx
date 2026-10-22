@@ -72,7 +72,7 @@ test('shows the Turkish headline when the interface language is Turkish', async 
   expect(
     await screen.findByRole('heading', {
       level: 1,
-      name: /uygun fiyatlı API erişimi/,
+      name: /resmî fiyatın yarısına/,
     })
   ).toBeInTheDocument()
 })
@@ -84,7 +84,7 @@ test('shows the English headline when the interface language is English', async 
   expect(
     await screen.findByRole('heading', {
       level: 1,
-      name: /Affordable API access to Claude and GPT models/,
+      name: /at half the official price/,
     })
   ).toBeInTheDocument()
 })

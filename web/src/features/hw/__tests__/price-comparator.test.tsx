@@ -142,10 +142,10 @@ describe('price comparator page', () => {
     expect(screen.getByText('Resmî liste fiyatı (USD)')).toBeInTheDocument()
     expect(screen.getByText('Resmî liste fiyatı (TL)')).toBeInTheDocument()
     expect(
-      screen.getByText('HisarWeb AI fiyatı (ilk alışveriş)')
+      screen.getByText('HisarWeb AI fiyatı (ilk alışveriş, hoş geldin indirimiyle)')
     ).toBeInTheDocument()
     expect(
-      screen.getByText('HisarWeb AI fiyatı (sonraki alışverişler)')
+      screen.getByText('HisarWeb AI fiyatı (her alışverişte)')
     ).toBeInTheDocument()
   })
 

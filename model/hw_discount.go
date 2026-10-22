@@ -13,9 +13,11 @@ import (
 var hwFirstPurchaseDiscountCapTRY = decimal.NewFromInt(1000)
 
 // Discount rates in percent, and the payable share that follows from them.
+// Later purchases get no purchase discount: the token prices themselves are
+// already far below the list price (service.HwListPriceDiscountPercent).
 const (
 	HwFirstPurchasePercent = 50
-	HwStandardPercent      = 15
+	HwStandardPercent      = 0
 
 	hwFirstPurchasePayablePercent = 100 - HwFirstPurchasePercent
 	hwStandardPayablePercent      = 100 - HwStandardPercent
@@ -40,8 +42,8 @@ type HwPurchaseQuote struct {
 }
 
 // HwComputePurchase prices a purchase. On the first paid purchase the value up
-// to HwFirstPurchaseDiscountCapTRY gets 50 % off and everything above it 15 %;
-// every later purchase gets 15 % off. Amounts are rounded to cents, half away
+// to HwFirstPurchaseDiscountCapTRY gets 50 % off and everything above it the
+// standard rate; every later purchase gets the standard rate. Amounts are rounded to cents, half away
 // from zero.
 func HwComputePurchase(listValueTRY decimal.Decimal, firstPurchase bool) (HwPurchaseQuote, error) {
 	if !listValueTRY.IsPositive() {

@@ -118,16 +118,18 @@ func TestHwSeedDefaultOptions(t *testing.T) {
 		assert.Equal(t, "Default group", setting.GetUsableGroupDescription("default"))
 
 		// Model ratio 1 is $2 per million tokens, so the ratio is the input
-		// price per million divided by two.
+		// price per million divided by two, at half the list price.
 		expectedModelRatios := map[string]float64{
-			"claude-opus-5-5":   2,
-			"claude-sonnet-5-5": 1,
-			"claude-sonnet-5":   1,
-			"claude-haiku-4-5":  0.5,
-			"gpt-5.2":           0.875,
-			"gpt-5.4":           1.25,
-			"gpt-5.4-mini":      0.375,
-			"gemini-3.5-flash":  0.75,
+			"claude-opus-5-5":   1,
+			"claude-sonnet-5-5": 0.5,
+			"claude-haiku-5-5":  0.025,
+			"claude-sonnet-5":   0.5,
+			"claude-haiku-4-5":  0.25,
+			"claude-fable-5-1":  2.5,
+			"gpt-6-astra":       2.5,
+			"gpt-6.1-sol":       0.5,
+			"gpt-6-luna":        0.025,
+			"gemini-3.8-flash":  0.1875,
 		}
 		for name, expected := range expectedModelRatios {
 			ratio, ok, _ := ratio_setting.GetModelRatio(name)
@@ -135,18 +137,8 @@ func TestHwSeedDefaultOptions(t *testing.T) {
 			assert.Equal(t, expected, ratio, "model ratio of %s", name)
 		}
 		// The completion ratio is the output price in units of the input price.
-		expectedCompletionRatios := map[string]float64{
-			"claude-opus-5-5":   5,
-			"claude-sonnet-5-5": 5,
-			"claude-sonnet-5":   5,
-			"claude-haiku-4-5":  5,
-			"gpt-5.2":           8,
-			"gpt-5.4":           6,
-			"gpt-5.4-mini":      6,
-			"gemini-3.5-flash":  6,
-		}
-		for name, expected := range expectedCompletionRatios {
-			assert.Equal(t, expected, ratio_setting.GetCompletionRatio(name), "completion ratio of %s", name)
+		for name := range expectedModelRatios {
+			assert.Equal(t, 5.0, ratio_setting.GetCompletionRatio(name), "completion ratio of %s", name)
 		}
 
 		// The thinking adapter would rewrite the model alias on its way to the
@@ -185,9 +177,9 @@ func TestHwSeedDefaultOptions(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, 3.5, ratio, "an operator price is never replaced")
 		assert.Equal(t, 4.0, ratio_setting.GetCompletionRatio("claude-opus-5-5"))
-		ratio, ok, _ = ratio_setting.GetModelRatio("gpt-5.4")
+		ratio, ok, _ = ratio_setting.GetModelRatio("gpt-6-astra")
 		require.True(t, ok, "a missing sold model is filled in")
-		assert.Equal(t, 1.25, ratio)
+		assert.Equal(t, 2.5, ratio)
 		ratio, ok, _ = ratio_setting.GetModelRatio("gpt-4o")
 		require.True(t, ok, "a model outside the catalog stays")
 		assert.Equal(t, 1.25, ratio)
@@ -282,32 +274,32 @@ func TestHwSeedDefaultOptions(t *testing.T) {
 }
 
 // TestHwApplySnapshotModelRatios protects the link between the daily price list
-// and the bill: the sold models are billed at the day's list price.
+// and the bill: the sold models are billed at half the day's list price.
 func TestHwApplySnapshotModelRatios(t *testing.T) {
 	setupHwSeedDefaultsTest(t)
 	// An operator priced two sold models itself and one model outside the catalog.
 	require.NoError(t, model.UpdateOption(hwModelRatioOption,
-		`{"claude-opus-5-5":3.5,"claude-sonnet-5":1,"gemini-3.5-flash":0.75,"gpt-4o":1.25}`))
+		`{"claude-opus-5-5":3.5,"claude-sonnet-5":1,"gemini-3.8-flash":0.75,"gpt-4o":1.25}`))
 	require.NoError(t, model.UpdateOption(hwCompletionRatioOption,
-		`{"claude-opus-5-5":4,"claude-sonnet-5":5,"gemini-3.5-flash":6}`))
+		`{"claude-opus-5-5":4,"claude-sonnet-5":5,"gemini-3.8-flash":6}`))
 
 	snapshot := &model.HwPriceSnapshot{
 		Models: `{"claude-opus-5-5":{"in":6000000,"out":30000000},` +
-			`"gpt-5.2":{"in":2000000,"out":10000000},` +
-			`"gemini-3.5-flash":{"in":0,"out":9000000}}`,
+			`"gpt-6.1-sol":{"in":2000000,"out":10000000},` +
+			`"gemini-3.8-flash":{"in":0,"out":9000000}}`,
 	}
 	require.NoError(t, HwApplySnapshotModelRatios(snapshot))
 
-	// A sold model is billed at the published list price.
+	// A sold model is billed at half the published list price.
 	ratio, ok, _ := ratio_setting.GetModelRatio("claude-opus-5-5")
 	require.True(t, ok)
-	assert.Equal(t, 3.0, ratio)
+	assert.Equal(t, 1.5, ratio)
 	assert.Equal(t, 5.0, ratio_setting.GetCompletionRatio("claude-opus-5-5"))
 	// A sold model the snapshot prices for the first time gets both ratios.
-	ratio, ok, _ = ratio_setting.GetModelRatio("gpt-5.2")
+	ratio, ok, _ = ratio_setting.GetModelRatio("gpt-6.1-sol")
 	require.True(t, ok)
-	assert.Equal(t, 1.0, ratio)
-	assert.Equal(t, 5.0, ratio_setting.GetCompletionRatio("gpt-5.2"))
+	assert.Equal(t, 0.5, ratio)
+	assert.Equal(t, 5.0, ratio_setting.GetCompletionRatio("gpt-6.1-sol"))
 	// A model outside the catalog keeps its operator ratio.
 	ratio, ok, _ = ratio_setting.GetModelRatio("gpt-4o")
 	require.True(t, ok)
@@ -318,10 +310,10 @@ func TestHwApplySnapshotModelRatios(t *testing.T) {
 	assert.Equal(t, 1.0, ratio)
 	assert.Equal(t, 5.0, ratio_setting.GetCompletionRatio("claude-sonnet-5"))
 	// An unusable price never lowers the bill of a sold model to zero.
-	ratio, ok, _ = ratio_setting.GetModelRatio("gemini-3.5-flash")
+	ratio, ok, _ = ratio_setting.GetModelRatio("gemini-3.8-flash")
 	require.True(t, ok)
 	assert.Equal(t, 0.75, ratio)
-	assert.Equal(t, 6.0, ratio_setting.GetCompletionRatio("gemini-3.5-flash"))
+	assert.Equal(t, 6.0, ratio_setting.GetCompletionRatio("gemini-3.8-flash"))
 }
 
 // TestHwSyncDisplayCurrencyRate protects the TL display against a stale rate:

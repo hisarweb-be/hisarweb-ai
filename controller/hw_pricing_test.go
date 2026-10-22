@@ -85,8 +85,9 @@ func hwGetCompare(t *testing.T, engine *gin.Engine, query string) (*httptest.Res
 
 // TestHwPricingCompareAnswersOfficialAndPurchasePrices pins the numbers of the
 // comparator for one monthly volume: 1M input and 0.5M output tokens cost $7
-// officially, TRY 416.24 with the rate and KDV, and the purchase prices follow
-// the credit ledger's first (50 %) and repeat (15 %) discount. The
+// officially, TRY 416.24 with the rate and KDV. Our price is half of that, and
+// the first purchase gets the ledger's 50 % on top; later purchases pay our
+// price. The
 // expectations were computed independently with exact decimal math.
 func TestHwPricingCompareAnswersOfficialAndPurchasePrices(t *testing.T) {
 	engine := setupHwPricingTestDB(t)
@@ -100,10 +101,10 @@ func TestHwPricingCompareAnswersOfficialAndPurchasePrices(t *testing.T) {
 	assert.Equal(t, "claude-sonnet-5-5", data["model"])
 	assert.Equal(t, "7", data["official_cost_usd"])
 	assert.Equal(t, "416.24", data["official_cost_try"])
-	assert.Equal(t, "208.12", data["first_purchase_try"])
-	assert.Equal(t, "353.8", data["repeat_purchase_try"])
-	assert.Equal(t, "208.12", data["savings_first_try"])
-	assert.Equal(t, "62.44", data["savings_repeat_try"])
+	assert.Equal(t, "104.06", data["first_purchase_try"])
+	assert.Equal(t, "208.12", data["repeat_purchase_try"])
+	assert.Equal(t, "312.18", data["savings_first_try"])
+	assert.Equal(t, "208.12", data["savings_repeat_try"])
 	assert.Equal(t, "49.5523", data["try_per_usd"])
 	assert.Equal(t, true, data["prices_include_kdv"])
 
@@ -121,10 +122,10 @@ func TestHwPricingCompareAnswersOfficialAndPurchasePrices(t *testing.T) {
 	data, ok = body["data"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "594627.6", data["official_cost_try"])
-	assert.Equal(t, "505083.46", data["first_purchase_try"])
-	assert.Equal(t, "505433.46", data["repeat_purchase_try"])
-	assert.Equal(t, "89544.14", data["savings_first_try"])
-	assert.Equal(t, "89194.14", data["savings_repeat_try"])
+	assert.Equal(t, "296813.8", data["first_purchase_try"])
+	assert.Equal(t, "297313.8", data["repeat_purchase_try"])
+	assert.Equal(t, "297813.8", data["savings_first_try"])
+	assert.Equal(t, "297313.8", data["savings_repeat_try"])
 }
 
 // TestHwPricingCompareMarksStaleSnapshot pins the stale flag of a snapshot
