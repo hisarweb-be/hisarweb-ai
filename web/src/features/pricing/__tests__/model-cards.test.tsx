@@ -377,25 +377,25 @@ describe('model cards', () => {
       usdExchangeRate: 6,
     }
     const { rerender } = render(<ModelCard {...props} tokenUnit='M' />)
-    expect(screen.getByText('Input').parentElement).toHaveTextContent(
+    expect(screen.getByText('Text you send').closest('div')).toHaveTextContent(
       /\$3\s*\/\s*1M/
     )
-    expect(screen.getByText('Output').parentElement).toHaveTextContent(
-      /\$9\s*\/\s*1M/
-    )
-    expect(screen.getByText('Cached').parentElement).toHaveTextContent(
-      /\$0\s*\/\s*1M/
-    )
+    expect(
+      screen.getByText('Text the model writes').closest('div')
+    ).toHaveTextContent(/\$9\s*\/\s*1M/)
+    expect(
+      screen.getByText('Reused text (cache)').closest('div')
+    ).toHaveTextContent(/\$0\s*\/\s*1M/)
     rerender(<ModelCard {...props} tokenUnit='K' />)
-    expect(screen.getByText('Input').parentElement).toHaveTextContent(
+    expect(screen.getByText('Text you send').closest('div')).toHaveTextContent(
       /\$0.003\s*\/\s*1K/
     )
-    expect(screen.getByText('Output').parentElement).toHaveTextContent(
-      /\$0.009\s*\/\s*1K/
-    )
-    expect(screen.getByText('Cached').parentElement).toHaveTextContent(
-      /\$0\s*\/\s*1K/
-    )
+    expect(
+      screen.getByText('Text the model writes').closest('div')
+    ).toHaveTextContent(/\$0.009\s*\/\s*1K/)
+    expect(
+      screen.getByText('Reused text (cache)').closest('div')
+    ).toHaveTextContent(/\$0\s*\/\s*1K/)
   })
 
   it('shows a per-request price with the selected group and recharge multiplier without a token unit', () => {
