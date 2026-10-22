@@ -26,8 +26,8 @@ import { toIntlLocale } from '@/i18n/languages'
 
 import { useHwPackages } from '../hooks/use-hw-packages'
 import { useHwText } from '../texts'
-
 import { CreditPackagesCard } from './credit-packages-card'
+import { TokenExplainer } from './token-explainer'
 import { TopUpForm } from './top-up-form'
 
 interface PurchasePageProps {
@@ -77,6 +77,8 @@ export function PurchasePage(props: PurchasePageProps) {
           )}
 
           <TopUpForm locale={locale} />
+
+          <TokenExplainer locale={locale} />
 
           <CreditPackagesCard
             data={packages.data}

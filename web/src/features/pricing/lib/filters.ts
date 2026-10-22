@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { recommendedRank } from '@/features/hw/data/model-guide'
+
 import {
   SORT_OPTIONS,
   FILTER_ALL,
@@ -188,6 +190,14 @@ export function sortModels(
   }
 
   switch (sortBy) {
+    case SORT_OPTIONS.RECOMMENDED:
+      // Models outside the recommended list keep a stable order by name.
+      sorted.sort(
+        (a, b) =>
+          recommendedRank(a.model_name) - recommendedRank(b.model_name) ||
+          (a.model_name || '').localeCompare(b.model_name || '')
+      )
+      break
     case SORT_OPTIONS.NAME:
       sorted.sort((a, b) =>
         (a.model_name || '').localeCompare(b.model_name || '')

@@ -34,7 +34,8 @@ interface ModelBillingModeBadgeProps {
 export function ModelBillingModeBadge(props: ModelBillingModeBadgeProps) {
   const { t } = useTranslation()
   const labelKey = getBillingModeLabelKey(props.model)
-  const label = t(labelKey)
+  // Customers read "Token-based" as jargon; the card says it in plain words.
+  const label = labelKey === 'Token-based' ? t('Pay as you go') : t(labelKey)
   const isCaption = props.appearance === 'caption'
   let variant: StatusVariant = 'purple'
 

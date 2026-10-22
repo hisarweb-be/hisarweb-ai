@@ -26,6 +26,7 @@ import type { TokenUnit } from './types'
 
 /** Sort options for pricing models */
 export const SORT_OPTIONS = {
+  RECOMMENDED: 'recommended',
   NAME: 'name',
   INPUT_PRICE_LOW: 'input-price-low',
   INPUT_PRICE_HIGH: 'input-price-high',
@@ -39,6 +40,7 @@ export type SortOption = (typeof SORT_OPTIONS)[keyof typeof SORT_OPTIONS]
 
 export function getSortLabels(t: TFunction): Record<SortOption, string> {
   return {
+    [SORT_OPTIONS.RECOMMENDED]: t('Recommended'),
     [SORT_OPTIONS.NAME]: t('Name'),
     [SORT_OPTIONS.INPUT_PRICE_LOW]: t('Input Price: Low to High'),
     [SORT_OPTIONS.INPUT_PRICE_HIGH]: t('Input Price: High to Low'),
@@ -68,7 +70,7 @@ export function getQuotaTypeLabels(
 ): Record<QuotaTypeOption, string> {
   return {
     [QUOTA_TYPES.ALL]: t('All Models'),
-    [QUOTA_TYPES.TOKEN]: t('Token-based'),
+    [QUOTA_TYPES.TOKEN]: t('Pay as you go'),
     [QUOTA_TYPES.REQUEST]: t('Per Request'),
     [QUOTA_TYPES.TASK]: t('Task billing'),
   }

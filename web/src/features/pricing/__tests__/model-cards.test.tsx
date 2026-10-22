@@ -161,9 +161,8 @@ describe('model cards', () => {
     const metrics = screen.getByLabelText(
       'Performance metrics for the last 24 hours'
     )
-    expect(within(metrics).getAllByText('—')).toHaveLength(2)
+    expect(within(metrics).getAllByText('—')).toHaveLength(3)
     expect(within(metrics).getByText('—s')).toBeVisible()
-    expect(within(metrics).getByText('—t/s')).toBeVisible()
     expect(within(metrics).queryByText(/100/)).not.toBeInTheDocument()
     const statusStrip = within(metrics).getByRole('img', {
       name: 'No performance data available',
@@ -191,7 +190,7 @@ describe('model cards', () => {
       />
     )
     const statusStrip = screen.getByRole('img', {
-      name: 'Success rate',
+      name: 'Uptime (last 24 hours)',
     })
     expect(statusStrip).toHaveClass('gap-px')
     expect(statusStrip).not.toHaveClass('justify-between')
@@ -242,22 +241,22 @@ describe('model cards', () => {
     )
     expect(within(active).getByText('1.20s')).toBeVisible()
     expect(
-      within(active).getByRole('img', { name: 'Success rate' }).children[0]
+      within(active).getByRole('img', { name: 'Uptime (last 24 hours)' })
+        .children[0]
     ).toHaveClass('bg-emerald-500')
     const samples = within(idle).getByRole('img', {
-      name: 'Success rate',
+      name: 'Uptime (last 24 hours)',
     }).children
     expect(samples).toHaveLength(2)
     expect(samples[0]).toHaveClass('bg-red-500')
     expect(samples[1]).toHaveClass('bg-emerald-500')
-    expect(within(idle).getByText('—')).toBeVisible()
+    expect(within(idle).getAllByText('—')).toHaveLength(2)
     expect(within(idle).getByText('—s')).toBeVisible()
-    expect(within(idle).getByText('—t/s')).toBeVisible()
   })
 
-  it('keeps group, endpoint and tag overflow counts with their own metadata', () => {
+  it('keeps the tag overflow count and names the compatible tools in plain words', () => {
     const groups = ['default-with-a-long-group-name', 'premium', 'internal']
-    const endpoints = ['openai-response', 'openai', 'claude', 'gemini', 'jina']
+    const endpoints = ['openai', 'anthropic']
     const tags = [
       'video-generation',
       'high-resolution',
@@ -277,30 +276,57 @@ describe('model cards', () => {
       />
     )
 
-    const groupField = screen.getByText('Groups').parentElement
-    const endpointField = screen.getByText('Endpoints').parentElement
-    if (!groupField || !endpointField) {
-      throw new Error('Expected labeled group and endpoint fields')
-    }
-    const tagField = screen.getByRole('group', { name: 'Tags' })
-    expect(within(groupField).getByText(groups[0])).toBeVisible()
-    expect(within(groupField).getByText('+2')).toHaveAttribute(
-      'title',
-      groups.slice(1).join(', ')
-    )
+    expect(screen.queryByText('Groups')).not.toBeInTheDocument()
+    expect(screen.queryByText('Endpoints')).not.toBeInTheDocument()
+    expect(screen.queryByText(groups[0])).not.toBeInTheDocument()
+    expect(screen.getByText('Works with')).toBeVisible()
     expect(
-      within(endpointField).getByText('openai-response, openai')
-    ).toHaveAttribute('title', endpoints.join(', '))
-    expect(within(endpointField).getByText('+3')).toBeVisible()
+      screen.getByText(
+        /OpenAI-compatible \(Cursor, Cline…\), Anthropic-compatible \(Claude Code\)/
+      )
+    ).toBeVisible()
+    const tagField = screen.getByRole('group', { name: 'Tags' })
     expect(
       within(tagField).getByText('video-generation, high-resolution')
     ).toHaveAttribute('title', tags.join(', '))
     expect(within(tagField).getByText('+4')).toBeVisible()
     expect(
       within(screen.getByRole('group', { name: 'Pricing' })).getByText(
-        'Token-based'
+        'Pay as you go'
       )
     ).toBeVisible()
+  })
+
+  it('falls back to the plain-language guide when the database description is empty', () => {
+    render(
+      <ModelCard
+        model={pricingModel({
+          model_name: 'claude-sonnet-5-5',
+          description: '',
+        })}
+        onClick={vi.fn()}
+      />
+    )
+
+    expect(screen.getByText('Best value')).toBeVisible()
+    expect(screen.getByText(/everyday coding/i)).toBeVisible()
+    expect(
+      screen.queryByText('No description available.')
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps the description from the database when there is one', () => {
+    render(
+      <ModelCard
+        model={pricingModel({
+          model_name: 'claude-sonnet-5-5',
+          description: 'Written by the operator',
+        })}
+        onClick={vi.fn()}
+      />
+    )
+
+    expect(screen.getByText('Written by the operator')).toBeVisible()
   })
 
   it('omits metadata fields when the model has no groups, endpoints or tags', () => {
@@ -335,9 +361,9 @@ describe('model cards', () => {
         'Performance metrics for the last 24 hours'
       )
       expect(within(metrics).getAllByText(expected)[0]).toBeVisible()
-      expect(within(metrics).getByText('Status')).toBeVisible()
+      expect(within(metrics).getByText('Uptime (last 24 hours)')).toBeVisible()
       expect(within(metrics).getByText('1.20s')).toBeVisible()
-      expect(within(metrics).getByText('42.0t/s')).toBeVisible()
+      expect(within(metrics).getByText('~32 words per second')).toBeVisible()
     }
   )
 
@@ -704,7 +730,7 @@ describe('model cards', () => {
 
     const spans = [
       ...screen.getByRole('img', {
-        name: 'Success rate',
+        name: 'Uptime (last 24 hours)',
       }).children,
     ]
     expect(spans).toHaveLength(3)
@@ -743,7 +769,7 @@ describe('model cards', () => {
 
     const spans = [
       ...screen.getByRole('img', {
-        name: 'Success rate',
+        name: 'Uptime (last 24 hours)',
       }).children,
     ]
     expect(spans).toHaveLength(2)
@@ -776,7 +802,7 @@ describe('model cards', () => {
 
     const spans = [
       ...screen.getByRole('img', {
-        name: 'Success rate',
+        name: 'Uptime (last 24 hours)',
       }).children,
     ]
     expect(spans).toHaveLength(24)
@@ -833,7 +859,7 @@ describe('model cards', () => {
 
     const spans = [
       ...screen.getByRole('img', {
-        name: 'Success rate',
+        name: 'Uptime (last 24 hours)',
       }).children,
     ]
     expect(spans).toHaveLength(1)

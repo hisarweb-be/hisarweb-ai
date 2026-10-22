@@ -114,7 +114,7 @@ describe('pricing controls', () => {
     expect(screen.getByRole('button', { name: /^Chat\s*2$/ })).toBeVisible()
     expect(screen.getByRole('button', { name: /^Chat\s*1$/ })).toBeVisible()
     expect(
-      screen.getByRole('button', { name: /^Token-based\s*1$/ })
+      screen.getByRole('button', { name: /^Pay as you go\s*1$/ })
     ).toBeVisible()
     expect(
       screen.getByRole('button', { name: /^Per Request\s*1$/ })
@@ -132,7 +132,7 @@ describe('pricing controls', () => {
     expect(screen.getByRole('button', { name: /^Chat\s*1$/ })).toBeVisible()
     expect(screen.getByRole('button', { name: /^Chat\s*0$/ })).toBeVisible()
     expect(
-      screen.getByRole('button', { name: /^Token-based\s*0$/ })
+      screen.getByRole('button', { name: /^Pay as you go\s*0$/ })
     ).toBeVisible()
     expect(
       screen.getByRole('button', { name: /^Task billing\s*0$/ })

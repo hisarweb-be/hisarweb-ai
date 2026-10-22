@@ -90,7 +90,7 @@ describe('documentation page', () => {
     expect(screen.getByText('HisarWeb AI nedir?')).toBeInTheDocument()
     for (const title of [
       'Hesap açın',
-      '250 TL startbonusunu alın',
+      '250 TL başlangıç bonusunu alın',
       'API anahtarı oluşturun',
       'Bakiye yükleyin (isteğe bağlı)',
       'Playground’da deneyin',
