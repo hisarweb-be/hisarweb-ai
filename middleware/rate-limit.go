@@ -194,6 +194,20 @@ func CriticalRateLimit() func(c *gin.Context) {
 	return defNext
 }
 
+// SessionRefreshRateLimit gives the silent session refresh its own per-IP
+// bucket. Sharing the "CT" bucket with login and verification let a handful of
+// sign-ins (or customers behind one mobile-carrier NAT) exhaust it, after which
+// every refresh answered 429 and the dashboard sent a signed-in customer to the
+// login screen.
+func SessionRefreshRateLimit() func(c *gin.Context) {
+	if common.CriticalRateLimitEnable {
+		return rateLimitFactory(common.CriticalRateLimitNum*sessionRefreshLimitFactor, common.CriticalRateLimitDuration, "RF")
+	}
+	return defNext
+}
+
+const sessionRefreshLimitFactor = 10
+
 func UserCriticalRateLimit(scope string) func(c *gin.Context) {
 	if !common.CriticalRateLimitEnable {
 		return defNext
