@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 /**
  * Texts of the beginner guide at the top of `/docs`: what HisarWeb AI is, the
- * steps from sign-up to a first answer, and how to connect Claude Code.
+ * steps from sign-up to a first answer, and the title of the program picker.
  *
  * Same language choice as the rest of the HisarWeb pages (`pickHwLanguage`):
  * Turkish by default, English only when the interface language is English.
@@ -70,37 +70,7 @@ const tr = {
     'Soldaki menüden “Playground” sayfasını açın, bir model seçin, sorunuzu yazıp “Gönder”e basın. Yanıt geldiyse hesabınız ve bakiyeniz çalışıyor demektir. Bakiye yoksa ekranda sizi yönlendiren bir uyarı çıkar.',
   step5Alt: 'Playground sayfası: model seçimi ve mesaj kutusu',
 
-  step6Title: 'Claude Code’u HisarWeb AI’ye bağlayın',
-  step6Body:
-    'Claude Code, Anthropic’in kodlama yardımcısıdır. İki yoldan birini seçin: komut satırı (CLI) ya da masaüstü uygulaması.',
-
-  cliTitle: 'Komut satırı (CLI)',
-  cliInstallTitle: 'a) Claude Code’u kurun',
-  cliInstallWin: 'Windows PowerShell:',
-  cliInstallUnix: 'macOS, Linux veya WSL:',
-  cliSettingsTitle: 'b) Ayar dosyasını yazın',
-  cliSettingsBody:
-    'Şu dosyayı açın, yoksa oluşturun: macOS ve Linux’ta ~/.claude/settings.json, Windows’ta %USERPROFILE%\\.claude\\settings.json. Aşağıdaki metni yapıştırın ve BURAYA_ANAHTARINIZ yerine 3. adımda kopyaladığınız anahtarı yazın.',
-  cliSettingsNote:
-    'Adres https://api.hisarweb.be olmalı, sonuna /v1 eklemeyin; Claude Code gerisini kendisi ekler. Ücretsiz deneme anahtarı yalnızca haiku sınıfı modelleri çalıştırır: o durumda model satırlarının hepsine claude-haiku-4-5 yazın.',
-  cliRunTitle: 'c) Başlatın',
-  cliRunBody:
-    'Bir proje klasöründe terminali açıp claude yazın. Anthropic hesabıyla giriş yapmanız gerekmez. Claude Code “model listesinde yok” türünde bir uyarı gösterebilir; bu zararsızdır, model çalışır.',
-  cliTested:
-    'Bu adımlar 21 Ekim 2026’da gerçek bir anahtarla denendi: Claude Code, api.hisarweb.be üzerinden yanıt aldı.',
-
-  desktopTitle: 'Masaüstü uygulaması',
-  desktopBody:
-    'Claude’un masaüstü uygulaması kendi ağ geçidinize “üçüncü taraf çıkarım” modu ile bağlanır. Adımlar Claude’un resmî belgesinden alınmıştır:',
-  desktopSteps: [
-    'Claude masaüstü uygulamasını claude.com/download adresinden kurun ve açın; Anthropic hesabıyla giriş yapmayın.',
-    'Yardım, Sorun giderme, Geliştirici modunu etkinleştir yolunu izleyin.',
-    'Geliştirici, Üçüncü taraf çıkarımı yapılandır… menüsünü açın.',
-    'Sağlayıcı olarak Gateway’i seçin. Gateway base URL alanına https://api.hisarweb.be yazın; çalışmazsa sonuna /v1 ekleyip tekrar deneyin.',
-    'Gateway API key alanına anahtarınızı yapıştırın. Credential kind olarak Static API key, kimlik doğrulama için Bearer seçin.',
-    'Model listesine claude-sonnet-5-5 ve claude-haiku-4-5 adlarını ekleyin; ilk yazılan varsayılan olur.',
-    'Apply Changes’e, sonra Save & Restart’a basın. Uygulama yeniden açılınca üçüncü taraf modunda başlatmayı seçin.',
-  ],
+  step6Title: 'Programınızı seçin',
 
   devTitle: 'Geliştiriciler için',
   devLead:
@@ -151,37 +121,7 @@ const en: typeof tr = {
     'Open “Playground” in the left menu, choose a model, type your question and press “Send”. If an answer comes back, your account and balance work. Without balance, a notice tells you what to do.',
   step5Alt: 'Playground page with the model picker and the message box',
 
-  step6Title: 'Connect Claude Code to HisarWeb AI',
-  step6Body:
-    'Claude Code is Anthropic’s coding assistant. Pick one of two ways: the command line (CLI) or the desktop app.',
-
-  cliTitle: 'Command line (CLI)',
-  cliInstallTitle: 'a) Install Claude Code',
-  cliInstallWin: 'Windows PowerShell:',
-  cliInstallUnix: 'macOS, Linux or WSL:',
-  cliSettingsTitle: 'b) Write the settings file',
-  cliSettingsBody:
-    'Open this file, or create it: ~/.claude/settings.json on macOS and Linux, %USERPROFILE%\\.claude\\settings.json on Windows. Paste the text below and replace BURAYA_ANAHTARINIZ with the key you copied in step 3.',
-  cliSettingsNote:
-    'The address must be https://api.hisarweb.be without /v1 at the end; Claude Code adds the rest. A free trial key only runs haiku-class models: in that case write claude-haiku-4-5 on every model line.',
-  cliRunTitle: 'c) Start it',
-  cliRunBody:
-    'Open a terminal in a project folder and type claude. You do not need to sign in with an Anthropic account. Claude Code may print a notice that the model is not in its list; that is harmless and the model works.',
-  cliTested:
-    'These steps were tried on 21 October 2026 with a real key: Claude Code received an answer through api.hisarweb.be.',
-
-  desktopTitle: 'Desktop app',
-  desktopBody:
-    'The Claude desktop app connects to your own gateway through its “third-party inference” mode. The steps come from Claude’s official documentation:',
-  desktopSteps: [
-    'Install the Claude desktop app from claude.com/download and open it; do not sign in with an Anthropic account.',
-    'Follow Help, Troubleshooting, Enable Developer Mode.',
-    'Open Developer, Configure Third-Party Inference…',
-    'Choose Gateway as the provider. Type https://api.hisarweb.be in Gateway base URL; if that fails, add /v1 at the end and try again.',
-    'Paste your key into Gateway API key. Choose Static API key as the credential kind and Bearer as the authentication.',
-    'Add claude-sonnet-5-5 and claude-haiku-4-5 to the model list; the first one becomes the default.',
-    'Press Apply Changes, then Save & Restart. When the app reopens, choose to start in third-party mode.',
-  ],
+  step6Title: 'Choose your program',
 
   devTitle: 'For developers',
   devLead:
@@ -189,7 +129,7 @@ const en: typeof tr = {
   codeSamplesTitle: 'Code samples',
 }
 
-export type DocsGuideTextKey = Exclude<keyof typeof tr, 'desktopSteps'>
+export type DocsGuideTextKey = keyof typeof tr
 
 const dictionaries = { tr, en }
 
@@ -205,9 +145,4 @@ export function useDocsGuideText(): (
 ) => string {
   const dictionary = useDictionary()
   return (key, vars) => fillHwText(dictionary[key], vars)
-}
-
-/** Returns the Claude Desktop steps of the active interface language. */
-export function useDocsDesktopSteps(): readonly string[] {
-  return useDictionary().desktopSteps
 }
