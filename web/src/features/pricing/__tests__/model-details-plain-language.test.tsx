@@ -124,6 +124,16 @@ afterEach(async () => {
 })
 
 describe('model details in plain language', () => {
+  it('lets the tab titles wrap instead of clipping them on a phone', async () => {
+    await useTurkish()
+    renderDetails()
+    for (const name of ['Genel Bakış', 'Performans']) {
+      const label = await screen.findByText(name)
+      expect(label.className).not.toMatch(/truncate|line-clamp/)
+      expect(label.closest('button')?.className).toMatch(/whitespace-normal/)
+    }
+  })
+
   it('shows the pay-as-you-go badge in Turkish', async () => {
     await useTurkish()
     renderDetails()
