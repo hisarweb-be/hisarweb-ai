@@ -320,6 +320,7 @@ export function PriceTable(props: PriceTableProps) {
             </li>
             <li>{t('noteSaving')}</li>
             <li>{t('noteContext')}</li>
+            <li>{t('noteOthers')}</li>
           </ul>
         </section>
 

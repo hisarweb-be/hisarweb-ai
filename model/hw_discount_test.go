@@ -40,9 +40,9 @@ func TestHwComputePurchase(t *testing.T) {
 	}{
 		{name: "first purchase below the cap", list: "600", firstPurchase: true, payable: "300.00", firstValue: "600.00", remainderValue: "0.00", discount: "300.00"},
 		{name: "first purchase exactly at the cap", list: "1000", firstPurchase: true, payable: "500.00", firstValue: "1000.00", remainderValue: "0.00", discount: "500.00"},
-		{name: "first purchase above the cap", list: "1500", firstPurchase: true, payable: "925.00", firstValue: "1000.00", remainderValue: "500.00", discount: "575.00"},
-		{name: "later purchase gets the standard rate", list: "1000", firstPurchase: false, payable: "850.00", firstValue: "0.00", remainderValue: "1000.00", discount: "150.00"},
-		{name: "rounds half up", list: "1.3", firstPurchase: false, payable: "1.11", firstValue: "0.00", remainderValue: "1.30", discount: "0.19"},
+		{name: "first purchase above the cap", list: "1500", firstPurchase: true, payable: "1000.00", firstValue: "1000.00", remainderValue: "500.00", discount: "500.00"},
+		{name: "later purchase pays the full value", list: "1000", firstPurchase: false, payable: "1000.00", firstValue: "0.00", remainderValue: "1000.00", discount: "0.00"},
+		{name: "rounds half up", list: "1.25", firstPurchase: true, payable: "0.63", firstValue: "1.25", remainderValue: "0.00", discount: "0.62"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

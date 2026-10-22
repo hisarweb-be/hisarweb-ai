@@ -34,7 +34,7 @@ const tr = {
   introToken:
     'Token, yapay zekânın metni işlediği küçük parçadır; İngilizce’de yaklaşık dörtte üç kelime eder, Türkçe metinde kelime başına daha çok token gider. “1M token” bir milyon token demektir. Girdi, modele gönderdiğiniz metindir; çıktı, modelin yazdığı yanıttır ve genellikle daha pahalıdır.',
   introWhy:
-    'Neden uygun? Modellerin dolar liste fiyatı resmi fiyatla aynı düzeydedir; HisarWeb AI’de avantaj bakiyeyi TL ile yüklerken gelir: ilk alışverişte 1000 TL’ye kadar %50, sonrasında ve sonraki alışverişlerde %15 indirim. Aşağıdaki tasarruf sütunları yalnızca token liste fiyatını karşılaştırır; bu indirim yüzdelere dahil değildir.',
+    'Neden HisarWeb AI? Her modelin token fiyatı resmî liste fiyatının yarısıdır, her istekte ve anında. OpenRouter aynı modelleri resmî fiyattan veya daha pahalıya satar ve kredi alımında ayrıca hizmet bedeli alır. Anthropic’in kendi ön ödemeli kullanım kredileri en fazla %30 indirim verir ve peşin ödeme ister. HisarWeb AI’de taahhüt yok, ödeme TL ile ve ilk alışverişte 1000 TL değerine kadar ayrıca %50 hoş geldin indirimi var; bu ek indirim aşağıdaki yüzdelere dahil değildir.',
 
   tableLabel: 'Model başına 1M token fiyatı: resmi, OpenRouter ve HisarWeb AI',
   colModel: 'Model',
@@ -58,6 +58,8 @@ const tr = {
     'Tasarruf, 1M girdi + 1M çıktı toplam fiyatı üzerinden hesaplanır. “—”, o kaynakta modelin listelenmediği anlamına gelir.',
   noteContext:
     'Resmi fiyatlar standart katman ve kısa bağlam içindir; sağlayıcılar çok uzun bağlamda daha yüksek fiyat uygulayabilir.',
+  noteOthers:
+    'Anthropic toplu işlemede (Batch API) de %50 indirim verir, ancak yanıt 24 saate kadar gecikebilir. HisarWeb AI’deki %50 indirim her gerçek zamanlı istekte geçerlidir.',
   sourcesTitle: 'Kaynaklar',
   sourceDate: 'Ölçüm tarihi: {date}',
 } as const
@@ -71,7 +73,7 @@ const en: Record<PriceTableTextKey, string> = {
   introToken:
     'A token is the small piece of text an AI model works with; in English it is about three quarters of a word, and Turkish text needs more tokens per word. “1M tokens” means one million tokens. Input is the text you send to the model; output is the answer it writes, which usually costs more.',
   introWhy:
-    'Why is it cheaper? The dollar list price of the models is at the same level as the official price; the advantage on HisarWeb AI comes when you top up in TRY: 50% off up to 1000 TL on the first purchase, and 15% off beyond that and on later purchases. The saving columns below compare the token list price only; that discount is not in the percentages.',
+    'Why HisarWeb AI? Every model costs half the official list price per token, on every request and in real time. OpenRouter sells the same models at the official price or more and adds a fee when you buy credits. Anthropic’s own prepaid usage credits give at most 30% off and need payment up front. On HisarWeb AI there is no commitment, you pay in TRY, and your first purchase gets an extra 50% welcome discount on up to 1000 TL; that extra discount is not in the percentages below.',
 
   tableLabel:
     'Price per 1M tokens per model: official, OpenRouter and HisarWeb AI',
@@ -96,6 +98,8 @@ const en: Record<PriceTableTextKey, string> = {
     'The saving is calculated on the price of 1M input plus 1M output tokens. “—” means the source does not list the model.',
   noteContext:
     'Official prices are for the standard tier and short context; providers may charge more for very long context.',
+  noteOthers:
+    'Anthropic also gives 50% off for batch processing (Batch API), but answers can take up to 24 hours. The 50% on HisarWeb AI applies to every real-time request.',
   sourcesTitle: 'Sources',
   sourceDate: 'Measured on: {date}',
 }

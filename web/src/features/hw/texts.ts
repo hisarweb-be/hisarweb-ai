@@ -39,9 +39,9 @@ const tr = {
 
   landingBadge: 'Türkiye için: TL fiyatlar, KDV dahil',
   landingTitle:
-    'Claude ve GPT modellerine uygun fiyatlı API erişimi, TL ile ödeyin',
+    'Claude, GPT ve Gemini API’si resmî fiyatın yarısına, TL ile ödeyin',
   landingLead:
-    'HisarWeb AI, yapay zekâ uygulamanız için tek bir API anahtarı sunar. Aylık abonelik yok; yalnızca yüklediğiniz bakiyeyi kullanırsınız.',
+    'HisarWeb AI, yapay zekâ uygulamanız için tek bir API anahtarı sunar. Her model resmî liste fiyatının %50 altında ve diğer API aracılarından ucuz. Aylık abonelik yok; yalnızca kullandığınız kadar ödersiniz.',
   landingCtaPrimary: 'Ücretsiz hesap aç',
   landingCtaSecondary: 'Fiyatları karşılaştır',
   landingCatalogNote:
@@ -51,9 +51,9 @@ const tr = {
   benefitPaymentTitle: 'TL ile ödeyin',
   benefitPaymentBody:
     'Kredi kartı veya Revolut ile Türk lirası üzerinden ödeme yapın. Gösterilen tüm fiyatlara KDV dahildir.',
-  benefitDiscountTitle: 'İlk alımda %50 indirim',
+  benefitDiscountTitle: 'Her zaman resmî fiyatın yarısı',
   benefitDiscountBody:
-    'İlk alışverişinizde 1000 TL değerine kadar %50, üzerindeki kısımda ve sonraki alışverişlerde %15 indirim. Aylık abonelik ücreti yok.',
+    'Tüm modellerde token fiyatı resmî liste fiyatının %50 altındadır, her istekte ve anında. İlk alışverişinizde 1000 TL değerine kadar ayrıca %50 hoş geldin indirimi alırsınız. Aylık abonelik ücreti yok.',
   benefitExpiryTitle: 'Bakiyeniz 30 gün geçerli',
   benefitExpiryBody:
     'Yüklediğiniz bakiye yükleme tarihinden itibaren 30 gün geçerlidir. Kullanmadığınız süre için ödeme yapmazsınız.',
@@ -111,10 +111,11 @@ const tr = {
   topUpValueLabel: 'Bakiye değeri',
   topUpPayableLabel: 'Ödenecek tutar',
   topUpPayableNote: 'İndirimli ödenecek tutarı ödeme sayfasında görürsünüz.',
-  topUpDiscountFirst: 'İlk alışveriş indirimi (%50, 1000 TL değerine kadar)',
-  topUpDiscountRepeat: 'Sonraki alışveriş indirimi (%15)',
+  topUpDiscountFirst: 'Hoş geldin indirimi (%50, 1000 TL değerine kadar)',
+  topUpDiscountRepeat:
+    'Sonraki alışverişler: token fiyatları zaten resmî fiyatın yarısı',
   topUpDiscountRule:
-    'İlk alışverişinizde 1000 TL değerine kadar %50, bu değerin üzerindeki kısımda %15 indirim uygulanır; sonraki alışverişlerde indirim %15’tir. İndirim ödeme sırasında otomatik hesaplanır.',
+    'Token fiyatları her zaman resmî liste fiyatının %50 altındadır. İlk alışverişinizde ayrıca 1000 TL değerine kadar %50 hoş geldin indirimi uygulanır; üzerindeki kısım ve sonraki alışverişler bu indirimli token fiyatıyla kullanılır. İndirim ödeme sırasında otomatik hesaplanır.',
   topUpKdvNote: 'Fiyatlara KDV dahildir.',
   topUpSubmit: 'Ödemeye geç',
   topUpSubmitting: 'Ödeme sayfası açılıyor…',
@@ -152,7 +153,7 @@ const tr = {
 
   compareTitle: 'Fiyat karşılaştırma',
   compareLead:
-    'Aylık token kullanımınızı girin; resmî liste fiyatı ile HisarWeb AI fiyatını yan yana görün.',
+    'Aylık token kullanımınızı girin; resmî liste fiyatı ile HisarWeb AI fiyatını yan yana görün. HisarWeb AI her zaman resmî fiyatın yarısıdır.',
   compareModelLabel: 'Model',
   compareInputLabel: 'Aylık girdi token sayısı',
   compareOutputLabel: 'Aylık çıktı token sayısı',
@@ -162,10 +163,10 @@ const tr = {
   compareOfficial: 'Resmî liste fiyatı',
   compareOfficialUsd: 'Resmî liste fiyatı (USD)',
   compareOfficialTry: 'Resmî liste fiyatı (TL)',
-  compareOursFirst: 'HisarWeb AI fiyatı (ilk alışveriş)',
-  compareOursRepeat: 'HisarWeb AI fiyatı (sonraki alışverişler)',
+  compareOursFirst: 'HisarWeb AI fiyatı (ilk alışveriş, hoş geldin indirimiyle)',
+  compareOursRepeat: 'HisarWeb AI fiyatı (her alışverişte)',
   compareSavingFirst: 'İlk alışverişte tasarruf: {amount}',
-  compareSavingRepeat: 'Sonraki alışverişlerde tasarruf: {amount}',
+  compareSavingRepeat: 'Her alışverişte tasarruf: {amount}',
   compareSource: 'Fiyat kaynağı',
   comparePriceDate: 'Fiyat tarihi',
   compareFxSource: 'Kur kaynağı',
@@ -313,9 +314,9 @@ const en: Record<HwTextKey, string> = {
   navStatus: 'Status',
 
   landingBadge: 'For Turkey: prices in TRY, VAT included',
-  landingTitle: 'Affordable API access to Claude and GPT models, paid in TRY',
+  landingTitle: 'Claude, GPT and Gemini APIs at half the official price, paid in TRY',
   landingLead:
-    'HisarWeb AI gives your application one API key. No monthly subscription; you only spend the balance you top up.',
+    'HisarWeb AI gives your application one API key. Every model is 50% below the official list price and cheaper than other API routers. No monthly subscription; you only pay for what you use.',
   landingCtaPrimary: 'Create a free account',
   landingCtaSecondary: 'Compare prices',
   landingCatalogNote:
@@ -325,9 +326,9 @@ const en: Record<HwTextKey, string> = {
   benefitPaymentTitle: 'Pay in TRY',
   benefitPaymentBody:
     'Pay in Turkish lira with a card or Revolut. Every price shown includes VAT.',
-  benefitDiscountTitle: '50% off your first purchase',
+  benefitDiscountTitle: 'Always half the official price',
   benefitDiscountBody:
-    '50% off up to TRY 1,000 of value on your first purchase, and 15% above that and on later purchases. No monthly subscription.',
+    'Every model costs 50% less per token than the official list price, on every request and in real time. Your first purchase also gets a 50% welcome discount on up to TRY 1,000 of value. No monthly subscription.',
   benefitExpiryTitle: 'Your balance lasts 30 days',
   benefitExpiryBody:
     'A top-up stays valid for 30 days from the day you buy it. You pay nothing for time you do not use.',
@@ -385,10 +386,11 @@ const en: Record<HwTextKey, string> = {
   topUpPayableLabel: 'You pay',
   topUpPayableNote:
     'The amount you pay after the discount is shown on the payment page.',
-  topUpDiscountFirst: 'First-purchase discount (50%, up to TRY 1,000 of value)',
-  topUpDiscountRepeat: 'Later-purchase discount (15%)',
+  topUpDiscountFirst: 'Welcome discount (50%, up to TRY 1,000 of value)',
+  topUpDiscountRepeat:
+    'Later purchases: token prices are already half the official price',
   topUpDiscountRule:
-    'Your first purchase gets 50% off up to TRY 1,000 of value and 15% above that; later purchases get 15% off. The discount is applied automatically at payment.',
+    'Token prices are always 50% below the official list price. Your first purchase also gets a 50% welcome discount on up to TRY 1,000 of value; the part above that and later purchases are used at that reduced token price. The discount is applied automatically at payment.',
   topUpKdvNote: 'Prices include VAT.',
   topUpSubmit: 'Continue to payment',
   topUpSubmitting: 'Opening the payment page…',

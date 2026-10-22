@@ -144,7 +144,7 @@ func TestHwQualityRunMeasuresJudgesBlindAndWritesFile(t *testing.T) {
 		BaseURL:    gateway.server.URL,
 		APIKey:     "hw-test-key-not-a-real-secret",
 		JudgeModel: "hw-test-judge",
-		Models:     []string{"claude-sonnet-5-5", "gpt-5.2"},
+		Models:     []string{"claude-sonnet-5-5", "gpt-6.1-sol"},
 		OutDir:     outDir,
 		Client:     gateway.server.Client(),
 		NowFunc:    nowFunc,
@@ -211,7 +211,7 @@ func TestHwQualityRunMeasuresJudgesBlindAndWritesFile(t *testing.T) {
 	for _, body := range gateway.judgeBodies {
 		lower := strings.ToLower(body)
 		assert.NotContains(t, lower, "claude-sonnet-5-5")
-		assert.NotContains(t, lower, "gpt-5.2")
+		assert.NotContains(t, lower, "gpt-6.1-sol")
 		assert.Contains(t, body, "hw sample answer")
 		assert.Contains(t, body, "Grading criteria")
 		// The primary supplier drops customer system messages, so the grading

@@ -21,19 +21,21 @@ For commercial licensing, please contact support@quantumnous.com
  * The models sold under HisarWeb AI names.
  *
  * `hwSoldModels` in `service/hw_pricing.go` is the source of truth; no public
- * endpoint exposes the catalog yet, so this list repeats those eight names in
+ * endpoint exposes the catalog yet, so this list repeats those names in
  * the same order. A model added on the server only reaches the picker after it
  * is added here too — the comparison then answers 404 until both sides agree.
  */
 export const HW_SOLD_MODELS = [
   'claude-opus-5-5',
   'claude-sonnet-5-5',
+  'claude-haiku-5-5',
   'claude-sonnet-5',
   'claude-haiku-4-5',
-  'gpt-5.2',
-  'gpt-5.4',
-  'gpt-5.4-mini',
-  'gemini-3.5-flash',
+  'claude-fable-5-1',
+  'gpt-6-astra',
+  'gpt-6.1-sol',
+  'gpt-6-luna',
+  'gemini-3.8-flash',
 ] as const
 
 export type HwSoldModel = (typeof HW_SOLD_MODELS)[number]
