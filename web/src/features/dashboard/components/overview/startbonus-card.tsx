@@ -26,7 +26,21 @@ import { useStatus } from '@/hooks/use-status'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
-type BonusStep = { key: HwTextKey; done: boolean }
+type BonusStepAction = {
+  label: HwTextKey
+  hint: HwTextKey
+  to?: string
+  href?: string
+}
+
+type BonusStep = {
+  key: HwTextKey
+  done: boolean
+  /** Telegram and the phone step wait until verification opens. */
+  closed: boolean
+  /** What the customer does next; empty while the step is closed. */
+  action?: BonusStepAction
+}
 
 /**
  * Tells a new customer how to receive the start bonus: confirm the e-mail
@@ -48,21 +62,53 @@ export function StartbonusCard() {
   const telegramOpen = Boolean(status?.telegram_oauth_configured)
   const botName = String(status?.telegram_bot_name ?? '').replace(/^@/, '')
   const steps: BonusStep[] = [
-    { key: 'bonusStepEmail', done: Boolean(user.email) },
-    { key: 'bonusStepTelegram', done: Boolean(user.telegram_id) },
-    { key: 'bonusStepPhone', done: false },
+    {
+      key: 'bonusStepEmail',
+      done: Boolean(user.email),
+      closed: false,
+      action: {
+        label: 'bonusButtonEmail',
+        hint: 'bonusHintEmail',
+        to: '/security',
+      },
+    },
+    {
+      key: 'bonusStepTelegram',
+      done: Boolean(user.telegram_id),
+      closed: !telegramOpen,
+      action: telegramOpen
+        ? {
+            label: 'bonusButtonTelegram',
+            hint: 'bonusHintTelegram',
+            to: '/security',
+          }
+        : undefined,
+    },
+    {
+      key: 'bonusStepPhone',
+      done: Boolean(packages.data.phone_shared),
+      closed: !telegramOpen,
+      action:
+        telegramOpen && botName
+          ? {
+              label: 'bonusButtonPhone',
+              hint: 'bonusHintPhone',
+              href: `https://t.me/${botName}`,
+            }
+          : undefined,
+    },
   ]
   const current = steps.findIndex((step) => !step.done)
   const stepNumber = current + 1
 
+  // The e-mail step can always be done, so its call to action stays visible
+  // while Telegram verification is closed; the other two cannot work then.
   let action: { label: string; to?: string; href?: string } | null = null
-  if (!telegramOpen) {
-    action = null
-  } else if (current === 0) {
+  if (current === 0) {
     action = { label: hw('bonusButtonEmail'), to: '/security' }
-  } else if (current === 1) {
+  } else if (telegramOpen && current === 1) {
     action = { label: hw('bonusButtonTelegram'), to: '/security' }
-  } else if (botName) {
+  } else if (telegramOpen && current === 2 && botName) {
     action = { label: hw('bonusButtonPhone'), href: `https://t.me/${botName}` }
   }
 
@@ -113,25 +159,77 @@ export function StartbonusCard() {
         </div>
       </div>
       <ol className='mt-4 grid gap-2 sm:grid-cols-3'>
-        {steps.map((step, index) => (
-          <li
-            key={step.key}
-            className={cn(
-              'flex items-start gap-3 rounded-xl border p-3 text-sm',
-              index === current && telegramOpen && 'border-primary bg-primary/5'
-            )}
-          >
-            <span
+        {steps.map((step, index) => {
+          let statusKey: HwTextKey = 'bonusStatusTodo'
+          if (step.done) {
+            statusKey = 'bonusStatusDone'
+          } else if (step.closed) {
+            statusKey = 'bonusStatusClosed'
+          }
+          const stepAction = step.done ? undefined : step.action
+          return (
+            <li
+              key={step.key}
               className={cn(
-                'flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-medium',
-                step.done && 'bg-success/10 text-success border-success/30'
+                'flex items-start gap-3 rounded-xl border p-3 text-sm',
+                index === current &&
+                  telegramOpen &&
+                  'border-primary bg-primary/5'
               )}
             >
-              {step.done ? <Check className='size-3.5' /> : index + 1}
-            </span>
-            <span className='min-w-0'>{hw(step.key)}</span>
-          </li>
-        ))}
+              <span
+                className={cn(
+                  'flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-medium',
+                  step.done && 'bg-success/10 text-success border-success/30'
+                )}
+              >
+                {step.done ? <Check className='size-3.5' /> : index + 1}
+              </span>
+              <div className='flex min-w-0 flex-col gap-1'>
+                <span>{hw(step.key)}</span>
+                <span
+                  className={cn(
+                    'text-muted-foreground text-xs',
+                    step.done && 'text-success'
+                  )}
+                >
+                  {hw(statusKey)}
+                </span>
+                {stepAction && (
+                  <span className='text-muted-foreground text-xs leading-relaxed'>
+                    {hw(stepAction.hint)}
+                  </span>
+                )}
+                {stepAction?.to && (
+                  <Button
+                    variant='link'
+                    size='sm'
+                    className='self-start'
+                    render={<Link to={stepAction.to} />}
+                  >
+                    {hw(stepAction.label)}
+                  </Button>
+                )}
+                {stepAction?.href && (
+                  <Button
+                    variant='link'
+                    size='sm'
+                    className='self-start'
+                    render={
+                      <a
+                        href={stepAction.href}
+                        target='_blank'
+                        rel='noreferrer'
+                      />
+                    }
+                  >
+                    {hw(stepAction.label)}
+                  </Button>
+                )}
+              </div>
+            </li>
+          )
+        })}
       </ol>
     </section>
   )
