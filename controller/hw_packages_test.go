@@ -30,7 +30,7 @@ func setupHwPackagesTestDB(t *testing.T, userID int) *gin.Engine {
 	require.NoError(t, err)
 	model.DB = db
 	model.LOG_DB = db
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.HwCreditPackage{}, &model.HwPriceSnapshot{}, &model.HwCreditExtension{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.HwCreditPackage{}, &model.HwPriceSnapshot{}, &model.HwCreditExtension{}, &model.HwUserSignal{}))
 	t.Cleanup(func() {
 		sqlDB, _ := db.DB()
 		_ = sqlDB.Close()
@@ -134,6 +134,27 @@ func TestHwListUserPackagesSplitsBalancePerPackage(t *testing.T) {
 	assert.Equal(t, "2026-10-17", data["fx_date"])
 	assert.Equal(t, "https://example.test/rates.xml", data["fx_source"])
 	assert.Equal(t, common.QuotaPerUnit, data["quota_per_unit"])
+}
+
+// TestHwListUserPackagesReportsPhoneStep proves the dashboard can mark the
+// phone step of the start bonus: the flag is false while no number is shared
+// and true once the bot stored one, so the card never shows a finished step
+// as pending or the other way round.
+func TestHwListUserPackagesReportsPhoneStep(t *testing.T) {
+	const userID = 9
+	t.Setenv("HW_SIGNAL_SALT", strings.Repeat("s", 32))
+	engine := setupHwPackagesTestDB(t, userID)
+	hwPackageFixture(t, userID, 1200, false)
+
+	before, ok := hwGetPackages(t, engine)["data"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, false, before["phone_shared"])
+
+	require.NoError(t, model.HwRecordPhoneSignal(userID, "+905321234567"))
+
+	after, ok := hwGetPackages(t, engine)["data"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, true, after["phone_shared"])
 }
 
 // TestHwListUserPackagesWithoutRateNamesNoLiraValue keeps the answer honest

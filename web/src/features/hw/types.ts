@@ -19,7 +19,6 @@ For commercial licensing, please contact support@quantumnous.com
 import type { HwLanguage } from './texts'
 /** Shapes of the HisarWeb AI top-up routes (`router/hw-revolut.go`). */
 
-
 /** One credit package as `GET /api/user/hw/packages` reports it. */
 export interface HwCreditPackage {
   /** `purchase`, `free`, `affiliate` or `admin`. */
@@ -43,6 +42,11 @@ export interface HwCreditPackages {
   /** Date of the rate (`YYYY-MM-DD`); empty when no snapshot exists yet. */
   fx_date: string
   fx_source: string
+  /**
+   * Whether the customer shared a phone number through the Telegram bot, which
+   * is the last step of the start bonus. Absent on an older server.
+   */
+  phone_shared?: boolean
 }
 
 /**

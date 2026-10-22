@@ -68,6 +68,15 @@ func HwListUserPackages(c *gin.Context) {
 	if snapshot, snapshotErr := model.HwLatestPriceSnapshot(); snapshotErr == nil {
 		tryPerUsd, fxDate, fxSource = snapshot.TryPerUsd, snapshot.FxDate, snapshot.FxSourceUrl
 	}
+	// The dashboard marks the phone step of the start bonus as done from this
+	// flag. A failing lookup must not break the card that shows the packages,
+	// so it reads as "not done" and the failure only reaches the server log.
+	phoneShared := false
+	if shared, sharedErr := model.HwUserHasPhoneSignal(userID); sharedErr == nil {
+		phoneShared = shared
+	} else {
+		logger.LogError(c.Request.Context(), common.LogText("reading the phone step failed"))
+	}
 	common.ApiSuccess(c, gin.H{
 		"packages":              packages,
 		"total_remaining_quota": total,
@@ -75,5 +84,6 @@ func HwListUserPackages(c *gin.Context) {
 		"try_per_usd":           tryPerUsd,
 		"fx_date":               fxDate,
 		"fx_source":             fxSource,
+		"phone_shared":          phoneShared,
 	})
 }

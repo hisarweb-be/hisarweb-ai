@@ -255,6 +255,15 @@ const tr = {
   bonusButtonEmail: 'E-postayı ekle',
   bonusButtonTelegram: 'Telegram’ı bağla',
   bonusButtonPhone: 'Telegram botunu aç',
+  bonusStatusDone: 'Tamamlandı',
+  bonusStatusTodo: 'Henüz yapılmadı',
+  bonusStatusClosed: 'Henüz açık değil',
+  bonusHintEmail:
+    'Güvenlik sayfasında e-posta adresinizi girin ve gelen doğrulama kodunu yazın.',
+  bonusHintTelegram:
+    'Güvenlik sayfasında Telegram ile bağlan düğmesine basın ve Telegram’da onaylayın.',
+  bonusHintPhone:
+    'Botu açın, Başlat’a basın ve Numaramı paylaş düğmesine dokunun.',
   noCreditTitle: 'Bakiyeniz bitti',
   noCreditBody:
     'Bu isteği göndermek için hesabınızda yeterli bakiye yok. Yeni hesaplar 250 TL başlangıç bonusu alır; bonusu henüz almadıysanız aşağıdan talep edin ya da TL ile bakiye yükleyin.',
@@ -553,6 +562,15 @@ const en: Record<HwTextKey, string> = {
   bonusButtonEmail: 'Add e-mail',
   bonusButtonTelegram: 'Link Telegram',
   bonusButtonPhone: 'Open the Telegram bot',
+  bonusStatusDone: 'Done',
+  bonusStatusTodo: 'Not done yet',
+  bonusStatusClosed: 'Not open yet',
+  bonusHintEmail:
+    'On the security page, enter your e-mail address and type the code you receive.',
+  bonusHintTelegram:
+    'On the security page, press the Telegram link button and confirm in Telegram.',
+  bonusHintPhone:
+    'Open the bot, press Start and tap the Share my number button.',
   noCreditTitle: 'You are out of credit',
   noCreditBody:
     'Your account does not have enough credit for this request. New accounts get a TRY 250 start bonus; claim it below if you have not yet, or top up in TRY.',
