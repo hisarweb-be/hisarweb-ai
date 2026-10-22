@@ -426,6 +426,9 @@ func UpdateOption(c *gin.Context) {
 	recordManageAudit(c, "option.update", map[string]any{
 		"key": option.Key,
 	})
+	if option.Key == "TelegramBotToken" || option.Key == "ServerAddress" {
+		service.HwRegisterTelegramWebhookInBackground()
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

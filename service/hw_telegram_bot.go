@@ -3,7 +3,10 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"errors"
 	"io"
 	"net/http"
@@ -14,6 +17,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 
 	"gorm.io/gorm"
 )
@@ -32,6 +36,11 @@ const (
 	hwTelegramDefaultAPIBase   = "https://api.telegram.org"
 	hwTelegramRequestTimeout   = 10 * time.Second
 	hwTelegramMaxBodyBytes     = 1 << 20
+	// hwTelegramWebhookPath is the webhook route under the server address.
+	hwTelegramWebhookPath = "/api/hw/telegram/webhook"
+	// hwTelegramWebhookSecretLabel derives the webhook secret from the bot
+	// token when TELEGRAM_WEBHOOK_SECRET is not set.
+	hwTelegramWebhookSecretLabel = "hisarweb-telegram-webhook"
 )
 
 // HwTelegramSecretHeader is the header Telegram sends the registered webhook
@@ -46,6 +55,9 @@ var (
 	// cause is deliberately not propagated: the request URL carries the bot
 	// token, and an error text that quotes the URL would leak it into a log.
 	ErrHwTelegramDeliveryFailed = errors.New("telegram message delivery failed")
+	// ErrHwTelegramWebhookAddress says the server address is not https, which
+	// Telegram requires of a webhook.
+	ErrHwTelegramWebhookAddress = errors.New("telegram webhook needs an https server address")
 )
 
 // hwTelegramClient delivers bot messages. It has a fixed timeout so a slow
@@ -101,8 +113,8 @@ type hwTelegramUpdate struct {
 	} `json:"message"`
 }
 
-// HwHandleTelegramWebhook verifies and processes one bot update. Without
-// TELEGRAM_WEBHOOK_SECRET every update is refused with 503: an unauthenticated
+// HwHandleTelegramWebhook verifies and processes one bot update. Without a
+// webhook secret every update is refused with 503: an unauthenticated
 // caller could otherwise hand any account a phone number it does not own. The
 // secret header is compared in constant time.
 //
@@ -111,9 +123,9 @@ type hwTelegramUpdate struct {
 // must exist. The handler is idempotent on update_id, so a repeated delivery is
 // acknowledged without doing the work twice.
 func HwHandleTelegramWebhook(ctx context.Context, rawBody []byte, secretHeader string, now time.Time) HwWebhookOutcome {
-	secret := strings.TrimSpace(os.Getenv(hwTelegramWebhookSecretEnv))
+	secret := hwTelegramWebhookSecret()
 	if secret == "" {
-		common.SysError(common.LogText("telegram webhook refused: %s is not configured", hwTelegramWebhookSecretEnv))
+		common.SysError(common.LogText("telegram webhook refused: neither %s nor a bot token is configured", hwTelegramWebhookSecretEnv))
 		return HwWebhookUnavailable
 	}
 	if subtle.ConstantTimeCompare([]byte(strings.TrimSpace(secretHeader)), []byte(secret)) != 1 {
@@ -220,12 +232,10 @@ func hwAnswerTelegramChat(ctx context.Context, chatID string, text string, butto
 // HwTelegramSendMessage sends one plain text to a Telegram chat. A non-empty
 // button label adds the keyboard that carries the share-contact button
 // (request_contact), which makes Telegram attach the sender's own number to the
-// answer. The bot token is read from TELEGRAM_BOT_TOKEN and the API base from
-// HW_TELEGRAM_API_BASE (a test double in tests). Neither the token nor the URL
-// reaches a log line, an error text or an answer.
+// answer. Neither the token nor the URL reaches a log line, an error text or
+// an answer.
 func HwTelegramSendMessage(ctx context.Context, chatID string, text string, button string) error {
-	token := strings.TrimSpace(os.Getenv(hwTelegramBotTokenEnv))
-	if token == "" {
+	if hwTelegramBotToken() == "" {
 		return ErrHwTelegramUnavailable
 	}
 	chat, err := strconv.ParseInt(strings.TrimSpace(chatID), 10, 64)
@@ -240,6 +250,79 @@ func HwTelegramSendMessage(ctx context.Context, chatID string, text string, butt
 			OneTimeKeyboard: true,
 		}
 	}
+	return hwTelegramCall(ctx, "sendMessage", request)
+}
+
+// hwTelegramBotToken is TELEGRAM_BOT_TOKEN, or else the bot token saved in the
+// Telegram settings, so the bot works from one admin field as well.
+func hwTelegramBotToken() string {
+	if token := strings.TrimSpace(os.Getenv(hwTelegramBotTokenEnv)); token != "" {
+		return token
+	}
+	return strings.TrimSpace(common.TelegramBotToken)
+}
+
+// hwTelegramWebhookSecret is TELEGRAM_WEBHOOK_SECRET, or else a secret derived
+// from the bot token. Only the token holder can derive it, and it changes with
+// the token, so registering the webhook needs no second value to keep.
+func hwTelegramWebhookSecret() string {
+	if secret := strings.TrimSpace(os.Getenv(hwTelegramWebhookSecretEnv)); secret != "" {
+		return secret
+	}
+	token := hwTelegramBotToken()
+	if token == "" {
+		return ""
+	}
+	mac := hmac.New(sha256.New, []byte(token))
+	mac.Write([]byte(hwTelegramWebhookSecretLabel))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// HwRegisterTelegramWebhook points the bot at this server's webhook with the
+// secret the webhook checks. Telegram only delivers to https, so a server
+// address without it is refused before any call.
+func HwRegisterTelegramWebhook(ctx context.Context) error {
+	if hwTelegramBotToken() == "" {
+		return ErrHwTelegramUnavailable
+	}
+	address := strings.TrimRight(strings.TrimSpace(system_setting.ServerAddress), "/")
+	if !strings.HasPrefix(address, "https://") {
+		return ErrHwTelegramWebhookAddress
+	}
+	return hwTelegramCall(ctx, "setWebhook", hwTelegramWebhookRequest{
+		Url:            address + hwTelegramWebhookPath,
+		SecretToken:    hwTelegramWebhookSecret(),
+		AllowedUpdates: []string{"message"},
+	})
+}
+
+// HwRegisterTelegramWebhookInBackground registers the webhook outside the
+// caller, after a token or server address change and at startup. Without a
+// token there is nothing to register and nothing is logged.
+func HwRegisterTelegramWebhookInBackground() {
+	if hwTelegramBotToken() == "" {
+		return
+	}
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				common.SysLog("telegram webhook registration recovered from a panic")
+			}
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), hwTelegramRequestTimeout)
+		defer cancel()
+		if err := HwRegisterTelegramWebhook(ctx); err != nil {
+			common.SysError(common.LogText("telegram webhook registration failed: %s", err.Error()))
+			return
+		}
+		common.SysLog("telegram webhook registered")
+	}()
+}
+
+// hwTelegramCall posts one Bot API method. The API base comes from
+// HW_TELEGRAM_API_BASE (a test double in tests). The URL carries the token, so
+// no error returned here quotes it.
+func hwTelegramCall(ctx context.Context, method string, request any) error {
 	body, err := common.Marshal(request)
 	if err != nil {
 		return ErrHwTelegramDeliveryFailed
@@ -248,7 +331,7 @@ func HwTelegramSendMessage(ctx context.Context, chatID string, text string, butt
 	if base == "" {
 		base = hwTelegramDefaultAPIBase
 	}
-	url := base + "/bot" + token + "/sendMessage"
+	url := base + "/bot" + hwTelegramBotToken() + "/" + method
 	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return ErrHwTelegramDeliveryFailed
@@ -264,6 +347,13 @@ func HwTelegramSendMessage(ctx context.Context, chatID string, text string, butt
 		return ErrHwTelegramDeliveryFailed
 	}
 	return nil
+}
+
+// hwTelegramWebhookRequest is the setWebhook body.
+type hwTelegramWebhookRequest struct {
+	Url            string   `json:"url"`
+	SecretToken    string   `json:"secret_token"`
+	AllowedUpdates []string `json:"allowed_updates"`
 }
 
 // hwTelegramMessageRequest is the sendMessage body. The reply markup is only

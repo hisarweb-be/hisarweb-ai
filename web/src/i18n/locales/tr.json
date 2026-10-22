@@ -2646,6 +2646,9 @@
     "Zoom": "Yakınlaştır",
     "Source code": "Kaynak kodu",
     "Source code (AGPL-3.0)": "Kaynak kodu (AGPL-3.0)",
-    "HisarWeb AI is based on New API (AGPL-3.0) by QuantumNous.": "HisarWeb AI, QuantumNous'un New API (AGPL-3.0) projesine dayanır."
+    "HisarWeb AI is based on New API (AGPL-3.0) by QuantumNous.": "HisarWeb AI, QuantumNous'un New API (AGPL-3.0) projesine dayanır.",
+    "Bot token": "Bot token",
+    "Telegram bot token from BotFather": "BotFather'dan alınan Telegram bot token'ı",
+    "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.": "Token kaydedildiğinde bot bu siteye bağlanır; müşteriler ücretsiz deneme kredisi için telefon numaralarını paylaşabilir."
   }
 }

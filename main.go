@@ -416,5 +416,10 @@ func InitResources() error {
 	// extend the credit of the packages that ran during an outage.
 	service.StartHwStatusJob()
 
+	// Point the Telegram bot at this server once its token is known.
+	if common.IsMasterNode {
+		service.HwRegisterTelegramWebhookInBackground()
+	}
+
 	return nil
 }

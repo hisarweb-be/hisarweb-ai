@@ -7326,6 +7326,9 @@
     "Zoom": "Zoom",
     "Source code": "Mã nguồn",
     "Source code (AGPL-3.0)": "Mã nguồn (AGPL-3.0)",
-    "HisarWeb AI is based on New API (AGPL-3.0) by QuantumNous.": "HisarWeb AI dựa trên New API (AGPL-3.0) của QuantumNous."
+    "HisarWeb AI is based on New API (AGPL-3.0) by QuantumNous.": "HisarWeb AI dựa trên New API (AGPL-3.0) của QuantumNous.",
+    "Bot token": "Bot token",
+    "Telegram bot token from BotFather": "Telegram bot token from BotFather",
+    "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.": "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit."
   }
 }
