@@ -57,6 +57,7 @@ const defaults: ComponentProps<typeof OAuthSection>['defaultValues'] = {
   TelegramOAuthEnabled: false,
   'telegram.client_id': '',
   'telegram.client_secret': '',
+  TelegramBotToken: '',
   LinuxDOOAuthEnabled: false,
   LinuxDOClientId: '',
   LinuxDOClientSecret: '',

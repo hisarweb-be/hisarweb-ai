@@ -83,6 +83,7 @@ const oauthSchema = z.object({
   }),
   TelegramOAuthEnabled: z.boolean(),
   telegram: z.object({ client_id: z.string(), client_secret: z.string() }),
+  TelegramBotToken: z.string(),
   LinuxDOOAuthEnabled: z.boolean(),
   LinuxDOClientId: z.string(),
   LinuxDOClientSecret: z.string(),
@@ -113,6 +114,7 @@ type FlatOAuthDefaults = {
   TelegramOAuthEnabled: boolean
   'telegram.client_id': string
   'telegram.client_secret': string
+  TelegramBotToken: string
   LinuxDOOAuthEnabled: boolean
   LinuxDOClientId: string
   LinuxDOClientSecret: string
@@ -199,6 +201,7 @@ const buildFormDefaults = (defaults: FlatOAuthDefaults): OAuthFormValues => ({
     client_id: defaults['telegram.client_id'] ?? '',
     client_secret: defaults['telegram.client_secret'] ?? '',
   },
+  TelegramBotToken: defaults.TelegramBotToken ?? '',
   LinuxDOOAuthEnabled: defaults.LinuxDOOAuthEnabled,
   LinuxDOClientId: defaults.LinuxDOClientId ?? '',
   LinuxDOClientSecret: defaults.LinuxDOClientSecret ?? '',
@@ -226,6 +229,7 @@ const normalizeFormValues = (values: OAuthFormValues): FlatOAuthDefaults => ({
   'oidc.user_info_endpoint': values.oidc.user_info_endpoint,
   'telegram.client_id': values.telegram.client_id,
   'telegram.client_secret': values.telegram.client_secret,
+  TelegramBotToken: values.TelegramBotToken,
   TelegramOAuthEnabled: values.TelegramOAuthEnabled,
   LinuxDOOAuthEnabled: values.LinuxDOOAuthEnabled,
   LinuxDOClientId: values.LinuxDOClientId,
@@ -879,6 +883,36 @@ export function OAuthSection(props: OAuthSectionProps) {
                           ref={field.ref}
                         />
                       </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name='TelegramBotToken'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Bot token')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type='password'
+                          placeholder={t('Telegram bot token from BotFather')}
+                          autoComplete='new-password'
+                          value={field.value ?? ''}
+                          onChange={(event) =>
+                            field.onChange(event.target.value)
+                          }
+                          name={field.name}
+                          onBlur={field.onBlur}
+                          ref={field.ref}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {t(
+                          'Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.'
+                        )}
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}

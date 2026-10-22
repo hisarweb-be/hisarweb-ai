@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -630,10 +632,11 @@ func TestHwTelegramWebhookPhoneStep(t *testing.T) {
 		}
 	})
 
-	t.Run("without a configured secret every update is refused", func(t *testing.T) {
+	t.Run("without a secret or a bot token to derive it from every update is refused", func(t *testing.T) {
 		_, secret := hwTelegramTestSetup(t)
 		user := hwPhoneStepTestTelegramUser(t, "unconfigured@example.com", "700005")
 		t.Setenv(hwTelegramWebhookSecretEnv, "")
+		t.Setenv(hwTelegramBotTokenEnv, "")
 		body := hwTelegramContactUpdate(t, 5, 700005, "tr", hwInt64Ptr(700005), "+90 555 000 55 66")
 
 		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
@@ -742,4 +745,48 @@ func TestHwTelegramWebhookPhoneStep(t *testing.T) {
 		assert.NotContains(t, logs, "+905550001212")
 		assert.NotRegexp(t, regexp.MustCompile(`[0-9a-f]{64}`), logs, "no keyed hash reaches a log line")
 	})
+}
+
+func TestHwRegisterTelegramWebhookFromTheSettingsToken(t *testing.T) {
+	var path string
+	var registered hwTelegramWebhookRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		body, _ := io.ReadAll(r.Body)
+		_ = common.Unmarshal(body, &registered)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv(hwTelegramAPIBaseEnv, server.URL)
+	t.Setenv(hwTelegramBotTokenEnv, "")
+	t.Setenv(hwTelegramWebhookSecretEnv, "")
+	previousToken, previousAddress := common.TelegramBotToken, system_setting.ServerAddress
+	t.Cleanup(func() { common.TelegramBotToken, system_setting.ServerAddress = previousToken, previousAddress })
+
+	common.TelegramBotToken = ""
+	system_setting.ServerAddress = "https://api.example.test/"
+	assert.ErrorIs(t, HwRegisterTelegramWebhook(context.Background()), ErrHwTelegramUnavailable)
+	assert.Equal(t, HwWebhookUnavailable, HwHandleTelegramWebhook(context.Background(), []byte("x"), "", time.Now()))
+
+	common.TelegramBotToken = "settings-bot-token"
+	system_setting.ServerAddress = "http://api.example.test"
+	assert.ErrorIs(t, HwRegisterTelegramWebhook(context.Background()), ErrHwTelegramWebhookAddress)
+	assert.Empty(t, path, "an http address must not reach Telegram")
+
+	system_setting.ServerAddress = "https://api.example.test/"
+	require.NoError(t, HwRegisterTelegramWebhook(context.Background()))
+	assert.Equal(t, "/botsettings-bot-token/setWebhook", path)
+	assert.Equal(t, "https://api.example.test/api/hw/telegram/webhook", registered.Url)
+	assert.Equal(t, []string{"message"}, registered.AllowedUpdates)
+	require.Len(t, registered.SecretToken, 64)
+	assert.NotContains(t, registered.SecretToken, "settings-bot-token")
+
+	// The secret the bot registered is the one the webhook accepts.
+	assert.Equal(t, HwWebhookRejected, HwHandleTelegramWebhook(context.Background(), []byte("x"), "wrong", time.Now()))
+	assert.Equal(t, HwWebhookBadRequest, HwHandleTelegramWebhook(context.Background(), []byte("x"), registered.SecretToken, time.Now()))
+
+	// An explicit secret still wins over the derived one.
+	t.Setenv(hwTelegramWebhookSecretEnv, "explicit-secret")
+	require.NoError(t, HwRegisterTelegramWebhook(context.Background()))
+	assert.Equal(t, "explicit-secret", registered.SecretToken)
 }
