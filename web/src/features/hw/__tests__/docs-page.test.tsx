@@ -94,7 +94,7 @@ describe('documentation page', () => {
       'API anahtarı oluşturun',
       'Bakiye yükleyin (isteğe bağlı)',
       'Playground’da deneyin',
-      'Claude Code’u HisarWeb AI’ye bağlayın',
+      'Programınızı seçin',
     ]) {
       expect(screen.getByRole('heading', { name: title })).toBeInTheDocument()
     }
