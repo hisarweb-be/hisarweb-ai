@@ -152,3 +152,12 @@ test('reads Turkish for any language other than an explicit English choice', () 
   expect(pickHwLanguage('en')).toBe('en')
   expect(pickHwLanguage('en-GB')).toBe('en')
 })
+
+test('highlights only the accent phrase inside the headline', async () => {
+  renderLanding()
+
+  const heading = await screen.findByRole('heading', { level: 1 })
+  const accent = heading.querySelector('.hwl-accent')
+  expect(accent).toHaveTextContent('resmî fiyatın yarısına')
+  expect(heading.textContent).toContain('Claude, GPT ve Gemini')
+})
