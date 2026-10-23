@@ -57,6 +57,11 @@ const (
 	// from marking the whole minute bad; below this count the share says little.
 	hwStatusMinMeasuredRequests = 10
 
+	// hwStatusMinAllFailedRequests is the least number of failures that makes a
+	// minute bad when nothing was served. One customer retrying a broken request
+	// is not an outage of the estate.
+	hwStatusMinAllFailedRequests = 3
+
 	hwStatusMinuteSeconds = 60
 )
 
@@ -64,7 +69,12 @@ const (
 // neither a supplier nor an error text.
 const (
 	HwStatusReasonRelayFailures = "relay_failures"
-	HwStatusReasonMeasurement   = "measurement"
+	HwStatusReasonNoRoute       = "no_route"
+	// HwStatusReasonMeasurement is the retired verdict of a minute without
+	// traffic. Until 23 Oct 2026 such a minute counted as bad, so every quiet
+	// night opened a false outage of the whole estate; the sweep in
+	// HwPurgeFalseIdleOutages removes those rows. It is never written again.
+	HwStatusReasonMeasurement = "measurement"
 )
 
 // Incident kinds, fixed in code so the answer does not depend on stored text.
@@ -145,19 +155,26 @@ func HwRecordStatusSample(sample *HwStatusSample) error {
 }
 
 // HwStatusVerdict is the outcome of one health measurement of one minute.
+// Idle means the minute had no paid traffic at all: the traffic says nothing
+// and the route check of each model decides (HwMeasureStatusOnce).
 type HwStatusVerdict struct {
 	Ok     bool
+	Idle   bool
 	Reason string
 }
 
 // HwEvaluateStatusMinute derives the verdict of a minute from the failed share
-// of paid customer requests. A minute without any measured request has no
-// evidence of health and counts as bad; it is never silently good.
+// of paid customer requests. A minute without traffic is idle, never bad: no
+// customer asking is not evidence of an outage (that rule kept /durum red for
+// 38 hours in Oct 2026).
 func HwEvaluateStatusMinute(failedRequests int64, measuredRequests int64) HwStatusVerdict {
-	if measuredRequests <= 0 {
-		return HwStatusVerdict{Reason: HwStatusReasonMeasurement}
+	if measuredRequests <= 0 && failedRequests <= 0 {
+		return HwStatusVerdict{Idle: true}
 	}
 	if failedRequests >= measuredRequests {
+		if failedRequests < hwStatusMinAllFailedRequests {
+			return HwStatusVerdict{Ok: true}
+		}
 		return HwStatusVerdict{Reason: HwStatusReasonRelayFailures}
 	}
 	if failedRequests >= hwStatusMinMeasuredRequests &&

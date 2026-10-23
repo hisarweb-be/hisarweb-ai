@@ -8,6 +8,7 @@ package model
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -212,8 +213,9 @@ func TestHwStatusEvaluateMinute(t *testing.T) {
 		ok       bool
 		reason   string
 	}{
-		{"no measured traffic is not good", 0, 0, false, HwStatusReasonMeasurement},
+		{"no traffic is idle, not bad", 0, 0, false, ""},
 		{"all failed", 12, 12, false, HwStatusReasonRelayFailures},
+		{"one customer retrying a broken request is no outage", 2, 0, true, ""},
 		{"a few failures in a busy minute are fine", 3, 200, true, ""},
 		{"few failures in a quiet minute say little", 4, 20, true, ""},
 		{"a real failing share", 30, 100, false, HwStatusReasonRelayFailures},
@@ -225,4 +227,61 @@ func TestHwStatusEvaluateMinute(t *testing.T) {
 			assert.Equal(t, tc.reason, verdict.Reason)
 		})
 	}
+}
+
+// A quiet night must never open an outage: with no paid traffic every minute is
+// judged by the route, and a routed model stays good (the 38-hour false outage
+// of Oct 2026).
+func TestHwStatusQuietNightOpensNoOutage(t *testing.T) {
+	hwStatusTestSetup(t)
+	require.NoError(t, DB.AutoMigrate(&Ability{}, &Log{}))
+	require.NoError(t, DB.Exec("DELETE FROM abilities").Error)
+	t.Cleanup(func() { DB.Exec("DELETE FROM abilities") })
+	require.NoError(t, DB.Create(&Ability{Group: HwPaidGroupName, Model: "claude-sonnet-5-5", ChannelId: 1, Enabled: true}).Error)
+
+	base := int64(1_800_000_000)
+	models := []string{"claude-sonnet-5-5", "claude-unrouted"}
+	for i := int64(1); i <= 5; i++ {
+		require.NoError(t, HwMeasureStatusOnce(time.Unix(base+i*60, 0), models))
+	}
+	var good, noRoute int64
+	require.NoError(t, DB.Model(&HwStatusSample{}).Where("model = ? AND ok = ?", "claude-sonnet-5-5", true).Count(&good).Error)
+	require.NoError(t, DB.Model(&HwStatusSample{}).Where("model = ? AND reason = ?", "claude-unrouted", HwStatusReasonNoRoute).Count(&noRoute).Error)
+	assert.EqualValues(t, 5, good, "a routed model is good in a quiet minute")
+	assert.EqualValues(t, 5, noRoute, "a model without an enabled route is bad")
+}
+
+// The sweep removes an outage made only of quiet minutes and keeps a real one.
+func TestHwStatusPurgeFalseIdleOutages(t *testing.T) {
+	hwStatusTestSetup(t)
+	base := int64(1_800_000_000)
+	for i := int64(0); i < 5; i++ {
+		hwStatusTestSample(t, base+i*60, false, HwStatusReasonMeasurement)
+	}
+	false1 := hwStatusTestIncident(t, base, 300)
+	realStart := base + 3600
+	for i := int64(0); i < 3; i++ {
+		hwStatusTestSample(t, realStart+i*60, false, HwStatusReasonRelayFailures)
+	}
+	real1 := hwStatusTestIncident(t, realStart, 180)
+	// A lone failure inside a long quiet outage does not make it real.
+	lonely := HwIncident{StartedAt: base + 7200, Kind: HwStatusIncidentRelay}
+	require.NoError(t, DB.Create(&lonely).Error)
+	hwStatusTestSample(t, base+7260, false, HwStatusReasonRelayFailures)
+
+	removed, err := HwPurgeFalseIdleOutages()
+	require.NoError(t, err)
+	assert.Equal(t, 2, removed)
+	var left []HwIncident
+	require.NoError(t, DB.Find(&left).Error)
+	require.Len(t, left, 1)
+	assert.Equal(t, real1.Id, left[0].Id)
+	assert.NotEqual(t, false1.Id, left[0].Id)
+	var idle int64
+	require.NoError(t, DB.Model(&HwStatusSample{}).Where("reason = ?", HwStatusReasonMeasurement).Count(&idle).Error)
+	assert.Zero(t, idle)
+
+	again, err := HwPurgeFalseIdleOutages()
+	require.NoError(t, err)
+	assert.Zero(t, again)
 }
