@@ -34,6 +34,9 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { toIntlLocale } from '@/i18n/languages'
+import { cn } from '@/lib/utils'
+
+import '@/styles/hw-cinematic.css'
 
 import {
   MODEL_PRICES,
@@ -52,6 +55,9 @@ type PriceTableProps = {
 }
 
 type Translate = ReturnType<typeof usePriceTableText>
+
+// The model name stays in view while a phone scrolls sideways to the savings.
+const STICKY_MODEL = 'bg-background sticky left-0 z-10 border-r'
 
 function formatMoney(
   value: number,
@@ -120,32 +126,42 @@ function PriceCells(props: {
   )
 }
 
-/** A saving is a plain percentage; a price above the reference is "no saving". */
+/**
+ * A saving is a pill with the percentage; a price above the reference is
+ * "no saving". Both saving columns carry the best-price highlight, the first
+ * one also the edge that opens the highlighted band.
+ */
 function SavingCell(props: {
   fraction: number | null
   locale: string | undefined
   t: Translate
+  edge?: boolean
 }) {
   const fraction = props.fraction
+  const best = cn('hwp-best', props.edge && 'hwp-best-edge')
   if (fraction === null) {
     return (
-      <TableCell className='text-muted-foreground'>
+      <TableCell className={cn(best, 'text-muted-foreground')}>
         {props.t('missing')}
       </TableCell>
     )
   }
   if (Math.abs(fraction) < 1e-9) {
-    return <TableCell>{props.t('savingNoneZero')}</TableCell>
+    return <TableCell className={best}>{props.t('savingNoneZero')}</TableCell>
   }
   if (fraction > 0) {
     return (
-      <TableCell className='font-semibold text-emerald-600 dark:text-emerald-400'>
-        {formatPercent(fraction, props.locale)}
+      <TableCell className={best}>
+        <span className='hwp-best-pill' data-testid='hw-saving-pill'>
+          {props.t('savingPill', {
+            percent: formatPercent(fraction, props.locale),
+          })}
+        </span>
       </TableCell>
     )
   }
   return (
-    <TableCell className='text-destructive'>
+    <TableCell className={cn(best, 'text-destructive')}>
       <div>{props.t('savingNone')}</div>
       <div data-table-text='secondary'>
         {props.t('savingNoneMore', {
@@ -170,7 +186,7 @@ function PriceRow(props: {
   }
   return (
     <TableRow>
-      <TableCell>
+      <TableCell className={STICKY_MODEL}>
         <div className='font-semibold'>{row.model}</div>
         <div className='text-muted-foreground' data-table-text='secondary'>
           {row.provider}
@@ -180,6 +196,7 @@ function PriceRow(props: {
       <PriceCells price={row.openrouter} {...common} />
       <PriceCells price={row.hisarweb} {...common} />
       <SavingCell
+        edge
         fraction={savingFraction(row.official, row.hisarweb)}
         locale={props.locale}
         t={props.t}
@@ -199,7 +216,9 @@ function PriceTableHead(props: { t: Translate }) {
   return (
     <TableHeader>
       <TableRow className='hover:bg-transparent'>
-        <TableHead rowSpan={2}>{t('colModel')}</TableHead>
+        <TableHead className={STICKY_MODEL} rowSpan={2}>
+          {t('colModel')}
+        </TableHead>
         <TableHead className={group} colSpan={2}>
           {t('colOfficial')}
         </TableHead>
@@ -209,16 +228,24 @@ function PriceTableHead(props: { t: Translate }) {
         <TableHead className={group} colSpan={2}>
           {t('colHisarweb')}
         </TableHead>
-        <TableHead className={group} colSpan={2}>
-          {t('colSaving')}
+        <TableHead
+          className={cn(group, 'hwp-best hwp-best-edge hwp-best-head py-2')}
+          colSpan={2}
+        >
+          <span className='hwp-best-label'>{t('bestPrice')}</span>
+          <span className='block'>{t('colSaving')}</span>
         </TableHead>
       </TableRow>
       <TableRow className='hover:bg-transparent'>
         {[0, 1, 2].map((group) => (
           <PriceSubHeads key={group} t={t} />
         ))}
-        <TableHead className='border-l'>{t('colVsOfficial')}</TableHead>
-        <TableHead>{t('colVsOpenRouter')}</TableHead>
+        <TableHead className='hwp-best hwp-best-edge hwp-best-head border-l'>
+          {t('colVsOfficial')}
+        </TableHead>
+        <TableHead className='hwp-best hwp-best-head'>
+          {t('colVsOpenRouter')}
+        </TableHead>
       </TableRow>
     </TableHeader>
   )

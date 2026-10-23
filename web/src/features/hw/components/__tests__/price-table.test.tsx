@@ -115,6 +115,28 @@ test('computes the saving against the official price and against OpenRouter', ()
   expect(cells[8]).toHaveTextContent('%10')
 })
 
+test('highlights the saving columns as the best price', () => {
+  render(<PriceTable models={[cheaper, dearer]} />)
+
+  const head = screen.getByText('En iyi fiyat').closest('th') as HTMLElement
+  expect(head).toHaveTextContent('Tasarruf (HisarWeb AI)')
+  expect(head).toHaveClass('hwp-best')
+
+  const cells = within(rowOf('test-cheaper')).getAllByRole('cell')
+  // Both saving cells carry the band; only the first opens it with an edge.
+  expect(cells[7]).toHaveClass('hwp-best', 'hwp-best-edge')
+  expect(cells[8]).toHaveClass('hwp-best')
+  expect(cells[8]).not.toHaveClass('hwp-best-edge')
+  expect(within(cells[7]).getByTestId('hw-saving-pill')).toHaveTextContent(
+    '%25 tasarruf'
+  )
+
+  // No saving stays a plain warning, never a pill.
+  const dearCells = within(rowOf('test-dearer')).getAllByRole('cell')
+  expect(dearCells[7]).toHaveClass('hwp-best')
+  expect(within(dearCells[7]).queryByTestId('hw-saving-pill')).toBeNull()
+})
+
 test('converts the dollar price into lira with the measured rate', () => {
   render(<PriceTable models={[cheaper]} tryPerUsd={50} />)
 

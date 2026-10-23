@@ -118,7 +118,7 @@ export function Home() {
   }
 
   return (
-    <PublicLayout showMainContainer={false}>
+    <PublicLayout backdrop={false} showMainContainer={false}>
       <LandingPage />
       <Footer />
     </PublicLayout>
