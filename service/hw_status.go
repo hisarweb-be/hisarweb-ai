@@ -164,6 +164,11 @@ func StartHwStatusJob() {
 		}
 		go func() {
 			common.SysLog(common.LogText("status measurement job started: interval=%s", hwStatusJobInterval))
+			if removed, err := model.HwPurgeFalseIdleOutages(); err != nil {
+				common.SysError(common.LogText("status false outage sweep failed: %v", err))
+			} else if removed > 0 {
+				common.SysLog(common.LogText("status false outage sweep removed %d outages", removed))
+			}
 			runHwStatusOnceSafely(time.Now())
 			ticker := time.NewTicker(hwStatusJobInterval)
 			defer ticker.Stop()
