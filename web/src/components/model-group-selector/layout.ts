@@ -20,6 +20,10 @@ export const modelGroupSelectorLayoutClasses = {
   desktopPanel: 'max-h-[min(50vh,28rem)] overflow-hidden',
   desktopContent:
     'grid h-[min(50vh,28rem)] max-h-[min(50vh,28rem)] min-h-0 gap-3 p-2 md:grid-cols-[9.5rem_minmax(0,1fr)]',
+  // HisarWeb: a customer only has their own group, so the panel drops the
+  // group column and shows the models alone.
+  singleColumnContent:
+    'grid h-[min(50vh,28rem)] max-h-[min(50vh,28rem)] min-h-0 gap-3 p-2',
   groupColumn: 'flex h-full min-h-0 min-w-0 flex-col overflow-hidden',
   groupScroll:
     'mt-2 grid min-h-0 flex-1 auto-rows-[2rem] content-start gap-1 overflow-y-auto pr-1',
@@ -36,6 +40,11 @@ export const modelGroupSelectorLayoutClasses = {
   selectedModelText: 'font-semibold text-foreground',
   unselectedModelText: 'font-medium',
 } as const
+
+// A group choice is only meaningful when there is more than one group.
+export function hasGroupChoice(groups: readonly unknown[]): boolean {
+  return groups.length > 1
+}
 
 type ScrollableOption = {
   offsetHeight?: number
