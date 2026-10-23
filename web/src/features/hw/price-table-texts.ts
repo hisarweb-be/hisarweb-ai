@@ -50,6 +50,8 @@ const tr = {
   savingNone: 'Tasarruf yok',
   savingNoneMore: 'Tasarruf yok, {percent} daha pahalı',
   savingNoneZero: '%0',
+  savingPill: '{percent} tasarruf',
+  bestPrice: 'En iyi fiyat',
 
   notesTitle: 'Notlar',
   noteFx:
@@ -90,6 +92,8 @@ const en: Record<PriceTableTextKey, string> = {
   savingNone: 'No saving',
   savingNoneMore: 'No saving, {percent} more expensive',
   savingNoneZero: '0%',
+  savingPill: '{percent} saved',
+  bestPrice: 'Best price',
 
   notesTitle: 'Notes',
   noteFx:

@@ -319,6 +319,7 @@ For commercial licensing, please contact support@quantumnous.com
 }
 .hwl-stage-card {
   position: relative;
+  z-index: 1;
   text-align: left;
   border-radius: 1.25rem;
   border: 1px solid var(--hwl-line);
@@ -434,6 +435,8 @@ For commercial licensing, please contact support@quantumnous.com
   font-weight: 600;
   box-shadow: 0 14px 34px -14px var(--hwl-glow);
   animation: hwl-float 7s ease-in-out infinite;
+  /* Above the code window: the chips come first in the DOM. */
+  z-index: 2;
 }
 .hwl-chip i {
   width: 0.55rem;
