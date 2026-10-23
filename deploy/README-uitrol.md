@@ -25,6 +25,7 @@ ongemoeid; die blijven voor upstream-releases en lokale ontwikkeling.
 | database | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | ja | inloggegevens van de eigen PostgreSQL-container; de poort staat niet naar buiten open |
 | betalen | `REVOLUT_SECRET_KEY`, `REVOLUT_WEBHOOK_SECRET` | nee | Revolut Merchant; leeg = de betaalroute start geen betaling |
 | betalen | `REVOLUT_API_BASE`, `REVOLUT_API_VERSION` | nee | leeg = productie-URL en standaardversie uit de code |
+| betalen | `HW_STRIPE_SECRET_KEY`, `HW_STRIPE_WEBHOOK_SECRET` | nee | Stripe Checkout in TRY; als beide gevuld zijn gaat Stripe voor Revolut; webhook `/api/hw/stripe/webhook` |
 | reserve | `HW_BUREAU_USAGE_URL`, `HW_BUREAU_USAGE_TOKEN`, `HW_WINDOW_CAPACITY_USD`, `HW_RESERVE_MODE` | nee | poort op het bureaugebruik; leeg betekent: klantverkeer dicht in plaats van gokken |
 
 Alles hierboven komt uit de omgeving van Coolify. In dit bestand staan alleen namen, nooit waarden.

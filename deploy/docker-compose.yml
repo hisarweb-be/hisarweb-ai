@@ -49,6 +49,10 @@ services:
       REVOLUT_WEBHOOK_SECRET: ${REVOLUT_WEBHOOK_SECRET:-}
       REVOLUT_API_BASE: ${REVOLUT_API_BASE:-}
       REVOLUT_API_VERSION: ${REVOLUT_API_VERSION:-}
+      # Card payments (Stripe Checkout, TRY). Chosen over Revolut when both
+      # values are set.
+      HW_STRIPE_SECRET_KEY: ${HW_STRIPE_SECRET_KEY:-}
+      HW_STRIPE_WEBHOOK_SECRET: ${HW_STRIPE_WEBHOOK_SECRET:-}
       # Bureau reserve gate.
       HW_BUREAU_USAGE_URL: ${HW_BUREAU_USAGE_URL:-}
       HW_BUREAU_USAGE_TOKEN: ${HW_BUREAU_USAGE_TOKEN:-}
