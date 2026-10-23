@@ -98,7 +98,20 @@ describe('documentation page', () => {
     ]) {
       expect(screen.getByRole('heading', { name: title })).toBeInTheDocument()
     }
-    expect(screen.getAllByRole('img')).toHaveLength(5)
+    const images = screen.getAllByRole('img')
+    const stepImages = images.filter(
+      (image) => !image.getAttribute('src')?.startsWith('/rehber/gids/')
+    )
+    expect(stepImages).toHaveLength(5)
+    const guideImages = images.filter((image) =>
+      image.getAttribute('src')?.startsWith('/rehber/gids/claude-code/')
+    )
+    expect(guideImages.length).toBeGreaterThan(0)
+    for (const image of guideImages) {
+      expect(image).toHaveAttribute('loading', 'lazy')
+      expect(image).toHaveAttribute('width')
+      expect(image).toHaveAttribute('height')
+    }
     expect(
       screen.getByRole('link', { name: 'Satın al sayfasına git' })
     ).toHaveAttribute('href', '/satin-al')

@@ -30,10 +30,27 @@ import {
   MODEL_HAIKU_FREE,
   MODEL_OPUS,
   OPENAI_BASE_URL,
+  type GuideShot,
   type GuideStep,
   type ToolGuide,
 } from './docs-tool-guides-base'
 import { KEY_ENV_STEPS, OPEN_TERMINAL_STEPS } from './docs-tool-guides-shared'
+
+/** One of our own screenshots for the Claude Code guide (webp, 1100 px wide). */
+function shot(
+  name: string,
+  height: number,
+  tr: string,
+  en: string,
+  width = 1100
+): GuideShot {
+  return {
+    src: `/rehber/gids/claude-code/${name}.webp`,
+    alt: { tr, en },
+    width,
+    height,
+  }
+}
 
 const CLAUDE_SETTINGS = `{
   "env": {
@@ -98,9 +115,17 @@ const CLAUDE_INSTALL_STEPS: readonly GuideStep[] = [
       en: 'Close the terminal window, open a new one and check the installation.',
     },
     blocks: [block('command', 'bash', 'claude --version')],
+    shots: [
+      shot(
+        'win-versie',
+        748,
+        'Windows PowerShell’de claude --version komutu ve altında sürüm numarası.',
+        'claude --version in Windows PowerShell with the version number below it.'
+      ),
+    ],
     see: {
-      tr: 'Bir sürüm numarası görünür, örneğin 2.1.308. “Tanınmıyor” gibi bir hata görürseniz pencereyi kapatıp yeniden açın.',
-      en: 'A version number appears, for example 2.1.308. If you see a “not recognized” style error, close the window and open it again.',
+      tr: 'Bir sürüm numarası görünür, örneğin 2.1.309. “Tanınmıyor” gibi bir hata görürseniz pencereyi kapatıp yeniden açın.',
+      en: 'A version number appears, for example 2.1.309. If you see a “not recognized” style error, close the window and open it again.',
     },
   },
 ]
@@ -111,8 +136,8 @@ const claudeCode: ToolGuide = {
   status: 'works',
   protocol: 'anthropic',
   testedWith: {
-    tr: 'Claude Code 2.1.283 ile 22 Ekim 2026’da gerçek bir anahtarla denendi (en yeni sürüm: 2.1.308)',
-    en: 'Tried with Claude Code 2.1.283 and a real key on 22 Oct 2026 (latest version: 2.1.308)',
+    tr: 'Claude Code 2.1.283 ile 23 Ekim 2026’da gerçek bir anahtarla denendi (en yeni sürüm: 2.1.309)',
+    en: 'Tried with Claude Code 2.1.283 and a real key on 23 Oct 2026 (latest version: 2.1.309)',
   },
   summary: {
     tr: 'Claude Code, Anthropic’in kodlama yardımcısıdır. Anthropic hesabına ya da aboneliğine gerek yoktur: HisarWeb AI anahtarınız yeterlidir.',
@@ -172,6 +197,15 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
             en: 'Paste the text below into the file, replace BURAYA_ANAHTARINIZ with the key you copied in step 3, and save the file.',
           },
           blocks: [block('config', 'json', CLAUDE_SETTINGS)],
+          shots: [
+            shot(
+              'win-instellingen',
+              676,
+              'Not Defteri’nde bitmiş settings.json; anahtar yıldızlarla gizlenmiştir.',
+              'The finished settings.json in Notepad; the key is hidden with stars.',
+              1022
+            ),
+          ],
           note: {
             tr: 'Adres https://api.hisarweb.be olmalı, sonuna /v1 eklemeyin; Claude Code gerisini kendisi ekler. Ücretsiz deneme anahtarı yalnızca haiku sınıfı modelleri çalıştırır: o durumda model satırlarının hepsine claude-haiku-4-5 yazın. Dosyada zaten başka ayarlar varsa yalnızca "env" bölümünü ekleyin.',
             en: 'The address must be https://api.hisarweb.be without /v1 at the end; Claude Code adds the rest. A free trial key only runs haiku-class models: in that case write claude-haiku-4-5 on every model line. If the file already has other settings, add only the "env" part.',
@@ -184,9 +218,65 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
           },
           blocks: [block('command', 'bash', 'claude')],
           see: {
-            tr: 'Claude Code karşılama ekranı açılır. “Model listesinde yok” türünde bir uyarı çıkabilir; bu zararsızdır, model çalışır.',
-            en: 'The Claude Code welcome screen opens. A notice that the model is not in its list may appear; that is harmless and the model works.',
+            tr: 'İlk açılışta bir renk teması sorulur. Aşağı ok ile istediğiniz temayı seçip Enter’a basın.',
+            en: 'The first time, it asks for a colour theme. Pick one with the Down arrow and press Enter.',
           },
+          shots: [
+            shot(
+              'win-tema',
+              748,
+              'Claude Code’un ilk açılışta gösterdiği tema seçimi.',
+              'The theme choice Claude Code shows on first start.'
+            ),
+          ],
+        },
+        {
+          text: {
+            tr: 'Claude Code klasöre güvenip güvenmediğinizi sorar. Kendi klasörünüzse aşağı oku ve ardından Enter’ı kullanarak “Yes, I trust this folder” seçeneğini onaylayın.',
+            en: 'Claude Code asks whether you trust the folder. If it is your own folder, use the Down arrow and then Enter to confirm “Yes, I trust this folder”.',
+          },
+          see: {
+            tr: 'Varsayılan seçenek “No, exit”tir; Enter’a basmadan önce aşağı okla “Yes”e geçin, yoksa Claude Code kapanır.',
+            en: 'The default is “No, exit”; move to “Yes” with the Down arrow before pressing Enter, or Claude Code closes.',
+          },
+          shots: [
+            shot(
+              'win-vertrouwen',
+              748,
+              'Klasöre güvenme sorusu; varsayılan “No, exit” seçili.',
+              'The folder trust question; “No, exit” is selected by default.'
+            ),
+          ],
+        },
+        {
+          text: {
+            tr: 'Karşılama ekranı açılır. Kutuya bir soru yazıp Enter’a basın.',
+            en: 'The welcome screen opens. Type a question in the box and press Enter.',
+          },
+          see: {
+            tr: 'Soru kutusu, altında kullandığınız model adı görünür. “Model listesinde yok” türünde bir uyarı çıkabilir; bu zararsızdır, model çalışır.',
+            en: 'A question box with your model name under it. A notice that the model is not in its list may appear; that is harmless and the model works.',
+          },
+          shots: [
+            shot(
+              'win-start',
+              748,
+              'Claude Code karşılama ekranı ve boş soru kutusu.',
+              'The Claude Code welcome screen with an empty question box.'
+            ),
+            shot(
+              'win-vraag',
+              748,
+              'Soru kutusuna yazılmış bir soru.',
+              'A question typed into the box.'
+            ),
+            shot(
+              'win-antwoord',
+              748,
+              'Gelen yanıt; giriş ekranı çıkmadı.',
+              'The answer that came back; no sign-in screen appeared.'
+            ),
+          ],
         },
         {
           text: {
@@ -195,9 +285,17 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
           },
           blocks: [block('command', 'text', '/status')],
           see: {
-            tr: 'Gösterilen adres https://api.hisarweb.be olmalıdır.',
-            en: 'The address shown must be https://api.hisarweb.be.',
+            tr: 'Anthropic base URL satırında https://api.hisarweb.be yazmalıdır.',
+            en: 'The “Anthropic base URL” line must read https://api.hisarweb.be.',
           },
+          shots: [
+            shot(
+              'win-status',
+              509,
+              '/status ekranı; Anthropic base URL satırında api.hisarweb.be görünür.',
+              'The /status screen; the Anthropic base URL line shows api.hisarweb.be.'
+            ),
+          ],
         },
       ],
     },
@@ -215,9 +313,17 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
             en: 'In VS Code press Ctrl + Shift + X (Cmd + Shift + X on macOS) to open Extensions, type Claude Code and install the extension published by Anthropic (anthropic.claude-code).',
           },
           see: {
-            tr: 'Eklentinin yanında “Yüklendi” görünür.',
-            en: 'The extension shows as installed.',
+            tr: 'Eklentinin yanında “Yükle” yerine bir dişli simgesi görünür; yüklü demektir.',
+            en: 'A gear icon replaces the Install button next to the extension; that means it is installed.',
           },
+          shots: [
+            shot(
+              'vsc-uitbreiding',
+              688,
+              'VS Code Eklentiler paneli; Anthropic’in Claude Code eklentisi yüklü.',
+              'The VS Code Extensions view; the Claude Code extension from Anthropic is installed.'
+            ),
+          ],
         },
         {
           text: {
@@ -241,7 +347,6 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
           },
         },
         {
-          unverified: true,
           text: {
             tr: 'VS Code’u kapatıp yeniden açın. Claude Code panelini kenar çubuğundaki Claude simgesinden ya da komut paletinde “Claude Code” yazarak açın ve bir soru yazın.',
             en: 'Close and reopen VS Code. Open the Claude Code panel from the Claude icon in the sidebar, or type “Claude Code” in the command palette, and ask a question.',
@@ -250,6 +355,20 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
             tr: 'Giriş ekranı çıkmaz ve yanıt gelir. Giriş ekranı çıkarsa ayarın kaydedildiğinden ve VS Code’un yeniden başladığından emin olun.',
             en: 'No sign-in screen appears and an answer comes back. If a sign-in screen appears, check that the setting was saved and VS Code restarted.',
           },
+          shots: [
+            shot(
+              'vsc-paneel',
+              688,
+              'Claude Code paneli açık, giriş istemiyor; model Haiku 4.5.',
+              'The Claude Code panel open without a sign-in prompt; the model is Haiku 4.5.'
+            ),
+            shot(
+              'vsc-antwoord',
+              543,
+              'Panelde yazılan soru ve gelen yanıt.',
+              'The question typed in the panel and the answer that came back.'
+            ),
+          ],
         },
       ],
     },
