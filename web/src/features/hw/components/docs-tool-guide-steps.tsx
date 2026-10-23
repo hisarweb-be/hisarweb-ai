@@ -75,6 +75,7 @@ function GuideShotImage(props: { shot: GuideShot; lang: GuideLang }) {
       width={props.shot.width}
       height={props.shot.height}
       loading='lazy'
+      style={{ maxWidth: props.shot.width }}
       className='h-auto w-full rounded-lg border'
     />
   )
