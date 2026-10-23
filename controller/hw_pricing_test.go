@@ -31,7 +31,7 @@ func setupHwPricingTestDB(t *testing.T) *gin.Engine {
 	require.NoError(t, err)
 	model.DB = db
 	model.LOG_DB = db
-	require.NoError(t, db.AutoMigrate(&model.HwPriceSnapshot{}, &model.HwQualityRun{}, &model.HwQualityScore{}))
+	require.NoError(t, db.AutoMigrate(&model.HwPriceSnapshot{}, &model.HwQualityRun{}, &model.HwQualityScore{}, &model.Log{}))
 	t.Cleanup(func() {
 		sqlDB, _ := db.DB()
 		_ = sqlDB.Close()
