@@ -66,6 +66,16 @@ services:
       HW_CSP_EXTRA_IMG_SRC: ${HW_CSP_EXTRA_IMG_SRC:-}
       HW_CSP_EXTRA_STYLE_SRC: ${HW_CSP_EXTRA_STYLE_SRC:-}
       HW_CSP_EXTRA_FONT_SRC: ${HW_CSP_EXTRA_FONT_SRC:-}
+      # Quality measurement (admin action POST /api/hw/quality/run). Without all
+      # four values the run refuses to start; a half-configured meter must not
+      # publish scores. The base URL is the gateway's own customer route and the
+      # key is a normal customer API key, so the meter measures what a customer
+      # gets. The output directory lies on the data volume, which is the only
+      # writable path the container keeps across a restart.
+      HW_QUALITY_BASE_URL: ${HW_QUALITY_BASE_URL:-}
+      HW_QUALITY_API_KEY: ${HW_QUALITY_API_KEY:-}
+      HW_QUALITY_JUDGE_MODEL: ${HW_QUALITY_JUDGE_MODEL:-}
+      HW_QUALITY_OUT_DIR: ${HW_QUALITY_OUT_DIR:-}
     ports:
       # Loopback only: the proxy of the platform reaches the container over the
       # compose network, so the gateway never listens on the public interface

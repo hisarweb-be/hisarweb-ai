@@ -151,3 +151,33 @@ func TestHwDeployComposePinsProductionAppEnv(t *testing.T) {
 	assert.NotContains(t, appBlock, "APP_ENV: ${", "the value is fixed, never interpolated")
 	assert.Equal(t, 1, strings.Count(text, "APP_ENV:"), "only the app service sets APP_ENV")
 }
+
+// TestHwDeployComposePassesQualityEnv requires the production compose to pass
+// the four quality-meter variables to the app container. The meter refuses to
+// start without them; a compose that drops them turns a configured deployment
+// into a meter that silently never runs, which is how the first measurement
+// went missing.
+func TestHwDeployComposePassesQualityEnv(t *testing.T) {
+	compose, err := os.ReadFile(filepath.Join("..", "deploy", "docker-compose.yml"))
+	require.NoError(t, err)
+	text := string(compose)
+
+	appStart := strings.Index(text, "\n  app:")
+	postgresStart := strings.Index(text, "\n  postgres:")
+	require.Positive(t, appStart, "the compose has an app service")
+	require.Greater(t, postgresStart, appStart, "postgres follows the app service")
+	appBlock := text[appStart:postgresStart]
+
+	// The names are repeated here on purpose: the constants live in package
+	// service, and importing that package from common would invert the
+	// dependency direction between them.
+	for _, name := range []string{
+		"HW_QUALITY_BASE_URL",
+		"HW_QUALITY_API_KEY",
+		"HW_QUALITY_JUDGE_MODEL",
+		"HW_QUALITY_OUT_DIR",
+	} {
+		assert.Contains(t, appBlock, "\n      "+name+": ${"+name+":-}\n",
+			"the app service passes %s through from the deployment environment", name)
+	}
+}

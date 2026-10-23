@@ -27,6 +27,7 @@ ongemoeid; die blijven voor upstream-releases en lokale ontwikkeling.
 | betalen | `REVOLUT_API_BASE`, `REVOLUT_API_VERSION` | nee | leeg = productie-URL en standaardversie uit de code |
 | betalen | `HW_STRIPE_SECRET_KEY`, `HW_STRIPE_WEBHOOK_SECRET` | nee | Stripe Checkout in TRY; als beide gevuld zijn gaat Stripe voor Revolut; webhook `/api/hw/stripe/webhook` |
 | reserve | `HW_BUREAU_USAGE_URL`, `HW_BUREAU_USAGE_TOKEN`, `HW_WINDOW_CAPACITY_USD`, `HW_RESERVE_MODE` | nee | poort op het bureaugebruik; leeg betekent: klantverkeer dicht in plaats van gokken |
+| kwaliteit | `HW_QUALITY_BASE_URL`, `HW_QUALITY_API_KEY`, `HW_QUALITY_JUDGE_MODEL`, `HW_QUALITY_OUT_DIR` | nee | meting van de kwaliteitsmeter (`POST /api/hw/quality/run`, beheerder). De basis-URL is de eigen klantroute (`https://api.hisarweb.be`), de sleutel een gewone klantsleutel, de keurder een verkocht model en de uitmap een pad op het datavolume (`/data/kwaliteit`). Ontbreekt één van de vier, dan weigert de meting te starten en blijven er geen halve scores staan |
 
 Alles hierboven komt uit de omgeving van Coolify. In dit bestand staan alleen namen, nooit waarden.
 
