@@ -44,6 +44,7 @@ const tr = {
     'HisarWeb AI, yapay zekâ uygulamanız için tek bir API anahtarı sunar. Her model resmî liste fiyatının %50 altında ve diğer API aracılarından ucuz. Aylık abonelik yok; yalnızca kullandığınız kadar ödersiniz.',
   landingCtaPrimary: 'Ücretsiz hesap aç',
   landingCtaSecondary: 'Fiyatları karşılaştır',
+  landingTitleAccent: 'resmî fiyatın yarısına',
   landingCatalogNote:
     'Claude, GPT ve Gemini ailelerinden seçilmiş modeller tek katalogda; her modelin güncel fiyatı karşılaştırma sayfasında yazar.',
 
@@ -62,6 +63,7 @@ const tr = {
   trialBody:
     'Hesap açtığınızda 250 TL deneme bakiyesi tanımlanır ve 14 gün geçerlidir. Kredi kartı gerekmez.',
   trialCta: 'Deneme hesabı aç',
+  trialFigure: '250 TL',
 
   stepsTitle: 'Dört adımda başlayın',
   step1Title: 'Kayıt olun',
@@ -351,6 +353,7 @@ const en: Record<HwTextKey, string> = {
     'HisarWeb AI gives your application one API key. Every model is 50% below the official list price and cheaper than other API routers. No monthly subscription; you only pay for what you use.',
   landingCtaPrimary: 'Create a free account',
   landingCtaSecondary: 'Compare prices',
+  landingTitleAccent: 'half the official price',
   landingCatalogNote:
     'Selected models from the Claude, GPT and Gemini families in one catalog; every current price is on the comparison page.',
 
@@ -369,6 +372,7 @@ const en: Record<HwTextKey, string> = {
   trialBody:
     'A new account receives TRY 250 of trial credit, valid for 14 days. No card needed.',
   trialCta: 'Create a trial account',
+  trialFigure: 'TRY 250',
 
   stepsTitle: 'Start in four steps',
   step1Title: 'Sign up',
