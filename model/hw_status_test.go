@@ -285,3 +285,35 @@ func TestHwStatusPurgeFalseIdleOutages(t *testing.T) {
 	require.NoError(t, err)
 	assert.Zero(t, again)
 }
+
+// One broken model must not turn the others red: the verdict is per model (22
+// Oct 2026: a 404 on claude-haiku-4-5 marked all ten models bad).
+func TestHwStatusOneBrokenModelStaysAlone(t *testing.T) {
+	hwStatusTestSetup(t)
+	require.NoError(t, DB.AutoMigrate(&Ability{}, &Log{}))
+	require.NoError(t, DB.Exec("DELETE FROM abilities").Error)
+	require.NoError(t, LOG_DB.Exec("DELETE FROM logs").Error)
+	t.Cleanup(func() {
+		DB.Exec("DELETE FROM abilities")
+		LOG_DB.Exec("DELETE FROM logs")
+	})
+	require.NoError(t, DB.Create(&Ability{Group: HwPaidGroupName, Model: "claude-quiet", ChannelId: 1, Enabled: true}).Error)
+
+	base := int64(1_800_000_000)
+	at := base + 60
+	for i := 0; i < 3; i++ {
+		require.NoError(t, LOG_DB.Create(&Log{Type: LogTypeError, CreatedAt: base + 5, Group: HwPaidGroupName, ModelName: "claude-broken"}).Error)
+	}
+	require.NoError(t, LOG_DB.Create(&Log{Type: LogTypeConsume, CreatedAt: base + 5, Group: HwPaidGroupName, ModelName: "claude-busy"}).Error)
+	// Another group's failure does not count for the paid status.
+	require.NoError(t, LOG_DB.Create(&Log{Type: LogTypeError, CreatedAt: base + 5, Group: "free", ModelName: "claude-busy"}).Error)
+
+	require.NoError(t, HwMeasureStatusOnce(time.Unix(at, 0), []string{"claude-broken", "claude-busy", "claude-quiet"}))
+	var samples []HwStatusSample
+	require.NoError(t, DB.Order("model").Find(&samples).Error)
+	require.Len(t, samples, 3)
+	assert.False(t, samples[0].Ok, "the broken model is bad")
+	assert.Equal(t, HwStatusReasonRelayFailures, samples[0].Reason)
+	assert.True(t, samples[1].Ok, "a served model stays good")
+	assert.True(t, samples[2].Ok, "a quiet routed model stays good")
+}
