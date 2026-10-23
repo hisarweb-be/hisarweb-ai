@@ -33,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { toIntlLocale } from '@/i18n/languages'
 import { cn } from '@/lib/utils'
 
@@ -210,6 +211,133 @@ function PriceRow(props: {
   )
 }
 
+/** A saving as one short phrase, for the phone card that has no column head. */
+function savingPhrase(
+  fraction: number | null,
+  locale: string | undefined,
+  t: Translate
+): string {
+  if (fraction === null) return t('missing')
+  if (Math.abs(fraction) < 1e-9) return t('savingNoneZero')
+  const percent = formatPercent(Math.abs(fraction), locale)
+  return fraction > 0
+    ? t('savingPill', { percent })
+    : t('savingNoneMore', { percent })
+}
+
+/** HisarWeb AI amount in front, the official amount struck through beside it. */
+function CardAmount(props: {
+  label: string
+  hisarweb: number | undefined
+  official: number | undefined
+  tryPerUsd: number
+  locale: string | undefined
+  t: Translate
+}) {
+  const hisarweb = props.hisarweb
+  return (
+    <div>
+      <dt className='text-muted-foreground text-xs'>{props.label}</dt>
+      <dd className='mt-0.5 tabular-nums'>
+        {hisarweb === undefined ? (
+          <span className='text-muted-foreground'>{props.t('missing')}</span>
+        ) : (
+          <>
+            <span className='text-base font-semibold'>
+              {formatMoney(hisarweb, 'USD', props.locale)}
+            </span>
+            {props.official !== undefined && (
+              <>
+                <span className='sr-only'>{props.t('colOfficial')}</span>
+                <s className='text-muted-foreground ml-1.5 text-xs'>
+                  {formatMoney(props.official, 'USD', props.locale)}
+                </s>
+              </>
+            )}
+            <div className='text-muted-foreground text-xs'>
+              {formatMoney(hisarweb * props.tryPerUsd, 'TRY', props.locale)}
+            </div>
+          </>
+        )}
+      </dd>
+    </div>
+  )
+}
+
+/**
+ * Phone view of one model: the saving and the HisarWeb AI price first, so the
+ * selling point is visible without scrolling sideways; OpenRouter is one
+ * secondary line.
+ */
+function PriceCard(props: {
+  row: ModelPrice
+  tryPerUsd: number
+  locale: string | undefined
+  t: Translate
+}) {
+  const row = props.row
+  const t = props.t
+  const common = { tryPerUsd: props.tryPerUsd, locale: props.locale, t }
+  const vsOfficial = savingFraction(row.official, row.hisarweb)
+  const openrouter = row.openrouter
+  return (
+    <li
+      className='bg-background/60 rounded-lg border p-4'
+      data-testid='hw-price-card'
+    >
+      <div className='flex items-start justify-between gap-3'>
+        <div className='min-w-0'>
+          <div className='font-mono text-sm font-semibold break-all'>
+            {row.model}
+          </div>
+          <div className='text-muted-foreground text-xs'>{row.provider}</div>
+        </div>
+        {vsOfficial !== null && vsOfficial > 1e-9 ? (
+          <span className='hwp-best-pill shrink-0' data-testid='hw-saving-pill'>
+            {savingPhrase(vsOfficial, props.locale, t)}
+          </span>
+        ) : (
+          <span
+            className={cn(
+              'shrink-0 text-right text-xs font-semibold',
+              vsOfficial !== null && vsOfficial < 0 && 'text-destructive'
+            )}
+          >
+            {savingPhrase(vsOfficial, props.locale, t)}
+          </span>
+        )}
+      </div>
+      <div className='hwp-best hwp-best-edge mt-3 rounded-md px-3 py-2'>
+        <div className='hwp-best-head text-xs'>{t('colHisarweb')}</div>
+        <dl className='mt-1 grid grid-cols-2 gap-x-4'>
+          <CardAmount
+            hisarweb={row.hisarweb?.input}
+            label={t('colInput')}
+            official={row.official?.input}
+            {...common}
+          />
+          <CardAmount
+            hisarweb={row.hisarweb?.output}
+            label={t('colOutput')}
+            official={row.official?.output}
+            {...common}
+          />
+        </dl>
+      </div>
+      <p
+        className='text-muted-foreground mt-3 border-t pt-2 text-xs tabular-nums'
+        data-testid='hw-price-card-openrouter'
+      >
+        {t('colOpenRouter')}
+        {': '}
+        {openrouter === null
+          ? t('missing')
+          : `${formatMoney(openrouter.input, 'USD', props.locale)} / ${formatMoney(openrouter.output, 'USD', props.locale)} · ${t('colVsOpenRouter')}: ${savingPhrase(savingFraction(openrouter, row.hisarweb), props.locale, t)}`}
+      </p>
+    </li>
+  )
+}
+
 function PriceTableHead(props: { t: Translate }) {
   const t = props.t
   const group = 'border-l text-center'
@@ -300,6 +428,7 @@ export function PriceTable(props: PriceTableProps) {
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const models = props.models ?? MODEL_PRICES
   const tryPerUsd = props.tryPerUsd ?? MODEL_PRICES_TRY_PER_USD
+  const isMobile = useIsMobile()
 
   return (
     <Card data-testid='hw-price-table'>
@@ -314,27 +443,41 @@ export function PriceTable(props: PriceTableProps) {
         </CardDescription>
       </CardHeader>
       <CardContent className='space-y-4'>
-        <div
-          aria-label={t('tableLabel')}
-          className='max-w-full overflow-x-auto rounded-md border'
-          role='region'
-          tabIndex={0}
-        >
-          <Table withContainer={false}>
-            <PriceTableHead t={t} />
-            <TableBody>
-              {models.map((row) => (
-                <PriceRow
-                  key={row.model}
-                  locale={locale}
-                  row={row}
-                  t={t}
-                  tryPerUsd={tryPerUsd}
-                />
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        {isMobile ? (
+          <ul aria-label={t('tableLabel')} className='space-y-3'>
+            {models.map((row) => (
+              <PriceCard
+                key={row.model}
+                locale={locale}
+                row={row}
+                t={t}
+                tryPerUsd={tryPerUsd}
+              />
+            ))}
+          </ul>
+        ) : (
+          <div
+            aria-label={t('tableLabel')}
+            className='max-w-full overflow-x-auto rounded-md border'
+            role='region'
+            tabIndex={0}
+          >
+            <Table withContainer={false}>
+              <PriceTableHead t={t} />
+              <TableBody>
+                {models.map((row) => (
+                  <PriceRow
+                    key={row.model}
+                    locale={locale}
+                    row={row}
+                    t={t}
+                    tryPerUsd={tryPerUsd}
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
 
         <section className='space-y-2'>
           <h3 className='text-sm font-semibold'>{t('notesTitle')}</h3>

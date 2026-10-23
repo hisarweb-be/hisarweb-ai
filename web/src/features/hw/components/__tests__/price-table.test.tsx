@@ -166,6 +166,45 @@ test('keeps the table inside its own horizontally scrollable wrapper', () => {
   expect(wrapper).toHaveClass('overflow-x-auto', 'max-w-full')
 })
 
+test('on a 390px phone shows one card per model with the HisarWeb price and saving first', async () => {
+  const width = window.innerWidth
+  window.innerWidth = 390
+  try {
+    render(<PriceTable models={[cheaper, noOpenRouter, dearer]} />)
+
+    const cards = await screen.findAllByTestId('hw-price-card')
+    expect(cards).toHaveLength(3)
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+
+    const card = within(cards[0])
+    const pill = card.getByTestId('hw-saving-pill')
+    expect(pill).toHaveTextContent('%25 tasarruf')
+    const hisarweb = card.getByText('$1,50')
+    // The saving pill comes before the price, so it is the first thing seen.
+    expect(
+      pill.compareDocumentPosition(hisarweb) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    // The official price sits next to it, struck through.
+    expect(card.getByText('$2,00').closest('s')).not.toBeNull()
+    // OpenRouter is one secondary line with its own saving.
+    const openrouter = card.getByTestId('hw-price-card-openrouter')
+    expect(openrouter).toHaveTextContent('$1,67')
+    expect(openrouter).toHaveTextContent('%10')
+
+    // A model OpenRouter does not list shows a dash on that line.
+    expect(
+      within(cards[1]).getByTestId('hw-price-card-openrouter')
+    ).toHaveTextContent('—')
+
+    // Selling above the official price is a warning, never a pill.
+    const dear = within(cards[2])
+    expect(dear.queryByTestId('hw-saving-pill')).toBeNull()
+    expect(dear.getAllByText(/Tasarruf yok/).length).toBeGreaterThan(0)
+  } finally {
+    window.innerWidth = width
+  }
+})
+
 test('shows the explanation in English when the interface language is English', async () => {
   await useLanguage('en')
   render(<PriceTable models={[cheaper]} />)
