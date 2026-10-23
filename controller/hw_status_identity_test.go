@@ -104,3 +104,24 @@ func TestHwStatusCarriesOurOwnPublicIdentity(t *testing.T) {
 	assert.NotContains(t, lower, "new_api")
 	assert.NotContains(t, lower, "oneapi")
 }
+
+// TestHwStatusTellsWhetherCardPaymentIsOpen lets the top-up page show a calm
+// "opening soon" state instead of an order that fails: card payment counts as
+// open only with both the merchant key and the webhook secret in place.
+func TestHwStatusTellsWhetherCardPaymentIsOpen(t *testing.T) {
+	hwStatusIdentityFixture(t)
+	t.Setenv(service.HwRevolutAPIBaseEnv, "")
+
+	t.Setenv(service.HwRevolutSecretKeyEnv, "")
+	t.Setenv(service.HwRevolutWebhookSecretEnv, "")
+	data, _ := hwStatusIdentityServe(t)
+	assert.Equal(t, false, data["hw_payment_available"])
+
+	t.Setenv(service.HwRevolutSecretKeyEnv, "sk_test_key")
+	data, _ = hwStatusIdentityServe(t)
+	assert.Equal(t, false, data["hw_payment_available"], "without the webhook secret no order is ever confirmed")
+
+	t.Setenv(service.HwRevolutWebhookSecretEnv, "wsk_test_secret")
+	data, _ = hwStatusIdentityServe(t)
+	assert.Equal(t, true, data["hw_payment_available"])
+}

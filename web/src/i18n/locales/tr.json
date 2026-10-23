@@ -892,6 +892,7 @@
     "Failed to create API key": "API anahtarı oluşturulamadı",
     "Failed to create deployment": "Dağıtım oluşturulamadı",
     "Failed to create the Telegram link": "Telegram bağlantısı oluşturulamadı",
+    "Failed to read the Telegram link status": "Telegram bağlantı durumu okunamadı",
     "Failed to delete account": "Hesap silinemedi",
     "Failed to delete API key": "API anahtarı silinemedi",
     "Failed to delete API keys": "API anahtarları silinemedi",

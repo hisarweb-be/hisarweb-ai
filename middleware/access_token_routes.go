@@ -56,6 +56,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	// router/hw_telegram.go: the Telegram deep link is an account-security
 	// action, so a personal access token never reaches it.
 	"POST /api/hw/telegram/link": accessTokenSessionRule,
+	"GET /api/hw/telegram/link":  accessTokenSessionRule,
 	// router/hw_pricing.go: public HisarWeb AI price comparator and quality meter
 	"GET /api/hw/pricing/compare": accessTokenAnyRule,
 	"GET /api/hw/quality/latest":  accessTokenAnyRule,

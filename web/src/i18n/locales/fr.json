@@ -2417,6 +2417,7 @@
     "Failed to create the Discovery request: {{error}}": "Échec de la création de la requête Discovery : {{error}}",
     "Failed to create the plan product": "Échec de la création du produit du forfait",
     "Failed to create the Telegram link": "Failed to create the Telegram link",
+    "Failed to read the Telegram link status": "Failed to read the Telegram link status",
     "Exchange rate must be greater than 0": "Le taux de change doit être supérieur à 0",
     "Excludes the first attempt. Counted per group.": "Hors première tentative, compté par groupe.",
     "Execute code in a sandbox during the response": "Exécuter du code dans un bac à sable pendant la réponse",

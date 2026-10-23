@@ -2417,6 +2417,7 @@
     "Failed to create the Discovery request: {{error}}": "Không thể tạo yêu cầu Discovery: {{error}}",
     "Failed to create the plan product": "Tạo sản phẩm của gói thất bại",
     "Failed to create the Telegram link": "Failed to create the Telegram link",
+    "Failed to read the Telegram link status": "Failed to read the Telegram link status",
     "Exchange rate must be greater than 0": "Tỷ giá phải lớn hơn 0",
     "Excludes the first attempt. Counted per group.": "Không tính lần đầu, tính theo từng nhóm.",
     "Execute code in a sandbox during the response": "Thực thi mã trong sandbox trong quá trình phản hồi",

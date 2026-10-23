@@ -72,15 +72,18 @@ let status: StatusFixture
 let packages: PackagesFixture
 /** Answer of `POST /api/hw/telegram/link`; each test overrides what it needs. */
 let linkAnswer: Record<string, unknown>
+/** Answer of `GET /api/hw/telegram/link`, how far the bot conversation is. */
+let linkStatus: {
+  linked: boolean
+  phone_shared: boolean
+  bonus_granted: boolean
+}
 /** Every GET the card issued, so a refetch can be told apart from a first load. */
 const getCalls: string[] = []
 
-type FakeTab = {
-  opener: Window | null
-  location: { href: string }
-  close: ReturnType<typeof vi.fn>
-}
-let tab: FakeTab
+const ONE_TIME_LINK = 'https://t.me/HisarWebAI_bot?start=one-time-token'
+const TEXT_LINKED =
+  'Telegram bağlandı. Şimdi bottaki Numaramı paylaş düğmesine dokunun.'
 
 beforeEach(async () => {
   await useLanguage('tr')
@@ -92,7 +95,11 @@ beforeEach(async () => {
   })
   status = { telegram_oauth_configured: false }
   packages = { packages: [], phone_shared: false }
-  linkAnswer = { success: true, data: { linked: true } }
+  linkAnswer = {
+    success: true,
+    data: { linked: false, url: ONE_TIME_LINK, expires_at: 1_770_000_000 },
+  }
+  linkStatus = { linked: false, phone_shared: false, bonus_granted: false }
   vi.spyOn(api, 'get').mockImplementation(async (url) => {
     getCalls.push(url)
     switch (url) {
@@ -105,6 +112,8 @@ beforeEach(async () => {
             data: { id: 1, username: 'new-user', role: 1 },
           },
         }
+      case '/api/hw/telegram/link':
+        return { data: { success: true, data: linkStatus } }
       case '/api/user/hw/packages':
         return {
           data: {
@@ -124,8 +133,6 @@ beforeEach(async () => {
     }
   })
   vi.spyOn(api, 'post').mockImplementation(async () => ({ data: linkAnswer }))
-  tab = { opener: window, location: { href: '' }, close: vi.fn() }
-  vi.spyOn(window, 'open').mockImplementation(() => tab as unknown as Window)
 })
 
 afterEach(async () => {
@@ -207,7 +214,7 @@ describe('start bonus card', () => {
     }
   })
 
-  it('links the phone step to the bot once telegram verification is open', async () => {
+  it('opens the bot dialog from the phone step once telegram verification is open', async () => {
     status = {
       telegram_oauth_configured: true,
       telegram_bot_name: '@HisarWebAI_bot',
@@ -219,15 +226,21 @@ describe('start bonus card', () => {
       email: 'new-user@example.com',
       telegram_id: 'telegram-user',
     })
+    linkStatus = { linked: true, phone_shared: false, bonus_granted: false }
     await renderCard()
 
-    const telegramStep = await stepItem(
+    const phoneStep = await stepItem(
       'Telefon numaranızı Telegram botuyla paylaşın'
     )
-    expect(telegramStep.getByText('Henüz yapılmadı')).toBeVisible()
-    expect(
-      telegramStep.getByRole('button', { name: 'Telegram botunu aç' })
-    ).toHaveAttribute('href', 'https://t.me/HisarWebAI_bot')
+    expect(phoneStep.getByText('Henüz yapılmadı')).toBeVisible()
+    const user = userEvent.setup()
+    await user.click(
+      phoneStep.getByRole('button', { name: 'Telegram botunu aç' })
+    )
+
+    const dialog = within(await screen.findByRole('dialog'))
+    expect(api.post).toHaveBeenCalledWith('/api/hw/telegram/link')
+    expect(await dialog.findByText(TEXT_LINKED)).toBeVisible()
   })
 
   it('opens both telegram steps when only the bot name is configured', async () => {
@@ -255,10 +268,10 @@ describe('start bonus card', () => {
     expect(phoneStep.getByText('Henüz yapılmadı')).toBeVisible()
     expect(
       phoneStep.getByRole('button', { name: 'Telegram botunu aç' })
-    ).toHaveAttribute('href', 'https://t.me/HisarWebAI_bot')
+    ).toBeVisible()
   })
 
-  it('opens the one-time link the server creates for the bot', async () => {
+  it('offers telegram web, the app and the t.me link for the one-time link', async () => {
     status = { telegram_bot_name: '@HisarWebAI_bot' }
     useAuthStore.getState().auth.setUser({
       id: 1,
@@ -266,13 +279,6 @@ describe('start bonus card', () => {
       role: 1,
       email: 'new-user@example.com',
     })
-    linkAnswer = {
-      success: true,
-      data: {
-        url: 'https://t.me/HisarWebAI_bot?start=one-time-token',
-        expires_at: 1_770_000_000,
-      },
-    }
     await renderCard()
 
     const telegramStep = await stepItem('Telegram hesabınızı bağlayın')
@@ -281,17 +287,67 @@ describe('start bonus card', () => {
       telegramStep.getByRole('button', { name: 'Link Telegram' })
     )
 
-    await waitFor(() =>
-      expect(api.post).toHaveBeenCalledWith('/api/hw/telegram/link')
+    const dialog = within(await screen.findByRole('dialog'))
+    expect(
+      await dialog.findByRole('button', { name: 'Telegram Web’de aç' })
+    ).toHaveAttribute(
+      'href',
+      'https://web.telegram.org/k/#?tgaddr=tg%3A%2F%2Fresolve%3Fdomain%3DHisarWebAI_bot%26start%3Done-time-token'
     )
-    expect(window.open).toHaveBeenCalledWith('', '_blank')
-    await waitFor(() =>
-      expect(tab.location.href).toBe(
-        'https://t.me/HisarWebAI_bot?start=one-time-token'
-      )
+    expect(
+      dialog.getByRole('button', { name: 'Telegram uygulamasında aç' })
+    ).toHaveAttribute(
+      'href',
+      'tg://resolve?domain=HisarWebAI_bot&start=one-time-token'
     )
-    expect(tab.opener).toBeNull()
-    expect(tab.close).not.toHaveBeenCalled()
+    expect(dialog.getByRole('link', { name: ONE_TIME_LINK })).toHaveAttribute(
+      'href',
+      ONE_TIME_LINK
+    )
+    expect(dialog.getByText('Telegram’dan onay bekleniyor…')).toBeVisible()
+  })
+
+  it('says the bonus arrived and keeps the dialog open once the bot granted it', async () => {
+    status = { telegram_bot_name: '@HisarWebAI_bot' }
+    useAuthStore.getState().auth.setUser({
+      id: 1,
+      username: 'new-user',
+      role: 1,
+      email: 'new-user@example.com',
+    })
+    await renderCard()
+
+    const telegramStep = await stepItem('Telegram hesabınızı bağlayın')
+    linkStatus = { linked: true, phone_shared: true, bonus_granted: true }
+    packages = {
+      packages: [
+        {
+          source: 'free',
+          granted_quota: 250000,
+          remaining_quota: 250000,
+          created_at: 1_770_000_000,
+          expires_at: 1_771_209_600,
+        },
+      ],
+      phone_shared: true,
+    }
+    const user = userEvent.setup()
+    await user.click(
+      telegramStep.getByRole('button', { name: 'Link Telegram' })
+    )
+
+    const dialog = within(await screen.findByRole('dialog'))
+    expect(
+      await dialog.findByText('Bağlandı, 250 TL bonus hesabınızda')
+    ).toBeVisible()
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('heading', {
+          name: '250 TL başlangıç bonusunuzu alın',
+        })
+      ).not.toBeInTheDocument()
+    )
+    expect(screen.getByRole('dialog')).toBeVisible()
   })
 
   it('shows the server message when the link cannot be created', async () => {
@@ -317,8 +373,9 @@ describe('start bonus card', () => {
     expect(
       await screen.findByText('Failed to create the Telegram link')
     ).toBeVisible()
-    expect(tab.close).toHaveBeenCalled()
-    expect(tab.location.href).toBe('')
+    expect(
+      screen.queryByRole('button', { name: 'Telegram Web’de aç' })
+    ).not.toBeInTheDocument()
   })
 
   it('reads the account and the packages again when the window regains focus', async () => {

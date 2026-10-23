@@ -478,7 +478,8 @@ func callHwTelegramLinkStart(t *testing.T, userID int) map[string]any {
 
 func TestHwTelegramLinkStart(t *testing.T) {
 	user, _ := setupSecurityEnrollmentTest(t)
-	require.NoError(t, model.DB.AutoMigrate(&model.HwTelegramLinkToken{}))
+	require.NoError(t, model.DB.AutoMigrate(&model.HwTelegramLinkToken{}, &model.HwUserSignal{}))
+	t.Setenv("HW_SIGNAL_SALT", strings.Repeat("s", 32))
 	previousName, previousToken := common.TelegramBotName, common.TelegramBotToken
 	t.Cleanup(func() { common.TelegramBotName, common.TelegramBotToken = previousName, previousToken })
 	t.Setenv("TELEGRAM_BOT_TOKEN", "")
@@ -494,7 +495,20 @@ func TestHwTelegramLinkStart(t *testing.T) {
 	require.NoError(t, model.DB.Model(&model.HwTelegramLinkToken{}).Where("user_id = ?", user.Id).Count(&stored).Error)
 	assert.EqualValues(t, 1, stored)
 
+	assert.Equal(t, false, data["linked"])
+
+	// A linked account that still owes the phone step gets a new link, which
+	// makes the bot ask for the number in that same chat.
 	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", user.Id).Update("telegram_id", "777").Error)
+	body = callHwTelegramLinkStart(t, user.Id)
+	require.Equal(t, true, body["success"], body)
+	data = body["data"].(map[string]any)
+	assert.Equal(t, true, data["linked"])
+	link, _ = data["url"].(string)
+	assert.True(t, strings.HasPrefix(link, "https://t.me/HisarWebAI_bot?start="), link)
+
+	// Once the number is shared there is nothing left to open.
+	require.NoError(t, model.HwRecordPhoneSignal(user.Id, "+905321234567"))
 	body = callHwTelegramLinkStart(t, user.Id)
 	require.Equal(t, true, body["success"], body)
 	assert.Equal(t, map[string]any{"linked": true}, body["data"])
@@ -505,5 +519,43 @@ func TestHwTelegramLinkStart(t *testing.T) {
 
 	common.TelegramBotName, common.TelegramBotToken = "HisarWebAI_bot", ""
 	body = callHwTelegramLinkStart(t, user.Id)
+	assert.Equal(t, false, body["success"])
+}
+
+func callHwTelegramLinkStatus(t *testing.T, userID int) map[string]any {
+	t.Helper()
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/hw/telegram/link", nil)
+	c.Set("id", userID)
+	HwTelegramLinkStatus(c)
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+	return body
+}
+
+// TestHwTelegramLinkStatus follows the three steps the link dialog waits for:
+// the account is linked, the number is shared and the free credit is granted.
+func TestHwTelegramLinkStatus(t *testing.T) {
+	user, _ := setupSecurityEnrollmentTest(t)
+	require.NoError(t, model.DB.AutoMigrate(&model.HwUserSignal{}, &model.HwCreditPackage{}, &model.HwCreditExtension{}))
+	t.Setenv("HW_SIGNAL_SALT", strings.Repeat("s", 32))
+
+	body := callHwTelegramLinkStatus(t, user.Id)
+	require.Equal(t, true, body["success"], body)
+	assert.Equal(t, map[string]any{"linked": false, "phone_shared": false, "bonus_granted": false}, body["data"])
+
+	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", user.Id).Update("telegram_id", "777").Error)
+	require.NoError(t, model.HwRecordPhoneSignal(user.Id, "+905321234567"))
+	body = callHwTelegramLinkStatus(t, user.Id)
+	assert.Equal(t, map[string]any{"linked": true, "phone_shared": true, "bonus_granted": false}, body["data"])
+
+	granted, err := model.GrantCreditPackage(nil, user.Id, 100, model.HwSourceFree, "free:test", time.Now().Unix())
+	require.NoError(t, err)
+	require.True(t, granted)
+	body = callHwTelegramLinkStatus(t, user.Id)
+	assert.Equal(t, map[string]any{"linked": true, "phone_shared": true, "bonus_granted": true}, body["data"])
+
+	body = callHwTelegramLinkStatus(t, user.Id+1000)
 	assert.Equal(t, false, body["success"])
 }

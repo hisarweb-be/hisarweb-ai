@@ -2417,6 +2417,7 @@
     "Failed to create the Discovery request: {{error}}": "建立 Discovery 請求失敗: {{error}}",
     "Failed to create the plan product": "建立套餐產品失敗",
     "Failed to create the Telegram link": "Failed to create the Telegram link",
+    "Failed to read the Telegram link status": "Failed to read the Telegram link status",
     "Exchange rate must be greater than 0": "匯率必須大於 0",
     "Excludes the first attempt. Counted per group.": "不含首次，依分組計算。",
     "Execute code in a sandbox during the response": "在回應過程中沙箱執行程式碼",

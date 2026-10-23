@@ -187,6 +187,8 @@ export interface SystemStatus {
   quota_remind_enabled?: boolean
   /** Site default low balance reminder threshold, in quota units */
   quota_remind_threshold?: number
+  /** HisarWeb AI: false while card payment is not configured on the server. */
+  hw_payment_available?: boolean
   [key: string]: unknown
 }
 

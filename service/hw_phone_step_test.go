@@ -793,6 +793,35 @@ func TestHwTelegramWebhookLinksAnAccount(t *testing.T) {
 		assert.Equal(t, hwTelegramTextsFor("en").LinkInvalid, sent[0].Text)
 	})
 
+	t.Run("an expired link token binds nothing and says so", func(t *testing.T) {
+		api, secret := hwTelegramTestSetup(t)
+		user := hwPhoneStepTestUser(t, "late-link@example.com")
+		body := hwTelegramTextUpdate(t, 25, 900025, "tr", "/start "+hwTelegramLinkTokenFor(t, user.Id))
+		late := time.Now().Add(time.Duration(model.HwTelegramLinkTokenLifetimeSeconds+1) * time.Second)
+
+		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, late)
+		assert.Equal(t, http.StatusOK, outcome.HTTPStatus())
+		assert.Empty(t, hwPhoneStepUserTelegramID(t, user.Id))
+
+		sent := api.messages()
+		require.Len(t, sent, 1)
+		assert.Equal(t, hwTelegramTextsFor("tr").LinkInvalid, sent[0].Text)
+	})
+
+	t.Run("a fresh link for an already linked account asks for the number again", func(t *testing.T) {
+		api, secret := hwTelegramTestSetup(t)
+		user := hwPhoneStepTestTelegramUser(t, "relink@example.com", "900026")
+		body := hwTelegramTextUpdate(t, 26, 900026, "tr", "/start "+hwTelegramLinkTokenFor(t, user.Id))
+
+		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+		assert.Equal(t, http.StatusOK, outcome.HTTPStatus())
+
+		sent := api.messages()
+		require.Len(t, sent, 1)
+		assert.Equal(t, hwTelegramTextsFor("tr").Prompt, sent[0].Text)
+		assert.Equal(t, hwTelegramTextsFor("tr").Button, sent[0].Button)
+	})
+
 	t.Run("a link is refused when the Telegram account belongs to another user", func(t *testing.T) {
 		api, secret := hwTelegramTestSetup(t)
 		hwPhoneStepTestTelegramUser(t, "holder@example.com", "900023")
