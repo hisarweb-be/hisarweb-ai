@@ -28,6 +28,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { toIntlLocale } from '@/i18n/languages'
 import { formatNumber } from '@/lib/format'
 
@@ -43,13 +44,52 @@ function seconds(value: number | null, t: HwText, locale: string | undefined) {
   return t('qualitySecondsUnit', { value: formatNumber(value, locale) })
 }
 
+type Figure = { label: string; value: string }
+
+/** The four measured figures of a model with enough data, in column order. */
+function measuredFigures(
+  entry: HwQualityTrafficModel,
+  t: HwText,
+  locale: string | undefined
+): Figure[] {
+  return [
+    {
+      label: t('qualitySuccess'),
+      value:
+        entry.success_percent == null
+          ? '-'
+          : t('qualityPercentUnit', {
+              value: formatNumber(entry.success_percent, locale),
+            }),
+    },
+    {
+      label: t('qualityMedian'),
+      value: seconds(entry.median_seconds, t, locale),
+    },
+    { label: t('qualityP95'), value: seconds(entry.p95_seconds, t, locale) },
+    {
+      label: t('qualitySpeed'),
+      value:
+        entry.output_tokens_per_second == null
+          ? '-'
+          : t('qualitySpeedUnit', {
+              value: formatNumber(entry.output_tokens_per_second, locale),
+            }),
+    },
+  ]
+}
+
+function useLocale() {
+  const { i18n } = useTranslation()
+  return toIntlLocale(i18n.resolvedLanguage || i18n.language)
+}
+
 function ModelRow(props: {
   entry: HwQualityTrafficModel
   minRequests: number
 }) {
   const t = useHwText()
-  const { i18n } = useTranslation()
-  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
+  const locale = useLocale()
   const entry = props.entry
   return (
     <TableRow>
@@ -58,24 +98,9 @@ function ModelRow(props: {
       </TableCell>
       <TableCell>{formatNumber(entry.requests, locale)}</TableCell>
       {entry.enough_data ? (
-        <>
-          <TableCell>
-            {entry.success_percent == null
-              ? '-'
-              : t('qualityPercentUnit', {
-                  value: formatNumber(entry.success_percent, locale),
-                })}
-          </TableCell>
-          <TableCell>{seconds(entry.median_seconds, t, locale)}</TableCell>
-          <TableCell>{seconds(entry.p95_seconds, t, locale)}</TableCell>
-          <TableCell>
-            {entry.output_tokens_per_second == null
-              ? '-'
-              : t('qualitySpeedUnit', {
-                  value: formatNumber(entry.output_tokens_per_second, locale),
-                })}
-          </TableCell>
-        </>
+        measuredFigures(entry, t, locale).map((figure) => (
+          <TableCell key={figure.label}>{figure.value}</TableCell>
+        ))
       ) : (
         <TableCell colSpan={4} className='text-muted-foreground'>
           {t('qualityTooFew', {
@@ -87,14 +112,84 @@ function ModelRow(props: {
   )
 }
 
+/** Phones: one card per model with every figure in view, no sideways scroll. */
+function ModelCard(props: {
+  entry: HwQualityTrafficModel
+  minRequests: number
+}) {
+  const t = useHwText()
+  const locale = useLocale()
+  const entry = props.entry
+  const figures: Figure[] = [
+    {
+      label: t('qualityRequests'),
+      value: formatNumber(entry.requests, locale),
+    },
+    ...(entry.enough_data ? measuredFigures(entry, t, locale) : []),
+  ]
+  return (
+    <li
+      className='bg-background/60 rounded-lg border p-4'
+      data-testid='hw-quality-traffic-card'
+    >
+      <p className='font-mono text-sm font-semibold break-all'>{entry.model}</p>
+      <dl className='mt-3 grid grid-cols-2 gap-x-4 gap-y-3'>
+        {figures.map((figure) => (
+          <div key={figure.label}>
+            <dt className='text-muted-foreground text-xs'>{figure.label}</dt>
+            <dd className='font-semibold tabular-nums'>{figure.value}</dd>
+          </div>
+        ))}
+      </dl>
+      {entry.enough_data ? null : (
+        <p className='text-muted-foreground mt-3 text-sm'>
+          {t('qualityTooFew', {
+            min: formatNumber(props.minRequests, locale),
+          })}
+        </p>
+      )}
+    </li>
+  )
+}
+
+function ModelTable(props: {
+  models: HwQualityTrafficModel[]
+  minRequests: number
+}) {
+  const t = useHwText()
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>{t('qualityModelColumn')}</TableHead>
+          <TableHead>{t('qualityRequests')}</TableHead>
+          <TableHead>{t('qualitySuccess')}</TableHead>
+          <TableHead>{t('qualityMedian')}</TableHead>
+          <TableHead>{t('qualityP95')}</TableHead>
+          <TableHead>{t('qualitySpeed')}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {props.models.map((entry) => (
+          <ModelRow
+            key={entry.model}
+            entry={entry}
+            minRequests={props.minRequests}
+          />
+        ))}
+      </TableBody>
+    </Table>
+  )
+}
+
 /**
  * The observed quality of every own model, one tab per window. Every figure
  * comes from the server; a model below the minimum shows only its count.
  */
 export function QualityTrafficTable(props: { traffic: HwQualityTraffic }) {
   const t = useHwText()
-  const { i18n } = useTranslation()
-  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
+  const locale = useLocale()
+  const isMobile = useIsMobile()
   const windows = props.traffic.windows
   const first = windows[0]
   if (!first) return null
@@ -119,29 +214,24 @@ export function QualityTrafficTable(props: { traffic: HwQualityTraffic }) {
                 <p className='text-muted-foreground py-6 text-sm'>
                   {t('qualityWindowEmpty')}
                 </p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t('qualityModelColumn')}</TableHead>
-                      <TableHead>{t('qualityRequests')}</TableHead>
-                      <TableHead>{t('qualitySuccess')}</TableHead>
-                      <TableHead>{t('qualityMedian')}</TableHead>
-                      <TableHead>{t('qualityP95')}</TableHead>
-                      <TableHead>{t('qualitySpeed')}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {window.models.map((entry) => (
-                      <ModelRow
-                        key={entry.model}
-                        entry={entry}
-                        minRequests={props.traffic.min_requests}
-                      />
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
+              ) : null}
+              {window.models.length > 0 && isMobile ? (
+                <ul className='space-y-3'>
+                  {window.models.map((entry) => (
+                    <ModelCard
+                      key={entry.model}
+                      entry={entry}
+                      minRequests={props.traffic.min_requests}
+                    />
+                  ))}
+                </ul>
+              ) : null}
+              {window.models.length > 0 && !isMobile ? (
+                <ModelTable
+                  models={window.models}
+                  minRequests={props.traffic.min_requests}
+                />
+              ) : null}
             </TabsContent>
           ))}
         </Tabs>
