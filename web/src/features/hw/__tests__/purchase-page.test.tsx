@@ -223,6 +223,18 @@ describe('top-up page', () => {
     expect(post).not.toHaveBeenCalled()
   })
 
+  it('while card payment is closed the bonus button opts out of the notice link underline', async () => {
+    getStatus.mockResolvedValue({ hw_payment_available: false })
+    await renderPage(false)
+
+    // AlertDescription underlines every link inside it; the button must not.
+    const bonus = await screen.findByRole('button', {
+      name: tr.topUpClosedBonusButton,
+    })
+    expect(bonus).toHaveClass('no-underline!')
+    expect(bonus).toHaveClass('hover:text-primary-foreground!')
+  })
+
   it('once card payment is configured keeps the order open', async () => {
     getStatus.mockResolvedValue({ hw_payment_available: true })
     await renderPage(false)
