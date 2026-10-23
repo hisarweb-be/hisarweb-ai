@@ -25,7 +25,7 @@ For commercial licensing, please contact support@quantumnous.com
  */
 import { useTranslation } from 'react-i18next'
 
-import { fillHwText, pickHwLanguage, type HwTextVars } from './texts'
+import { pickHwLanguage, useHwCurrencyText, type HwTextVars } from './texts'
 
 const tr = {
   title: 'Model fiyat tablosu',
@@ -34,7 +34,7 @@ const tr = {
   introToken:
     'Token, yapay zekânın metni işlediği küçük parçadır; İngilizce’de yaklaşık dörtte üç kelime eder, Türkçe metinde kelime başına daha çok token gider. “1M token” bir milyon token demektir. Girdi, modele gönderdiğiniz metindir; çıktı, modelin yazdığı yanıttır ve genellikle daha pahalıdır.',
   introWhy:
-    'Neden HisarWeb AI? Her modelin token fiyatı resmî liste fiyatının yarısıdır, her istekte ve anında. OpenRouter aynı modelleri resmî fiyattan veya daha pahalıya satar ve kredi alımında ayrıca hizmet bedeli alır. Anthropic’in kendi ön ödemeli kullanım kredileri en fazla %30 indirim verir ve peşin ödeme ister. HisarWeb AI’de taahhüt yok, ödeme TL ile ve ilk alışverişte 1000 TL değerine kadar ayrıca %50 hoş geldin indirimi var; bu ek indirim aşağıdaki yüzdelere dahil değildir.',
+    'Neden HisarWeb AI? Her modelin token fiyatı resmî liste fiyatının yarısıdır, her istekte ve anında. OpenRouter aynı modelleri resmî fiyattan veya daha pahalıya satar ve kredi alımında ayrıca hizmet bedeli alır. Anthropic’in kendi ön ödemeli kullanım kredileri en fazla %30 indirim verir ve peşin ödeme ister. HisarWeb AI’de taahhüt yok, ödeme {currencyName} ile ve ilk alışverişte {firstCap} değerine kadar ayrıca %50 hoş geldin indirimi var; bu ek indirim aşağıdaki yüzdelere dahil değildir.',
 
   tableLabel: 'Model başına 1M token fiyatı: resmi, OpenRouter ve HisarWeb AI',
   colModel: 'Model',
@@ -54,6 +54,8 @@ const tr = {
   bestPrice: 'En iyi fiyat',
 
   notesTitle: 'Notlar',
+  noteFxForeign:
+    '{symbol} tutarları 1 USD = {rate} {symbol} kuruyla hesaplanmıştır.',
   noteFx:
     '₺ tutarları 1 USD = {rate} ₺ kuruyla ({date}) hesaplanmıştır ve KDV hariçtir; aşağıdaki hesaplayıcı KDV dahil tutar gösterir.',
   noteSaving:
@@ -75,7 +77,7 @@ const en: Record<PriceTableTextKey, string> = {
   introToken:
     'A token is the small piece of text an AI model works with; in English it is about three quarters of a word, and Turkish text needs more tokens per word. “1M tokens” means one million tokens. Input is the text you send to the model; output is the answer it writes, which usually costs more.',
   introWhy:
-    'Why HisarWeb AI? Every model costs half the official list price per token, on every request and in real time. OpenRouter sells the same models at the official price or more and adds a fee when you buy credits. Anthropic’s own prepaid usage credits give at most 30% off and need payment up front. On HisarWeb AI there is no commitment, you pay in TRY, and your first purchase gets an extra 50% welcome discount on up to 1000 TL; that extra discount is not in the percentages below.',
+    'Why HisarWeb AI? Every model costs half the official list price per token, on every request and in real time. OpenRouter sells the same models at the official price or more and adds a fee when you buy credits. Anthropic’s own prepaid usage credits give at most 30% off and need payment up front. On HisarWeb AI there is no commitment, you pay in {currencyName}, and your first purchase gets an extra 50% welcome discount on up to {firstCap}; that extra discount is not in the percentages below.',
 
   tableLabel:
     'Price per 1M tokens per model: official, OpenRouter and HisarWeb AI',
@@ -96,6 +98,8 @@ const en: Record<PriceTableTextKey, string> = {
   bestPrice: 'Best price',
 
   notesTitle: 'Notes',
+  noteFxForeign:
+    'Amounts in {symbol} use 1 USD = {rate} {symbol}.',
   noteFx:
     'Amounts in ₺ use 1 USD = {rate} ₺ ({date}) and exclude KDV (VAT); the calculator below shows amounts including KDV.',
   noteSaving:
@@ -119,7 +123,6 @@ export function usePriceTableText(): (
   vars?: HwTextVars
 ) => string {
   const { i18n } = useTranslation()
-  const dictionary =
-    dictionaries[pickHwLanguage(i18n.resolvedLanguage ?? i18n.language)]
-  return (key, vars) => fillHwText(dictionary[key], vars)
+  const language = pickHwLanguage(i18n.resolvedLanguage ?? i18n.language)
+  return useHwCurrencyText(dictionaries[language], language)
 }

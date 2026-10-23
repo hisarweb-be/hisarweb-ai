@@ -7,10 +7,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// hwFirstPurchaseDiscountCapTRY is the part of the list price (in TRY) that
+// HwFirstPurchaseDiscountCapTRY is the part of the list price (in TRY) that
 // receives the first-purchase discount. The part above it in the same purchase
-// is discounted at the standard rate.
-var hwFirstPurchaseDiscountCapTRY = decimal.NewFromInt(1000)
+// is discounted at the standard rate. Another currency uses the same value in
+// dollars, converted at the rate of its own order (service.hwDiscountCap).
+var HwFirstPurchaseDiscountCapTRY = decimal.NewFromInt(1000)
 
 // Discount rates in percent, and the payable share that follows from them.
 // Later purchases get no purchase discount: the token prices themselves are
@@ -26,43 +27,44 @@ const (
 // ErrHwInvalidPurchaseValue rejects a purchase without a positive list value.
 var ErrHwInvalidPurchaseValue = errors.New("purchase list value must be positive")
 
-// HwPurchaseQuote is the price breakdown of one purchase. The customer always
-// receives the full list value as credit and pays PayableTRY.
+// HwPurchaseQuote is the price breakdown of one purchase, in the currency of
+// the purchase. The customer always receives the full list value as credit and
+// pays Payable.
 type HwPurchaseQuote struct {
-	// ListValueTRY is the official list value of the purchase, rounded to cents.
-	ListValueTRY decimal.Decimal
-	// PayableTRY is what the customer pays.
-	PayableTRY decimal.Decimal
-	// DiscountTRY is the discount given on this purchase.
-	DiscountTRY decimal.Decimal
-	// FirstPurchaseValueTRY is the value portion discounted as first purchase.
-	FirstPurchaseValueTRY decimal.Decimal
-	// RemainderValueTRY is the value portion discounted at the standard rate.
-	RemainderValueTRY decimal.Decimal
+	// ListValue is the official list value of the purchase, rounded to cents.
+	ListValue decimal.Decimal
+	// Payable is what the customer pays.
+	Payable decimal.Decimal
+	// Discount is the discount given on this purchase.
+	Discount decimal.Decimal
+	// FirstPurchaseValue is the value portion discounted as first purchase.
+	FirstPurchaseValue decimal.Decimal
+	// RemainderValue is the value portion discounted at the standard rate.
+	RemainderValue decimal.Decimal
 }
 
-// HwComputePurchase prices a purchase. On the first paid purchase the value up
-// to HwFirstPurchaseDiscountCapTRY gets 50 % off and everything above it the
-// standard rate; every later purchase gets the standard rate. Amounts are rounded to cents, half away
-// from zero.
-func HwComputePurchase(listValueTRY decimal.Decimal, firstPurchase bool) (HwPurchaseQuote, error) {
-	if !listValueTRY.IsPositive() {
+// HwComputePurchase prices a purchase in one currency. On the first paid
+// purchase the value up to discountCap (in that same currency) gets 50 % off and
+// everything above it the standard rate; every later purchase gets the standard
+// rate. Amounts are rounded to cents, half away from zero.
+func HwComputePurchase(listValue decimal.Decimal, firstPurchase bool, discountCap decimal.Decimal) (HwPurchaseQuote, error) {
+	if !listValue.IsPositive() {
 		return HwPurchaseQuote{}, ErrHwInvalidPurchaseValue
 	}
-	listValue := listValueTRY.Round(2)
-	quote := HwPurchaseQuote{ListValueTRY: listValue}
+	listValue = listValue.Round(2)
+	quote := HwPurchaseQuote{ListValue: listValue}
 	if firstPurchase {
-		quote.FirstPurchaseValueTRY = decimal.Min(listValue, hwFirstPurchaseDiscountCapTRY)
-		quote.RemainderValueTRY = listValue.Sub(quote.FirstPurchaseValueTRY)
+		quote.FirstPurchaseValue = decimal.Min(listValue, discountCap)
+		quote.RemainderValue = listValue.Sub(quote.FirstPurchaseValue)
 	} else {
-		quote.FirstPurchaseValueTRY = decimal.Zero
-		quote.RemainderValueTRY = listValue
+		quote.FirstPurchaseValue = decimal.Zero
+		quote.RemainderValue = listValue
 	}
-	payable := quote.FirstPurchaseValueTRY.Mul(decimal.NewFromInt(hwFirstPurchasePayablePercent)).
-		Add(quote.RemainderValueTRY.Mul(decimal.NewFromInt(hwStandardPayablePercent))).
+	payable := quote.FirstPurchaseValue.Mul(decimal.NewFromInt(hwFirstPurchasePayablePercent)).
+		Add(quote.RemainderValue.Mul(decimal.NewFromInt(hwStandardPayablePercent))).
 		Div(decimal.NewFromInt(100))
-	quote.PayableTRY = payable.Round(2)
-	quote.DiscountTRY = listValue.Sub(quote.PayableTRY)
+	quote.Payable = payable.Round(2)
+	quote.Discount = listValue.Sub(quote.Payable)
 	return quote, nil
 }
 

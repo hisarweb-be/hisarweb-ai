@@ -39,6 +39,10 @@ type HwPriceSnapshot struct {
 	FxDate string `json:"fx_date" gorm:"type:varchar(10);not null"`
 	// TryPerUsd is the TRY per USD rate as decimal text (e.g. "49.5523").
 	TryPerUsd string `json:"try_per_usd" gorm:"type:varchar(32);not null"`
+	// EurPerUsd is the EUR per USD cross rate of the same bulletin as decimal
+	// text, or empty when the bulletin had no usable EUR rate. It only travels
+	// from the fetch to the rate options and is not stored.
+	EurPerUsd string `json:"-" gorm:"-"`
 	// Models maps our own model names to their list price, stored as JSON
 	// text. Only the models we sell are kept, so the column stays small on
 	// every supported database.

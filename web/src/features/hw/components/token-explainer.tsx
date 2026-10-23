@@ -25,17 +25,19 @@ import { TitledCard } from '@/components/ui/titled-card'
 import { cn } from '@/lib/utils'
 
 import { MODEL_PRICES } from '../data/model-prices'
-import { formatHwTry } from '../lib/format'
+import { useHwCurrency } from '../hooks/use-hw-currency'
+import { formatHwAmount } from '../lib/format'
 import {
   ACTIVE_HOURS_PER_DAY,
   HEAVY_USD_PER_ACTIVE_DAY,
   HOURS_PER_SMALL_PROJECT,
   REFERENCE_MODEL,
   TYPICAL_USD_PER_ACTIVE_DAY,
-  USAGE_BUDGETS_TRY,
   USAGE_SOURCE_URL,
   estimateUsage,
   formatEstimate,
+  usageBudgetsIn,
+  usageRatePerUsd,
 } from '../lib/usage-calculator'
 import { useHwText } from '../texts'
 
@@ -59,10 +61,18 @@ const NOTES = [
 export function TokenExplainer(props: TokenExplainerProps) {
   const hw = useHwText()
   const id = useId()
-  const [budget, setBudget] = useState<number>(USAGE_BUDGETS_TRY[1])
+  const { currency, rates } = useHwCurrency()
+  const budgets = usageBudgetsIn(currency, rates)
+  // The selected button is kept by position, so a currency switch keeps it.
+  const [budgetIndex, setBudgetIndex] = useState(1)
+  const budget = budgets[budgetIndex] ?? budgets[0]
   const [model, setModel] = useState<string>(REFERENCE_MODEL)
 
-  const estimate = estimateUsage(budget, model)
+  const estimate = estimateUsage(
+    budget,
+    model,
+    usageRatePerUsd(currency, rates)
+  )
 
   return (
     <TitledCard
@@ -99,16 +109,16 @@ export function TokenExplainer(props: TokenExplainerProps) {
                 aria-label={hw('calcBudgetLabel')}
                 className='flex flex-wrap gap-2'
               >
-                {USAGE_BUDGETS_TRY.map((value) => (
+                {budgets.map((value, index) => (
                   <Button
                     key={value}
                     type='button'
                     size='sm'
-                    variant={budget === value ? 'default' : 'outline'}
-                    aria-pressed={budget === value}
-                    onClick={() => setBudget(value)}
+                    variant={budgetIndex === index ? 'default' : 'outline'}
+                    aria-pressed={budgetIndex === index}
+                    onClick={() => setBudgetIndex(index)}
                   >
-                    {formatHwTry(value, props.locale)}
+                    {formatHwAmount(value, currency, props.locale)}
                   </Button>
                 ))}
               </div>

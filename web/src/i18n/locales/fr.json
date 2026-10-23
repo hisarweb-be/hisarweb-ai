@@ -3205,6 +3205,8 @@
     "Includes request rules": "Inclut des règles de requête",
     "Invalid provider ID": "ID de fournisseur invalide",
     "Invalid request": "Requête invalide",
+    "Top-up value must be between {{min}} {{currency}} and {{max}} {{currency}}": "Le montant de la recharge doit être compris entre {{min}} {{currency}} et {{max}} {{currency}}",
+    "The payment provider's cost for this order is not available yet; nothing was changed, repeat the refund later": "Les frais du prestataire de paiement pour cette commande ne sont pas encore disponibles ; rien n'a été modifié, réessayez le remboursement plus tard",
     "Invalid request body.": "Corps de requête invalide.",
     "Invalid request parameter format": "Format des paramètres de requête invalide",
     "Invalid request parameters: {{error}}": "Paramètres de requête invalides : {{error}}",
@@ -7334,6 +7336,9 @@
     "HisarWeb AI is based on New API (AGPL-3.0) by QuantumNous.": "HisarWeb AI est basé sur New API (AGPL-3.0) de QuantumNous.",
     "Bot token": "Bot token",
     "Telegram bot token from BotFather": "Telegram bot token from BotFather",
-    "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.": "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit."
+    "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.": "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.",
+    "HisarWeb pays the payment and currency conversion costs. You get the full credit for what you pay, with no surcharge or deduction.": "HisarWeb prend en charge les frais de paiement et de conversion de devise. Vous recevez le crédit complet pour le montant payé, sans supplément ni retenue.",
+    "Costs and refunds": "Frais et remboursements",
+    "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.": "En cas de remboursement, les frais de traitement du paiement et de conversion de devise payés par HisarWeb sont déduits du montant remboursé."
   }
 }

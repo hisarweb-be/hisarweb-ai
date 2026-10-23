@@ -3205,6 +3205,8 @@
     "Includes request rules": "Bao gồm quy tắc yêu cầu",
     "Invalid provider ID": "ID nhà cung cấp không hợp lệ",
     "Invalid request": "Yêu cầu không hợp lệ",
+    "Top-up value must be between {{min}} {{currency}} and {{max}} {{currency}}": "Giá trị nạp phải nằm trong khoảng từ {{min}} {{currency}} đến {{max}} {{currency}}",
+    "The payment provider's cost for this order is not available yet; nothing was changed, repeat the refund later": "Chưa có chi phí của nhà cung cấp thanh toán cho đơn hàng này; chưa có thay đổi nào, hãy thử hoàn tiền lại sau",
     "Invalid request body.": "Nội dung yêu cầu không hợp lệ.",
     "Invalid request parameter format": "Định dạng tham số yêu cầu không hợp lệ",
     "Invalid request parameters: {{error}}": "Tham số yêu cầu không hợp lệ: {{error}}",
@@ -7334,6 +7336,9 @@
     "HisarWeb AI is based on New API (AGPL-3.0) by QuantumNous.": "HisarWeb AI dựa trên New API (AGPL-3.0) của QuantumNous.",
     "Bot token": "Bot token",
     "Telegram bot token from BotFather": "Telegram bot token from BotFather",
-    "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.": "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit."
+    "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.": "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.",
+    "HisarWeb pays the payment and currency conversion costs. You get the full credit for what you pay, with no surcharge or deduction.": "HisarWeb chịu chi phí thanh toán và quy đổi tiền tệ. Bạn nhận đủ số tín dụng tương ứng với số tiền đã trả, không phụ phí và không bị khấu trừ.",
+    "Costs and refunds": "Chi phí và hoàn tiền",
+    "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.": "Khi hoàn tiền, chi phí xử lý thanh toán và quy đổi tiền tệ mà HisarWeb đã trả sẽ được trừ vào số tiền hoàn lại."
   }
 }

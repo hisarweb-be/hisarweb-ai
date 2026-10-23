@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useTranslation } from 'react-i18next'
+
 import {
   CodeBlock,
   CodeBlockCopyButton,
@@ -113,6 +115,7 @@ function Paragraph(props: { children: React.ReactNode }) {
 
 /** The plain-language walk from sign-up to a first answer in Claude Code. */
 function BeginnerGuide() {
+  const { t } = useTranslation()
   const guide = useDocsGuideText()
 
   return (
@@ -195,6 +198,20 @@ function BeginnerGuide() {
           </GuideStep>
         </ol>
       </section>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className='text-base'>{t('Costs and refunds')}</CardTitle>
+        </CardHeader>
+        <CardContent className='space-y-3 text-sm'>
+          <Paragraph>{t('HisarWeb pays the payment and currency conversion costs. You get the full credit for what you pay, with no surcharge or deduction.')}</Paragraph>
+          <Paragraph>
+            {t(
+              'On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.'
+            )}
+          </Paragraph>
+        </CardContent>
+      </Card>
     </>
   )
 }

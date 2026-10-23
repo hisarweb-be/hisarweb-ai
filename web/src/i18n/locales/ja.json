@@ -3205,6 +3205,8 @@
     "Includes request rules": "リクエストルールを含む",
     "Invalid provider ID": "プロバイダー ID が無効です",
     "Invalid request": "リクエストが無効です",
+    "Top-up value must be between {{min}} {{currency}} and {{max}} {{currency}}": "チャージ金額は {{min}} {{currency}} から {{max}} {{currency}} の間で指定してください",
+    "The payment provider's cost for this order is not available yet; nothing was changed, repeat the refund later": "この注文に対する決済事業者の手数料はまだ取得できません。何も変更していません。後で返金をやり直してください",
     "Invalid request body.": "リクエスト本文が無効です。",
     "Invalid request parameter format": "リクエストパラメータの形式が正しくありません",
     "Invalid request parameters: {{error}}": "リクエストパラメーターが無効です: {{error}}",
@@ -7334,6 +7336,9 @@
     "HisarWeb AI is based on New API (AGPL-3.0) by QuantumNous.": "HisarWeb AI は QuantumNous の New API（AGPL-3.0）に基づいています。",
     "Bot token": "Bot token",
     "Telegram bot token from BotFather": "Telegram bot token from BotFather",
-    "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.": "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit."
+    "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.": "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.",
+    "HisarWeb pays the payment and currency conversion costs. You get the full credit for what you pay, with no surcharge or deduction.": "決済手数料と通貨換算コストはHisarWebが負担します。お支払い額と同額のクレジットがそのまま付与され、追加料金や差し引きはありません。",
+    "Costs and refunds": "費用と返金",
+    "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.": "返金の際は、HisarWebが負担した決済処理費用と通貨換算費用が返金額から差し引かれます。"
   }
 }

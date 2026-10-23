@@ -22,6 +22,7 @@ import {
   blendedPrice,
   type ModelPrice,
 } from '../data/model-prices'
+import { hwTryAmountIn, niceFloor, type HwCurrency, type HwRates } from './currency'
 
 /**
  * "What does my credit buy?" estimate for people who are new to AI coding tools.
@@ -51,6 +52,22 @@ export const REFERENCE_MODEL = 'claude-sonnet-5-5'
 
 export const USAGE_BUDGETS_TRY = [250, 500, 1000, 2500] as const
 
+/** The budget buttons in `currency`: the TRY budgets, converted via USD. */
+export function usageBudgetsIn(
+  currency: HwCurrency,
+  rates: HwRates
+): number[] {
+  return USAGE_BUDGETS_TRY.map((budget) =>
+    niceFloor(hwTryAmountIn(budget, currency, rates))
+  )
+}
+
+/** Units of `currency` per USD for the estimate; TRY uses the price table's rate. */
+export function usageRatePerUsd(currency: HwCurrency, rates: HwRates): number {
+  if (currency === 'TRY') return MODEL_PRICES_TRY_PER_USD
+  return currency === 'USD' ? 1 : (rates[currency] ?? MODEL_PRICES_TRY_PER_USD)
+}
+
 export type UsageEstimate = {
   /** Hours of active coding when the usage is as heavy as the top 10 % of users. */
   hoursLow: number
@@ -65,19 +82,21 @@ export function findModelPrice(model: string): ModelPrice | undefined {
 }
 
 /**
- * Estimates how long `budgetTry` lasts on `model`. Returns null when the
- * budget is not positive or a price is missing, so nothing is guessed.
+ * Estimates how long `budget` (in a currency worth `ratePerUsd` per USD, TRY by
+ * default) lasts on `model`. Returns null when the budget is not positive or a
+ * price is missing, so nothing is guessed.
  */
 export function estimateUsage(
-  budgetTry: number,
-  model: string
+  budget: number,
+  model: string,
+  ratePerUsd: number = MODEL_PRICES_TRY_PER_USD
 ): UsageEstimate | null {
   const ours = findModelPrice(model)?.hisarweb
   const reference = findModelPrice(REFERENCE_MODEL)?.official
-  if (!ours || !reference || !(budgetTry > 0)) return null
+  if (!ours || !reference || !(budget > 0)) return null
 
   const priceRatio = blendedPrice(ours) / blendedPrice(reference)
-  const budgetUsd = budgetTry / MODEL_PRICES_TRY_PER_USD
+  const budgetUsd = budget / ratePerUsd
   const hoursFor = (usdPerDay: number) =>
     budgetUsd / ((usdPerDay / ACTIVE_HOURS_PER_DAY) * priceRatio)
 

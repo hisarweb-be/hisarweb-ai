@@ -3205,6 +3205,8 @@
     "Includes request rules": "Includes request rules",
     "Invalid provider ID": "Invalid provider ID",
     "Invalid request": "Invalid request",
+    "Top-up value must be between {{min}} {{currency}} and {{max}} {{currency}}": "Top-up value must be between {{min}} {{currency}} and {{max}} {{currency}}",
+    "The payment provider's cost for this order is not available yet; nothing was changed, repeat the refund later": "The payment provider's cost for this order is not available yet; nothing was changed, repeat the refund later",
     "Invalid request body.": "Invalid request body.",
     "Invalid request parameter format": "Invalid request parameter format",
     "Invalid request parameters: {{error}}": "Invalid request parameters: {{error}}",
@@ -7443,6 +7445,9 @@
     "Works with tools that speak the OpenAI format, such as Cursor and Cline. You only change the address and the key in the tool.": "Works with tools that speak the OpenAI format, such as Cursor and Cline. You only change the address and the key in the tool.",
     "Anthropic-compatible (Claude Code)": "Anthropic-compatible (Claude Code)",
     "Works with tools that speak the Anthropic format, such as Claude Code. You only change the address and the key in the tool.": "Works with tools that speak the Anthropic format, such as Claude Code. You only change the address and the key in the tool.",
-    "Connection type: {{name}}": "Connection type: {{name}}"
+    "Connection type: {{name}}": "Connection type: {{name}}",
+    "HisarWeb pays the payment and currency conversion costs. You get the full credit for what you pay, with no surcharge or deduction.": "HisarWeb pays the payment and currency conversion costs. You get the full credit for what you pay, with no surcharge or deduction.",
+    "Costs and refunds": "Costs and refunds",
+    "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.": "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount."
   }
 }

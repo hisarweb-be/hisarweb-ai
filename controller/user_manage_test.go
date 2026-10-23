@@ -724,3 +724,42 @@ func TestUpdateUserSettingKeepsWhatTheRequestLeavesOut(t *testing.T) {
 		})
 	}
 }
+
+// The preferred top-up currency is stored in the user setting: TRY, EUR or USD
+// (any letter case), or empty to clear it. Anything else is refused and leaves
+// the stored value alone, and the other settings stay as they were.
+func TestUpdateSelfStoresThePreferredTopUpCurrency(t *testing.T) {
+	db := setupManageUserTestDB(t)
+	setting, err := common.Marshal(dto.UserSetting{Language: "tr", HwCurrency: "TRY"})
+	require.NoError(t, err)
+	user := model.User{Username: "currency-owner", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AffCode: "currency-owner-aff", Setting: string(setting)}
+	require.NoError(t, db.Create(&user).Error)
+
+	update := func(body string) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Request = httptest.NewRequest(http.MethodPut, "/api/user/self", strings.NewReader(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set("id", user.Id)
+		UpdateSelf(c)
+	}
+	stored := func() dto.UserSetting {
+		var current model.User
+		require.NoError(t, db.First(&current, user.Id).Error)
+		return current.GetSetting()
+	}
+
+	steps := []struct{ body, want string }{
+		{`{"hw_currency":"eur"}`, "EUR"},
+		{`{"hw_currency":"GBP"}`, "EUR"},
+		{`{"hw_currency":5}`, "EUR"},
+		{`{"hw_currency":" USD "}`, "USD"},
+		{`{"hw_currency":""}`, ""},
+		{`{"hw_currency":"try"}`, "TRY"},
+	}
+	for _, step := range steps {
+		update(step.body)
+		assert.Equal(t, step.want, stored().HwCurrency, step.body)
+		assert.Equal(t, "tr", stored().Language, "other settings stay")
+	}
+}

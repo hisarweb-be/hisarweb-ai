@@ -910,6 +910,29 @@ func UpdateSelf(c *gin.Context) {
 		return
 	}
 
+	// HisarWeb AI: preferred top-up currency (TRY, EUR, USD, or empty to clear)
+	if hwCurrency, exists := requestData["hw_currency"]; exists && !passwordRequested {
+		currencyStr, ok := hwCurrency.(string)
+		currencyStr = strings.ToUpper(strings.TrimSpace(currencyStr))
+		if !ok || (currencyStr != "" && !model.HwOrderCurrencyAllowed(currencyStr)) {
+			common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid request"))
+			return
+		}
+		user, err := model.GetUserById(c.GetInt("id"), false)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		currentSetting := user.GetSetting()
+		currentSetting.HwCurrency = currencyStr
+		if err := model.UpdateUserSetting(user.Id, currentSetting); err != nil {
+			common.ApiErrorT(c, "Update failed")
+			return
+		}
+		common.ApiSuccessT(c, "Update successful", nil)
+		return
+	}
+
 	// 原有的用户信息更新逻辑
 	var user model.User
 	requestDataBytes, err := common.Marshal(requestData)

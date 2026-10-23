@@ -379,6 +379,9 @@ func hwOrderTestSetup(t *testing.T) *hwFakeProvider {
 		model.HwMaxTopUpTryOption,
 		model.HwMaxOpenOrdersOption,
 		model.HwCheckoutReturnURLOption,
+		model.HwEurPerUsdOption,
+		model.HwEurPerUsdDateOption,
+		model.HwEurPresetBaseOption,
 	}
 	common.OptionMapRWMutex.Lock()
 	if common.OptionMap == nil {
@@ -594,7 +597,7 @@ func TestHwTopUpFullPath(t *testing.T) {
 	order := hwOrderTestCreate(t, buyer.Id, 600)
 	providerOrder := fake.providerOrder(order.MerchantRef)
 	assert.EqualValues(t, 30000, providerOrder.Amount, "the first purchase pays 300 of 600 TL")
-	assert.Equal(t, model.HwOrderCurrency, providerOrder.Currency)
+	assert.Equal(t, model.HwCurrencyTRY, providerOrder.Currency)
 	assert.Equal(t, buyer.Email, providerOrder.Email)
 
 	fake.setFingerprint("card-fingerprint-abc")
@@ -753,7 +756,7 @@ func TestHwTopUpIgnoresAmountsFromTheClient(t *testing.T) {
 	hwOrderTestIdentify(t, buyer.Id, "client-amount")
 
 	var request HwTopUpRequest
-	require.NoError(t, common.Unmarshal([]byte(`{"package_try":600,"amount":1,"payable_try_minor":1,"list_quota":1}`), &request))
+	require.NoError(t, common.Unmarshal([]byte(`{"package_try":600,"payable_try_minor":1,"list_quota":1}`), &request))
 	order, err := HwCreateTopUpOrder(context.Background(), buyer.Id, request, time.Now())
 	require.NoError(t, err)
 	assert.EqualValues(t, 30000, fake.providerOrder(order.MerchantRef).Amount)

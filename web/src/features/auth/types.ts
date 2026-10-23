@@ -189,6 +189,12 @@ export interface SystemStatus {
   quota_remind_threshold?: number
   /** HisarWeb AI: false while card payment is not configured on the server. */
   hw_payment_available?: boolean
+  /** HisarWeb AI: currencies on sale, in switch order (absent on old servers). */
+  hw_currencies?: string[]
+  /** HisarWeb AI: units of each currency per 1 USD, as decimal strings. */
+  hw_rates?: Record<string, string>
+  /** HisarWeb AI: top-up limits and presets per currency, in whole units. */
+  hw_topup?: Record<string, { min: number; max: number; presets: number[] }>
   [key: string]: unknown
 }
 

@@ -2765,6 +2765,9 @@
     "Anthropic-compatible (Claude Code)": "Anthropic uyumlu (Claude Code)",
     "Works with tools that speak the Anthropic format, such as Claude Code. You only change the address and the key in the tool.": "Anthropic biçimini konuşan araçlarla çalışır, örneğin Claude Code. Araçta yalnızca adresi ve anahtarı değiştirirsiniz.",
     "Connection type: {{name}}": "Bağlantı türü: {{name}}",
-    "Billing": "Ücretlendirme"
+    "Billing": "Ücretlendirme",
+    "HisarWeb pays the payment and currency conversion costs. You get the full credit for what you pay, with no surcharge or deduction.": "Ödeme ve kur dönüşümü masraflarını HisarWeb öder. Ödediğiniz tutarın tamamı krediniz olarak yüklenir; ek ücret veya kesinti yoktur.",
+    "Costs and refunds": "Masraflar ve iade",
+    "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.": "İade durumunda, HisarWeb'in ödediği ödeme işleme ve kur dönüşümü masrafları iade edilecek tutardan düşülür."
   }
 }

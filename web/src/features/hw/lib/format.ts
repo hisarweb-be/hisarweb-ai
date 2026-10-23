@@ -20,18 +20,25 @@ import type { HwLanguage, HwTextKey, HwTextVars } from '../texts'
 import { formatDateTimeStr } from '@/lib/format'
 import { HW_COMPARE_MAX_MONTHLY_TOKENS } from '../constants'
 import type { HwMoneyText } from '../types'
+import type { HwCurrency } from './currency'
 
 /**
- * Formats a lira amount. The HisarWeb AI service is priced and charged in TRY,
- * whatever display currency the rest of the console is set to, so this does not
- * go through `@/lib/currency` (which follows that display setting).
+ * Formats an amount that is already in `currency` (TRY, EUR or USD): whole
+ * amounts without decimals, anything else with two. The HisarWeb AI service has
+ * its own currency, so this does not go through `@/lib/currency` (which follows
+ * the console's display setting). `locale` must already be an Intl locale.
  */
-export function formatHwTry(amount: number, locale?: string): string {
+export function formatHwAmount(
+  amount: number,
+  currency: HwCurrency,
+  locale?: string
+): string {
   if (!Number.isFinite(amount)) return '-'
   const fractionDigits = Number.isInteger(amount) ? 0 : 2
   return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: 'TRY',
+    currency,
+    currencyDisplay: currency === 'TRY' ? 'symbol' : 'narrowSymbol',
     minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits,
   }).format(amount)
@@ -75,15 +82,15 @@ export function parseHwAmount(
 }
 
 /**
- * Formats an amount that is already in `currency` (the API's official USD price
- * and its TRY prices). The shared currency helpers convert quota into the
- * admin's display currency, which is not what these amounts are, so this page
- * formats the amount directly. Sub-unit amounts keep six decimals so a cheap
- * request never displays as zero.
+ * Formats an API amount that is already in `currency` (the official USD price,
+ * the TRY prices, or a USD price converted with `hw_rates`). The shared currency
+ * helpers convert quota into the admin's display currency, which is not what
+ * these amounts are, so this page formats the amount directly. Sub-unit amounts
+ * keep six decimals so a cheap request never displays as zero.
  */
 export function formatHwMoney(
   value: number | null,
-  currency: 'TRY' | 'USD',
+  currency: HwCurrency,
   locale?: string
 ): string {
   if (value == null || !Number.isFinite(value)) return '-'
@@ -92,6 +99,7 @@ export function formatHwMoney(
   return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
+    currencyDisplay: currency === 'TRY' ? 'symbol' : 'narrowSymbol',
     minimumFractionDigits: 2,
     maximumFractionDigits,
   }).format(value)

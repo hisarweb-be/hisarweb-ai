@@ -107,6 +107,25 @@ func HwLastPurchasedQuota(userID int) (int, bool, error) {
 	return pkgs[0].GrantedQuota, true, nil
 }
 
+// HwLastPaidOrderCurrency returns the currency of the most recent paid order of
+// the customer, or an empty string when there is none. Customer mails write
+// their amounts in that currency.
+func HwLastPaidOrderCurrency(userID int) (string, error) {
+	if userID <= 0 {
+		return "", ErrHwInvalidOrder
+	}
+	var orders []HwOrder
+	err := DB.Select("id", "currency").
+		Where("user_id = ? AND status = ?", userID, HwOrderStatusPaid).
+		Order("paid_at DESC, id DESC").
+		Limit(1).
+		Find(&orders).Error
+	if err != nil || len(orders) == 0 {
+		return "", err
+	}
+	return orders[0].Currency, nil
+}
+
 // HwLastOrderLanguage returns the language the customer chose on the most recent
 // top-up order, or an empty string when there is no order. It is the first
 // source of the mail language: the choice made at the checkout is the closest

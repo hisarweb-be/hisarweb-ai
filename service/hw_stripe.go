@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"math/big"
 	"net/http"
 	"net/url"
 	"os"
@@ -145,14 +146,47 @@ func (intent *hwStripeIntent) UnmarshalJSON(data []byte) error {
 }
 
 type hwStripeIntent struct {
-	Id           string `json:"id"`
-	LatestCharge *struct {
-		PaymentMethodDetails struct {
-			Card struct {
-				Fingerprint string `json:"fingerprint"`
-			} `json:"card"`
-		} `json:"payment_method_details"`
-	} `json:"latest_charge"`
+	Id           string          `json:"id"`
+	LatestCharge *hwStripeCharge `json:"latest_charge"`
+}
+
+// hwStripeCharge is the part of a charge the integration reads: the paying
+// card, what was paid and refunded, and the balance transaction that carries
+// the fee Stripe took.
+type hwStripeCharge struct {
+	Id                   string `json:"id"`
+	Amount               int64  `json:"amount"`
+	Currency             string `json:"currency"`
+	AmountRefunded       int64  `json:"amount_refunded"`
+	PaymentMethodDetails struct {
+		Card struct {
+			Fingerprint string `json:"fingerprint"`
+		} `json:"card"`
+	} `json:"payment_method_details"`
+	// BalanceTransaction is nil while Stripe has not booked the charge yet.
+	BalanceTransaction *hwStripeBalanceTransaction `json:"balance_transaction"`
+}
+
+// hwStripeBalanceTransaction is what the charge cost. Amount and Fee are in the
+// currency Stripe settles in (Currency), which can differ from the currency the
+// customer paid in; Fee holds processing and conversion costs together.
+type hwStripeBalanceTransaction struct {
+	Id       string `json:"id"`
+	Amount   int64  `json:"amount"`
+	Fee      int64  `json:"fee"`
+	Currency string `json:"currency"`
+}
+
+// UnmarshalJSON accepts a bare id (not expanded) next to the object; the bare
+// form leaves Amount and Currency empty, which the refund plan refuses.
+func (bt *hwStripeBalanceTransaction) UnmarshalJSON(data []byte) error {
+	var id string
+	if common.Unmarshal(data, &id) == nil {
+		bt.Id = id
+		return nil
+	}
+	type plain hwStripeBalanceTransaction
+	return common.Unmarshal(data, (*plain)(bt))
 }
 
 // toOrder maps a session onto the provider-neutral order the settle step checks.
@@ -220,11 +254,15 @@ func (config HwStripeConfig) GetOrder(ctx context.Context, sessionID string) (hw
 }
 
 func (config HwStripeConfig) getSession(ctx context.Context, sessionID string) (hwStripeSession, error) {
+	return config.getSessionExpanded(ctx, sessionID, "payment_intent.latest_charge")
+}
+
+func (config HwStripeConfig) getSessionExpanded(ctx context.Context, sessionID, expand string) (hwStripeSession, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if !strings.HasPrefix(sessionID, hwStripeSessionPrefix) {
 		return hwStripeSession{}, ErrHwStripeUnusableResponse
 	}
-	query := url.Values{"expand[]": {"payment_intent.latest_charge"}}
+	query := url.Values{"expand[]": {expand}}
 	return config.do(ctx, http.MethodGet, "/v1/checkout/sessions/"+url.PathEscape(sessionID)+"?"+query.Encode(), nil, "")
 }
 
@@ -238,18 +276,91 @@ func (config HwStripeConfig) CancelOrder(ctx context.Context, sessionID string) 
 	return err
 }
 
-// Refund returns the money of a paid session to the card. The idempotency key is
-// derived from the order, so repeating the admin refund never refunds twice.
-func (config HwStripeConfig) Refund(ctx context.Context, sessionID, merchantRef string) error {
-	session, err := config.getSession(ctx, sessionID)
+// ErrHwRefundFeeUnavailable: the cost Stripe took for an order cannot be read
+// yet (its balance transaction is not booked, or the lookup failed). Nothing was
+// changed; the refund can be repeated later. It never falls back to a refund
+// without the deduction.
+var ErrHwRefundFeeUnavailable = errors.New("the provider cost of the payment is not available yet")
+
+// HwStripeRefundPlan is what a refund of one paid order comes to, all in minor
+// units of the order currency: the costs HisarWeb itself paid for the payment
+// (processing and currency conversion) are deducted from what goes back.
+type HwStripeRefundPlan struct {
+	PaymentIntentID string
+	Currency        string
+	PaidMinor       int64
+	// FeeMinor is Stripe's total cost converted to the order currency, rounded up.
+	FeeMinor int64
+	// RefundMinor is paid minus fee, never below zero.
+	RefundMinor int64
+	// AlreadyRefundedMinor is what Stripe already returned for the charge.
+	AlreadyRefundedMinor int64
+}
+
+// PlanRefund reads the session with the fee expanded and works out the refund.
+// It only reads, so it runs before any state of the order changes.
+func (config HwStripeConfig) PlanRefund(ctx context.Context, sessionID string, order *model.HwOrder) (HwStripeRefundPlan, error) {
+	session, err := config.getSessionExpanded(ctx, sessionID, "payment_intent.latest_charge.balance_transaction")
 	if err != nil {
-		return err
+		return HwStripeRefundPlan{}, err
 	}
-	if session.PaymentIntent == nil || session.PaymentIntent.Id == "" {
-		return ErrHwStripeUnusableResponse
+	intent := session.PaymentIntent
+	if intent == nil || intent.Id == "" || intent.LatestCharge == nil {
+		return HwStripeRefundPlan{}, ErrHwStripeUnusableResponse
 	}
-	form := url.Values{"payment_intent": {session.PaymentIntent.Id}, "metadata[merchant_ref]": {merchantRef}}
-	_, err = config.do(ctx, http.MethodPost, "/v1/refunds", form, "hw-refund-"+merchantRef)
+	charge := intent.LatestCharge
+	if charge.Amount <= 0 || charge.Amount != order.PayableTryMinor || !strings.EqualFold(charge.Currency, order.Currency) || charge.AmountRefunded < 0 {
+		return HwStripeRefundPlan{}, ErrHwStripeUnusableResponse
+	}
+	bt := charge.BalanceTransaction
+	if bt == nil {
+		return HwStripeRefundPlan{}, ErrHwRefundFeeUnavailable
+	}
+	if bt.Amount <= 0 || bt.Fee < 0 || bt.Currency == "" {
+		return HwStripeRefundPlan{}, ErrHwStripeUnusableResponse
+	}
+	// The fee is in the settlement currency; charge.amount / bt.amount is the
+	// rate Stripe itself applied, so the fee in the order currency is
+	// fee * charge.amount / bt.amount, rounded up to the smallest unit. Big
+	// integers: the product of two provider amounts must not overflow. A cost
+	// that is negative or higher than the payment itself is not believable and
+	// plans nothing.
+	product := new(big.Int).Mul(big.NewInt(bt.Fee), big.NewInt(charge.Amount))
+	product.Add(product, big.NewInt(bt.Amount-1))
+	feeBig := product.Div(product, big.NewInt(bt.Amount))
+	if feeBig.Sign() < 0 || !feeBig.IsInt64() || feeBig.Int64() > charge.Amount {
+		return HwStripeRefundPlan{}, ErrHwStripeUnusableResponse
+	}
+	fee := feeBig.Int64()
+	return HwStripeRefundPlan{
+		PaymentIntentID:      intent.Id,
+		Currency:             strings.ToUpper(charge.Currency),
+		PaidMinor:            charge.Amount,
+		FeeMinor:             fee,
+		RefundMinor:          charge.Amount - fee,
+		AlreadyRefundedMinor: charge.AmountRefunded,
+	}, nil
+}
+
+// hwStripeRefundKeyPrefix versions the refund idempotency key: the amount of the
+// refund changed meaning (paid minus costs), and Stripe rejects a key reused
+// with other parameters.
+const hwStripeRefundKeyPrefix = "hw-refund-v2-"
+
+// Refund returns the planned amount to the card. The idempotency key is derived
+// from the order, so repeating the admin refund never refunds twice; a charge
+// that already shows a refund is left alone (Stripe forgets keys after a day).
+// A plan with nothing to return sends nothing.
+func (config HwStripeConfig) Refund(ctx context.Context, merchantRef string, plan HwStripeRefundPlan) error {
+	if plan.RefundMinor <= 0 || plan.AlreadyRefundedMinor > 0 {
+		return nil
+	}
+	form := url.Values{
+		"payment_intent":         {plan.PaymentIntentID},
+		"amount":                 {strconv.FormatInt(plan.RefundMinor, 10)},
+		"metadata[merchant_ref]": {merchantRef},
+	}
+	_, err := config.do(ctx, http.MethodPost, "/v1/refunds", form, hwStripeRefundKeyPrefix+merchantRef)
 	return err
 }
 

@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { Link } from '@tanstack/react-router'
 import { CreditCard, Gift, Hourglass } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -27,22 +28,31 @@ import { Label } from '@/components/ui/label'
 import { TitledCard } from '@/components/ui/titled-card'
 import { useStatus } from '@/hooks/use-status'
 
-import { HW_TOPUP_MAX_TRY, HW_TOPUP_MIN_TRY, HW_TOPUP_PRESET_TRY } from '../api'
+import type { HwTopUpLimits } from '../lib/currency'
+import { useHwCurrency } from '../hooks/use-hw-currency'
 import { useHwTopUpOrder } from '../hooks/use-hw-top-up-order'
 import { hwOrderErrorTextKey, openCheckout } from '../lib/checkout'
-import { formatHwTry } from '../lib/format'
+import { formatHwAmount } from '../lib/format'
 import { useHwLanguage, useHwText, type HwTextKey } from '../texts'
 
 interface TopUpFormProps {
   locale?: string
 }
 
+/** The preset in the middle of the list; the lowest allowed amount without any. */
+function defaultAmount(topUp: HwTopUpLimits): string {
+  const preset = topUp.presets[Math.floor(topUp.presets.length / 2)]
+  return String(preset ?? topUp.min)
+}
+
 /**
- * Picks a list value in whole lira and starts the order. The payable amount and
+ * Picks a list value in whole units of the chosen currency and starts the
+ * order. The payable amount and
  * the discount are computed by the server; this form never shows an amount it
  * worked out itself.
  */
 export function TopUpForm(props: TopUpFormProps) {
+  const { t } = useTranslation()
   const hw = useHwText()
   const language = useHwLanguage()
   const order = useHwTopUpOrder()
@@ -50,16 +60,23 @@ export function TopUpForm(props: TopUpFormProps) {
   // Only an explicit false closes the form: an older server or a status that
   // is still loading must not hide a payment that works.
   const paymentClosed = status?.hw_payment_available === false
-  const [amountInput, setAmountInput] = useState('1000')
+  const { currency, topUp } = useHwCurrency()
+  const [amountInput, setAmountInput] = useState(defaultAmount(topUp))
+  const [inputCurrency, setInputCurrency] = useState(currency)
+  if (inputCurrency !== currency) {
+    // Another currency has other limits: start again from its default amount.
+    setInputCurrency(currency)
+    setAmountInput(defaultAmount(topUp))
+  }
   const [errorKey, setErrorKey] = useState<HwTextKey | null>(null)
 
   const amount = Number(amountInput)
   const amountIsValid =
     amountInput.trim() !== '' &&
     Number.isInteger(amount) &&
-    amount >= HW_TOPUP_MIN_TRY &&
-    amount <= HW_TOPUP_MAX_TRY
-  const selectedPreset = HW_TOPUP_PRESET_TRY.includes(amount) ? amount : null
+    amount >= topUp.min &&
+    amount <= topUp.max
+  const selectedPreset = topUp.presets.includes(amount) ? amount : null
   const showInvalidAmount = amountInput.trim() !== '' && !amountIsValid
 
   function changeAmount(next: string) {
@@ -72,7 +89,7 @@ export function TopUpForm(props: TopUpFormProps) {
     if (!amountIsValid) return
     setErrorKey(null)
     order.mutate(
-      { package_try: amount, language },
+      { amount, currency, language },
       {
         onSuccess: (created) => openCheckout(created.checkout_url),
         onError: (error) => setErrorKey(hwOrderErrorTextKey(error)),
@@ -123,7 +140,7 @@ export function TopUpForm(props: TopUpFormProps) {
             aria-labelledby='hw-topup-preset-label'
             className='flex flex-wrap gap-2'
           >
-            {HW_TOPUP_PRESET_TRY.map((preset) => (
+            {topUp.presets.map((preset) => (
               <Button
                 key={preset}
                 type='button'
@@ -131,7 +148,7 @@ export function TopUpForm(props: TopUpFormProps) {
                 aria-pressed={selectedPreset === preset}
                 onClick={() => changeAmount(String(preset))}
               >
-                {formatHwTry(preset, props.locale)}
+                {formatHwAmount(preset, currency, props.locale)}
               </Button>
             ))}
           </div>
@@ -143,8 +160,8 @@ export function TopUpForm(props: TopUpFormProps) {
             id='hw-topup-amount'
             type='number'
             inputMode='numeric'
-            min={HW_TOPUP_MIN_TRY}
-            max={HW_TOPUP_MAX_TRY}
+            min={topUp.min}
+            max={topUp.max}
             step={1}
             value={amountInput}
             placeholder={hw('topUpCustomPlaceholder')}
@@ -157,8 +174,8 @@ export function TopUpForm(props: TopUpFormProps) {
             className='text-muted-foreground text-xs'
           >
             {hw('topUpRangeNote', {
-              min: formatHwTry(HW_TOPUP_MIN_TRY, props.locale),
-              max: formatHwTry(HW_TOPUP_MAX_TRY, props.locale),
+              min: formatHwAmount(topUp.min, currency, props.locale),
+              max: formatHwAmount(topUp.max, currency, props.locale),
             })}
           </p>
           {showInvalidAmount && (
@@ -171,12 +188,14 @@ export function TopUpForm(props: TopUpFormProps) {
         <div className='bg-muted/40 flex flex-col gap-1.5 rounded-md p-3 text-sm'>
           {amountIsValid && (
             <p className='font-medium'>
-              {hw('topUpValueLabel')}: {formatHwTry(amount, props.locale)}
+              {hw('topUpValueLabel')}: {formatHwAmount(amount, currency, props.locale)}
             </p>
           )}
           <p>{hw('topUpDiscountRule')}</p>
           <p className='text-muted-foreground text-xs'>
-            {hw('topUpKdvNote')} {hw('topUpPayableNote')}
+            {[hw('topUpKdvNote'), hw('topUpPayableNote')]
+              .filter(Boolean)
+              .join(' ')}
           </p>
         </div>
 
@@ -193,6 +212,9 @@ export function TopUpForm(props: TopUpFormProps) {
         >
           {order.isPending ? hw('topUpSubmitting') : hw('topUpSubmit')}
         </Button>
+        <p className='text-muted-foreground text-xs'>
+          {t('HisarWeb pays the payment and currency conversion costs. You get the full credit for what you pay, with no surcharge or deduction.')}
+        </p>
       </form>
     </TitledCard>
   )
