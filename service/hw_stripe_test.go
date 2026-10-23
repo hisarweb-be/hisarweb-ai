@@ -326,7 +326,7 @@ func TestHwStripeRefusesAWrongAmountOrCurrency(t *testing.T) {
 }
 
 func TestHwStripeIgnoresEventsOfOtherProducts(t *testing.T) {
-	hwStripeTestSetup(t)
+	fake := hwStripeTestSetup(t)
 	now := time.Now()
 	for _, reference := range []string{"", "bodybalance-123", "hw-does-not-exist"} {
 		body := hwStripeTestEvent(t, "checkout.session.completed", "cs_test_foreign", reference)
@@ -334,6 +334,18 @@ func TestHwStripeIgnoresEventsOfOtherProducts(t *testing.T) {
 		assert.Equal(t, HwWebhookIgnored, outcome, "the shared account must not trigger endless retries (reference %q)", reference)
 		assert.Equal(t, http.StatusOK, outcome.HTTPStatus())
 	}
+	// A foreign session that carries the reference of an open order of ours
+	// (a payment link of another product on the shared account) is ignored.
+	buyer := hwOrderTestUser(t, 0)
+	hwOrderTestIdentify(t, buyer.Id, "stripe-foreign")
+	order := hwOrderTestCreate(t, buyer.Id, 600)
+	foreign := fake.session(order.MerchantRef)
+	foreign.id = "cs_test_not_ours"
+	assert.Equal(t, HwWebhookIgnored, hwStripeTestWebhook(t, "checkout.session.expired", foreign, now))
+	var open model.HwOrder
+	require.NoError(t, model.DB.Where("merchant_ref = ?", order.MerchantRef).First(&open).Error)
+	assert.Equal(t, model.HwOrderStatusPending, open.Status)
+
 	body := []byte(`not json`)
 	assert.Equal(t, HwWebhookBadRequest, HwHandleStripeWebhook(context.Background(), body, hwStripeTestSign(body, hwStripeTestWebhookSecret, now), now))
 }

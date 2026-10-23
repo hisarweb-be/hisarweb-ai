@@ -185,6 +185,7 @@ func (session hwStripeSession) toOrder() hwRevolutOrderResponse {
 func (config HwStripeConfig) CreateCheckout(ctx context.Context, order *model.HwOrder, email, language, returnURL string) (hwRevolutOrderResponse, error) {
 	form := url.Values{}
 	form.Set("mode", "payment")
+	form.Set("payment_method_types[0]", "card")
 	form.Set("client_reference_id", order.MerchantRef)
 	form.Set("metadata[merchant_ref]", order.MerchantRef)
 	form.Set("payment_intent_data[metadata][merchant_ref]", order.MerchantRef)
@@ -377,6 +378,11 @@ func HwHandleStripeWebhook(ctx context.Context, rawBody []byte, signatureHeader 
 		// Unlike Revolut no retry: the account is shared, and a session of
 		// another environment must not be redelivered forever. The
 		// reconciliation round settles any order of ours that was missed.
+		return HwWebhookIgnored
+	}
+	// A foreign session (a payment link of another product on the shared
+	// account) can carry our reference: it must not touch our order.
+	if order.RevolutOrderId != nil && *order.RevolutOrderId != "" && *order.RevolutOrderId != session.Id {
 		return HwWebhookIgnored
 	}
 	mapped := hwRevolutWebhookEvent{Event: event.Type, OrderId: session.Id, MerchantOrderExtRef: session.ClientReferenceId}
