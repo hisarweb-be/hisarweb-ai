@@ -64,6 +64,7 @@ import { cn } from '@/lib/utils'
 
 import { formatGroupDetail } from './model-group-selector/group-detail'
 import {
+  hasGroupChoice,
   modelGroupSelectorLayoutClasses,
   scrollSelectedOptionIntoView,
 } from './model-group-selector/layout'
@@ -587,6 +588,7 @@ export const ModelGroupSelector: React.FC<ModelGroupSelectorProps> = ({
     () => groups.find((group) => group.value === selectedGroup),
     [groups, selectedGroup]
   )
+  const showGroups = hasGroupChoice(groups)
   const filteredModels = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
     if (!query) {
@@ -663,9 +665,11 @@ export const ModelGroupSelector: React.FC<ModelGroupSelectorProps> = ({
       <span className='min-w-0 truncate text-xs'>
         {currentModel?.label || t('Model')}
       </span>
-      <span className='bg-muted text-muted-foreground hidden max-w-20 shrink-0 rounded px-1.5 py-0.5 text-[10px] sm:inline-flex'>
-        {currentGroup?.label || t('Group')}
-      </span>
+      {showGroups && (
+        <span className='bg-muted text-muted-foreground hidden max-w-20 shrink-0 rounded px-1.5 py-0.5 text-[10px] sm:inline-flex'>
+          {currentGroup?.label || t('Group')}
+        </span>
+      )}
       <ChevronsUpDown className='text-muted-foreground ml-auto size-3.5 shrink-0 opacity-60' />
     </Button>
   )
@@ -787,15 +791,22 @@ export const ModelGroupSelector: React.FC<ModelGroupSelectorProps> = ({
     </Command>
   )
 
+  const desktopContentClass = showGroups
+    ? modelGroupSelectorLayoutClasses.desktopContent
+    : modelGroupSelectorLayoutClasses.singleColumnContent
+
   const renderContent = () => (
     <div
       className={
         isMobile
-          ? 'grid gap-3 p-2 md:grid-cols-[9.5rem_minmax(0,1fr)]'
-          : modelGroupSelectorLayoutClasses.desktopContent
+          ? cn(
+              'grid gap-3 p-2',
+              showGroups && 'md:grid-cols-[9.5rem_minmax(0,1fr)]'
+            )
+          : desktopContentClass
       }
     >
-      {renderGroupList()}
+      {showGroups && renderGroupList()}
       <div
         className={cn(
           'min-w-0 overflow-hidden rounded-lg border',
@@ -825,7 +836,8 @@ export const ModelGroupSelector: React.FC<ModelGroupSelectorProps> = ({
       <PopoverContent
         align='end'
         className={cn(
-          'bg-popover z-50 w-[34rem] max-w-[calc(100vw-2rem)] rounded-xl border p-0 shadow-lg',
+          'bg-popover z-50 max-w-[calc(100vw-2rem)] rounded-xl border p-0 shadow-lg',
+          showGroups ? 'w-[34rem]' : 'w-[24rem]',
           modelGroupSelectorLayoutClasses.desktopPanel
         )}
         collisionPadding={8}

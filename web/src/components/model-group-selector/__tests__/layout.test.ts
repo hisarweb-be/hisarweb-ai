@@ -19,11 +19,27 @@ For commercial licensing, please contact support@quantumnous.com
 import { describe, expect, test } from 'vitest'
 
 import {
+  hasGroupChoice,
   modelGroupSelectorLayoutClasses,
   scrollSelectedOptionIntoView,
 } from '../layout'
 
 describe('model group selector layout', () => {
+  test('hides the group choice when the customer has a single group', () => {
+    expect(hasGroupChoice([])).toBe(false)
+    expect(hasGroupChoice([{ value: 'free' }])).toBe(false)
+  })
+
+  test('offers the group choice when several groups are usable', () => {
+    expect(hasGroupChoice([{ value: 'default' }, { value: 'paid' }])).toBe(true)
+  })
+
+  test('drops the group column from the single-column panel', () => {
+    expect(
+      modelGroupSelectorLayoutClasses.singleColumnContent.includes('grid-cols')
+    ).toBe(false)
+  })
+
   test('keeps group options at a fixed height and aligned to the top', () => {
     const groupScrollClasses =
       modelGroupSelectorLayoutClasses.groupScroll.split(' ')
