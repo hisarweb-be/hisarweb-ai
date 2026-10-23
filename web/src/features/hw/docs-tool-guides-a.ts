@@ -36,7 +36,7 @@ import {
 } from './docs-tool-guides-base'
 import { KEY_ENV_STEPS, OPEN_TERMINAL_STEPS } from './docs-tool-guides-shared'
 
-/** One of our own screenshots for the Claude Code guide (webp, 1100 px wide). */
+/** One of our own screenshots for the Claude Code guide (webp, cropped to the readable part). */
 function shot(
   name: string,
   height: number,
@@ -118,14 +118,14 @@ const CLAUDE_INSTALL_STEPS: readonly GuideStep[] = [
     shots: [
       shot(
         'win-versie',
-        748,
+        170,
         'Windows PowerShell’de claude --version komutu ve altında sürüm numarası.',
-        'claude --version in Windows PowerShell with the version number below it.'
+        'claude --version in Windows PowerShell with the version number below it.', 666
       ),
     ],
     see: {
-      tr: 'Bir sürüm numarası görünür, örneğin 2.1.309. “Tanınmıyor” gibi bir hata görürseniz pencereyi kapatıp yeniden açın.',
-      en: 'A version number appears, for example 2.1.309. If you see a “not recognized” style error, close the window and open it again.',
+      tr: 'Bir sürüm numarası görünür, örneğin 2.1.x. “Tanınmıyor” gibi bir hata görürseniz pencereyi kapatıp yeniden açın.',
+      en: 'A version number appears, for example 2.1.x. If you see a “not recognized” style error, close the window and open it again.',
     },
   },
 ]
@@ -136,8 +136,8 @@ const claudeCode: ToolGuide = {
   status: 'works',
   protocol: 'anthropic',
   testedWith: {
-    tr: 'Claude Code 2.1.283 ile 23 Ekim 2026’da gerçek bir anahtarla denendi (en yeni sürüm: 2.1.309)',
-    en: 'Tried with Claude Code 2.1.283 and a real key on 23 Oct 2026 (latest version: 2.1.309)',
+    tr: 'Claude Code 2.1.283 ile 23 Ekim 2026’da gerçek bir anahtarla denendi',
+    en: 'Tried with Claude Code 2.1.283 and a real key on 23 Oct 2026',
   },
   summary: {
     tr: 'Claude Code, Anthropic’in kodlama yardımcısıdır. Anthropic hesabına ya da aboneliğine gerek yoktur: HisarWeb AI anahtarınız yeterlidir.',
@@ -200,10 +200,9 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
           shots: [
             shot(
               'win-instellingen',
-              676,
+              230,
               'Not Defteri’nde bitmiş settings.json; anahtar yıldızlarla gizlenmiştir.',
-              'The finished settings.json in Notepad; the key is hidden with stars.',
-              1022
+              'The finished settings.json in Notepad; the key is hidden with stars.', 490
             ),
           ],
           note: {
@@ -224,9 +223,9 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
           shots: [
             shot(
               'win-tema',
-              748,
+              767,
               'Claude Code’un ilk açılışta gösterdiği tema seçimi.',
-              'The theme choice Claude Code shows on first start.'
+              'The theme choice Claude Code shows on first start.', 744
             ),
           ],
         },
@@ -242,9 +241,9 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
           shots: [
             shot(
               'win-vertrouwen',
-              748,
+              690,
               'Klasöre güvenme sorusu; varsayılan “No, exit” seçili.',
-              'The folder trust question; “No, exit” is selected by default.'
+              'The folder trust question; “No, exit” is selected by default.', 744
             ),
           ],
         },
@@ -260,21 +259,21 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
           shots: [
             shot(
               'win-start',
-              748,
+              340,
               'Claude Code karşılama ekranı ve boş soru kutusu.',
-              'The Claude Code welcome screen with an empty question box.'
+              'The Claude Code welcome screen with an empty question box.', 744
             ),
             shot(
               'win-vraag',
-              748,
+              340,
               'Soru kutusuna yazılmış bir soru.',
-              'A question typed into the box.'
+              'A question typed into the box.', 744
             ),
             shot(
               'win-antwoord',
-              748,
+              750,
               'Gelen yanıt; giriş ekranı çıkmadı.',
-              'The answer that came back; no sign-in screen appeared.'
+              'The answer that came back; no sign-in screen appeared.', 744
             ),
           ],
         },
@@ -291,9 +290,9 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
           shots: [
             shot(
               'win-status',
-              509,
+              951,
               '/status ekranı; Anthropic base URL satırında api.hisarweb.be görünür.',
-              'The /status screen; the Anthropic base URL line shows api.hisarweb.be.'
+              'The /status screen; the Anthropic base URL line shows api.hisarweb.be.', 698
             ),
           ],
         },
@@ -319,9 +318,9 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
           shots: [
             shot(
               'vsc-uitbreiding',
-              688,
+              650,
               'VS Code Eklentiler paneli; Anthropic’in Claude Code eklentisi yüklü.',
-              'The VS Code Extensions view; the Claude Code extension from Anthropic is installed.'
+              'The VS Code Extensions view; the Claude Code extension from Anthropic is installed.', 340
             ),
           ],
         },
@@ -358,15 +357,15 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
           shots: [
             shot(
               'vsc-paneel',
-              688,
-              'Claude Code paneli açık, giriş istemiyor; model Haiku 4.5.',
-              'The Claude Code panel open without a sign-in prompt; the model is Haiku 4.5.'
+              380,
+              'Claude Code paneli açık; giriş istemi yok, “New session” hazır.',
+              'The Claude Code panel open with no sign-in prompt and “New session” ready.', 400
             ),
             shot(
               'vsc-antwoord',
-              543,
+              160,
               'Panelde yazılan soru ve gelen yanıt.',
-              'The question typed in the panel and the answer that came back.'
+              'The question typed in the panel and the answer that came back.', 390
             ),
           ],
         },
