@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { createInstance } from 'i18next'
 import { I18nextProvider } from 'react-i18next'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -25,7 +26,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '@/lib/api'
 
 import { QualityMeter } from '../components/quality-meter'
-import type { HwQualityLatest } from '../types'
+import type {
+  HwQualityLatest,
+  HwQualityTraffic,
+  HwQualityTrafficModel,
+} from '../types'
 
 vi.mock('@/components/layout', () => ({
   PublicLayout: (props: { children?: React.ReactNode }) => (
@@ -75,6 +80,16 @@ const measured: HwQualityLatest = {
     'These measurements are a sample over a small fixed task set, not a guarantee.',
 }
 
+const noTraffic: HwQualityTraffic = {
+  computed_at: 1792400000,
+  refresh_seconds: 600,
+  min_requests: 20,
+  windows: [
+    { days: 7, models: [] },
+    { days: 30, models: [] },
+  ],
+}
+
 const empty: HwQualityLatest = {
   measured_at: 0,
   file: '',
@@ -85,6 +100,60 @@ const empty: HwQualityLatest = {
   note: sampleNote,
   note_en:
     'These measurements are a sample over a small fixed task set, not a guarantee.',
+  traffic: noTraffic,
+}
+
+const sonnetWeek: HwQualityTrafficModel = {
+  model: 'claude-sonnet-5-5',
+  requests: 1234,
+  failed: 3,
+  enough_data: true,
+  success_percent: 99.76,
+  median_seconds: 2,
+  p95_seconds: 9,
+  output_tokens_per_second: 32.6,
+}
+
+const observed: HwQualityLatest = {
+  ...empty,
+  traffic: {
+    ...noTraffic,
+    windows: [
+      {
+        days: 7,
+        models: [
+          sonnetWeek,
+          {
+            model: 'claude-haiku-4-5',
+            requests: 5,
+            failed: 0,
+            enough_data: false,
+            success_percent: null,
+            median_seconds: null,
+            p95_seconds: null,
+            output_tokens_per_second: null,
+          },
+        ],
+      },
+      {
+        days: 30,
+        models: [
+          {
+            ...sonnetWeek,
+            requests: 5678,
+            median_seconds: 0,
+            p95_seconds: 3,
+          },
+        ],
+      },
+    ],
+  },
+}
+
+function mockQuality(data: HwQualityLatest) {
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: { success: true, message: '', data },
+  })
 }
 
 function renderPage(retryDelayMs = 60_000) {
@@ -136,19 +205,99 @@ describe('quality meter page', () => {
     expect(await screen.findByText(sampleNote)).toBeInTheDocument()
   })
 
-  it('shows an empty state without a measurement and invents no values', async () => {
-    vi.spyOn(api, 'get').mockResolvedValue({
-      data: { success: true, message: '', data: empty },
-    })
+  it('shows an empty state without traffic or a run and invents no values', async () => {
+    mockQuality(empty)
     renderPage()
 
-    expect(await screen.findByText('İlk ölçüm yakında')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Henüz ölçülecek istek yok')
+    ).toBeInTheDocument()
     expect(
       screen.getByText(
-        'Henüz yayınlanmış bir ölçüm yok. İlk ölçüm tamamlandığında sonuçlar burada görünecek.'
+        'Son 30 günde modellerimize gelen müşteri isteği yok. Rakam uydurmuyoruz: ilk istekler geldiğinde sonuçlar burada kendiliğinden görünür.'
       )
     ).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.queryByText(sampleNote)).not.toBeInTheDocument()
+  })
+
+  it('keeps the empty state for an older server without traffic data', async () => {
+    mockQuality({ ...empty, traffic: undefined })
+    renderPage()
+
+    expect(
+      await screen.findByText('Henüz ölçülecek istek yok')
+    ).toBeInTheDocument()
+  })
+
+  it('shows the observed figures of the last 7 days from the traffic', async () => {
+    mockQuality(observed)
+    renderPage()
+
+    expect(await screen.findByText('claude-sonnet-5-5')).toBeInTheDocument()
+    expect(
+      screen.getByText('Gerçek müşteri isteklerinden ölçüm')
+    ).toBeInTheDocument()
+    expect(screen.getByText('1.234')).toBeInTheDocument()
+    expect(screen.getByText('%99,76')).toBeInTheDocument()
+    expect(screen.getByText('2 sn')).toBeInTheDocument()
+    expect(screen.getByText('9 sn')).toBeInTheDocument()
+    expect(screen.getByText('32,6 token/sn')).toBeInTheDocument()
+    expect(screen.queryByText('İlk ölçüm yakında')).not.toBeInTheDocument()
+    expect(screen.queryByText('Henüz ölçülecek istek yok')).not.toBeInTheDocument()
+    // Without a judged run there is no judged table and no sample note.
+    expect(screen.queryByText('Görev seti ölçümü')).not.toBeInTheDocument()
+    expect(screen.queryByText(sampleNote)).not.toBeInTheDocument()
+    expect(screen.getByText(/en geç 10 dakikada bir yenilenir/)).toBeInTheDocument()
+  })
+
+  it('shows only the count for a model below the minimum', async () => {
+    mockQuality(observed)
+    renderPage()
+
+    expect(await screen.findByText('claude-haiku-4-5')).toBeInTheDocument()
+    expect(
+      screen.getByText('Yeterli veri yok (en az 20 istek)')
+    ).toBeInTheDocument()
+    expect(screen.getByText('5')).toBeInTheDocument()
+  })
+
+  it('switches to the 30-day window and shows a sub-second median', async () => {
+    mockQuality(observed)
+    renderPage()
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('tab', { name: 'Son 30 gün' }))
+
+    expect(await screen.findByText('5.678')).toBeInTheDocument()
+    expect(screen.getByText('<1 sn')).toBeInTheDocument()
+    expect(screen.getByText('3 sn')).toBeInTheDocument()
+  })
+
+  it('says so when one window has no requests while the other has', async () => {
+    const traffic = observed.traffic as HwQualityTraffic
+    mockQuality({
+      ...observed,
+      traffic: {
+        ...traffic,
+        windows: [{ days: 7, models: [] }, traffic.windows[1]],
+      },
+    })
+    renderPage()
+
+    expect(
+      await screen.findByText('Bu dönemde müşteri isteği yok.')
+    ).toBeInTheDocument()
+  })
+
+  it('shows the observed figures next to a judged run', async () => {
+    mockQuality({ ...measured, traffic: observed.traffic })
+    renderPage()
+
+    expect(await screen.findByText('claude-sonnet-5-5')).toBeInTheDocument()
+    expect(screen.getByText('Görev seti ölçümü')).toBeInTheDocument()
+    expect(screen.getByText('claude-sonnet-5')).toBeInTheDocument()
+    expect(screen.getByText(sampleNote)).toBeInTheDocument()
   })
 
   it('reports a failed read in Turkish without a table', async () => {
@@ -223,8 +372,9 @@ describe('quality meter page', () => {
   })
 
   it('never claims the models equal the original and names no supplier', async () => {
+    mockQuality({ ...measured, traffic: observed.traffic })
     renderPage()
-    await screen.findByText('claude-sonnet-5')
+    await screen.findByText('claude-sonnet-5-5')
 
     const text = document.body.textContent?.toLowerCase() ?? ''
     expect(text).not.toContain('lumia')

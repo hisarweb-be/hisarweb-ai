@@ -94,3 +94,73 @@ func HwLatestQualityRun() (*HwQualityRun, []HwQualityScore, error) {
 	}
 	return &run, scores, nil
 }
+
+// HwQualityLatencyBucket counts the served customer requests of one own model
+// that took the same whole number of seconds, with the output tokens they
+// produced. The relay stores the duration in whole seconds, so these buckets
+// carry the full latency distribution without loading one row per request.
+type HwQualityLatencyBucket struct {
+	ModelName    string `gorm:"column:model_name"`
+	UseTime      int    `gorm:"column:use_time"`
+	Requests     int64  `gorm:"column:requests"`
+	OutputTokens int64  `gorm:"column:output_tokens"`
+}
+
+// HwQualityFailedRequests is the number of customer requests of one own model
+// that never got an answer in the window.
+type HwQualityFailedRequests struct {
+	ModelName string `gorm:"column:model_name"`
+	Failed    int64  `gorm:"column:failed"`
+}
+
+// HwReadQualityTraffic reads the customer traffic of the named own models in
+// [from, to) from the rows the relay already writes: a served request leaves
+// one consume row, a failed attempt leaves an error row. The relay retries a
+// failed attempt on another route under the same request id, so a request
+// counts as failed only when none of its attempts was served; an error row
+// alone is not a failed request. Only the customer groups count, so internal
+// and admin traffic never shapes the public figures. Nothing here reads a
+// channel, a supplier or an error text.
+func HwReadQualityTraffic(from int64, to int64, models []string) ([]HwQualityLatencyBucket, []HwQualityFailedRequests, error) {
+	if from <= 0 || to <= from {
+		return nil, nil, errors.New("invalid quality traffic window")
+	}
+	if len(models) == 0 {
+		return []HwQualityLatencyBucket{}, []HwQualityFailedRequests{}, nil
+	}
+	// A map condition lets GORM quote the reserved column "group" for every
+	// dialect of the log database.
+	customer := map[string]any{"group": HwCustomerGroupNames(), "model_name": models}
+
+	buckets := make([]HwQualityLatencyBucket, 0)
+	if err := LOG_DB.Model(&Log{}).
+		Select("model_name, use_time, COUNT(*) AS requests, SUM(completion_tokens) AS output_tokens").
+		Where("type = ?", LogTypeConsume).
+		Where("created_at >= ? AND created_at < ?", from, to).
+		Where(customer).
+		Group("model_name, use_time").
+		Scan(&buckets).Error; err != nil {
+		return nil, nil, err
+	}
+
+	// The served request ids of the window. An empty id cannot be matched, so
+	// it is left out here and below; a NULL inside NOT IN would drop every row.
+	served := LOG_DB.Model(&Log{}).
+		Select("request_id").
+		Where("type = ?", LogTypeConsume).
+		Where("created_at >= ? AND created_at < ?", from, to).
+		Where("request_id IS NOT NULL AND request_id <> ''")
+	failed := make([]HwQualityFailedRequests, 0)
+	if err := LOG_DB.Model(&Log{}).
+		Select("model_name, COUNT(DISTINCT request_id) AS failed").
+		Where("type = ?", LogTypeError).
+		Where("created_at >= ? AND created_at < ?", from, to).
+		Where(customer).
+		Where("request_id IS NOT NULL AND request_id <> ''").
+		Where("request_id NOT IN (?)", served).
+		Group("model_name").
+		Scan(&failed).Error; err != nil {
+		return nil, nil, err
+	}
+	return buckets, failed, nil
+}

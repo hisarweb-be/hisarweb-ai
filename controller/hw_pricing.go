@@ -113,14 +113,21 @@ func HwPricingCompare(c *gin.Context) {
 	})
 }
 
-// HwQualityLatest answers the public quality summary of the newest measurement.
-// Without a measurement it is an empty list with the sample note.
+// HwQualityLatest answers the public quality summary: the observed quality of
+// the real customer traffic plus the newest judged run, if there is one.
+// Without any data both parts are empty lists; nothing is made up.
 func HwQualityLatest(c *gin.Context) {
 	summary, err := service.HwLatestQualitySummary()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "quality data could not be read"})
 		return
 	}
+	traffic, err := service.HwQualityTrafficNow(time.Now())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "quality data could not be read"})
+		return
+	}
+	summary.Traffic = traffic
 	common.ApiSuccess(c, summary)
 }
 

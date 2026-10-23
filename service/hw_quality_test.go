@@ -260,3 +260,175 @@ func TestHwQualityRunRefusesIncompleteConfig(t *testing.T) {
 	require.NoError(t, model.DB.Model(&model.HwQualityRun{}).Count(&count).Error)
 	assert.Equal(t, int64(0), count)
 }
+
+// hwTrafficTestSetup starts every observed-quality test from an empty log
+// table and an empty cache.
+func hwTrafficTestSetup(t *testing.T) {
+	t.Helper()
+	reset := func() {
+		model.LOG_DB.Exec("DELETE FROM logs")
+		hwQualityTrafficCache.Lock()
+		hwQualityTrafficCache.traffic = nil
+		hwQualityTrafficCache.builtAt = time.Time{}
+		hwQualityTrafficCache.Unlock()
+	}
+	reset()
+	t.Cleanup(reset)
+}
+
+// hwTrafficTestLog writes one relay row as the gateway would.
+func hwTrafficTestLog(t *testing.T, logType int, modelName string, group string, createdAt int64, useTime int, outputTokens int, requestID string) {
+	t.Helper()
+	require.NoError(t, model.LOG_DB.Create(&model.Log{
+		Type:             logType,
+		ModelName:        modelName,
+		Group:            group,
+		CreatedAt:        createdAt,
+		UseTime:          useTime,
+		CompletionTokens: outputTokens,
+		RequestId:        requestID,
+	}).Error)
+}
+
+// TestHwQualityTrafficFromCustomerLogs pins the public figures on a known log:
+// retried attempts that were served in the end are no failures, a failed
+// request counts once however often it was retried, internal groups and unsold
+// models stay out, and each window only sees its own days.
+func TestHwQualityTrafficFromCustomerLogs(t *testing.T) {
+	hwTrafficTestSetup(t)
+	now := time.Unix(1_800_000_000, 0)
+	recent := now.Unix() - 3600
+	const sonnet = "claude-sonnet-5-5"
+
+	// 30 served requests in the last seven days: 20 of 2 s, 8 of 4 s and 2 of
+	// 10 s, 100 output tokens each, spread over both customer groups.
+	served := 0
+	for _, run := range []struct{ count, seconds int }{{20, 2}, {8, 4}, {2, 10}} {
+		for range run.count {
+			group := model.HwFreeGroupName
+			if served%2 == 0 {
+				group = model.HwPaidGroupName
+			}
+			hwTrafficTestLog(t, model.LogTypeConsume, sonnet, group, recent, run.seconds, 100, fmt.Sprintf("served-%d", served))
+			served++
+		}
+	}
+	// Two served requests had a failed attempt first: not a failure.
+	hwTrafficTestLog(t, model.LogTypeError, sonnet, model.HwPaidGroupName, recent-1, 0, 0, "served-0")
+	hwTrafficTestLog(t, model.LogTypeError, sonnet, model.HwPaidGroupName, recent-1, 0, 0, "served-1")
+	// Three requests failed on every attempt, two attempts each.
+	for i := range 3 {
+		id := fmt.Sprintf("failed-%d", i)
+		hwTrafficTestLog(t, model.LogTypeError, sonnet, model.HwPaidGroupName, recent, 0, 0, id)
+		hwTrafficTestLog(t, model.LogTypeError, sonnet, model.HwPaidGroupName, recent, 1, 0, id)
+	}
+	// Ten served requests of 1 s ten days ago: only in the thirty-day window.
+	for i := range 10 {
+		hwTrafficTestLog(t, model.LogTypeConsume, sonnet, model.HwFreeGroupName, now.Unix()-10*24*3600, 1, 50, fmt.Sprintf("old-%d", i))
+	}
+	// Outside every window, outside the customer groups, or not sold here.
+	hwTrafficTestLog(t, model.LogTypeConsume, sonnet, model.HwPaidGroupName, now.Unix()-40*24*3600, 60, 1, "ancient")
+	hwTrafficTestLog(t, model.LogTypeConsume, sonnet, "default", recent, 60, 1, "internal")
+	hwTrafficTestLog(t, model.LogTypeError, sonnet, "default", recent, 0, 0, "internal-failed")
+	hwTrafficTestLog(t, model.LogTypeConsume, "not-sold-model", model.HwPaidGroupName, recent, 1, 1, "unsold")
+	// A model with too few requests shows its count and no figures.
+	for i := range 5 {
+		hwTrafficTestLog(t, model.LogTypeConsume, "claude-haiku-4-5", model.HwFreeGroupName, recent, 3, 10, fmt.Sprintf("haiku-%d", i))
+	}
+
+	traffic, err := HwReadQualityTrafficAt(now)
+	require.NoError(t, err)
+	require.Len(t, traffic.Windows, 2)
+	assert.Equal(t, HwQualityTrafficMinRequests, traffic.MinRequests)
+
+	week := traffic.Windows[0]
+	assert.Equal(t, 7, week.Days)
+	require.Len(t, week.Models, 2)
+	sonnetWeek := week.Models[0]
+	assert.Equal(t, sonnet, sonnetWeek.Model)
+	assert.Equal(t, int64(33), sonnetWeek.Requests)
+	assert.Equal(t, int64(3), sonnetWeek.Failed)
+	assert.True(t, sonnetWeek.EnoughData)
+	require.NotNil(t, sonnetWeek.SuccessPercent)
+	assert.InDelta(t, 90.91, *sonnetWeek.SuccessPercent, 1e-9)
+	require.NotNil(t, sonnetWeek.MedianSeconds)
+	assert.Equal(t, 2, *sonnetWeek.MedianSeconds)
+	require.NotNil(t, sonnetWeek.P95Seconds)
+	assert.Equal(t, 10, *sonnetWeek.P95Seconds)
+	require.NotNil(t, sonnetWeek.OutputTokensPerSecond)
+	assert.InDelta(t, 32.6, *sonnetWeek.OutputTokensPerSecond, 1e-9) // 3000 tokens over 92 s
+
+	haikuWeek := week.Models[1]
+	assert.Equal(t, "claude-haiku-4-5", haikuWeek.Model)
+	assert.Equal(t, int64(5), haikuWeek.Requests)
+	assert.False(t, haikuWeek.EnoughData)
+	assert.Nil(t, haikuWeek.SuccessPercent)
+	assert.Nil(t, haikuWeek.MedianSeconds)
+	assert.Nil(t, haikuWeek.P95Seconds)
+	assert.Nil(t, haikuWeek.OutputTokensPerSecond)
+
+	month := traffic.Windows[1]
+	assert.Equal(t, 30, month.Days)
+	require.Len(t, month.Models, 2)
+	assert.Equal(t, int64(43), month.Models[0].Requests)
+	assert.Equal(t, int64(3), month.Models[0].Failed)
+	require.NotNil(t, month.Models[0].MedianSeconds)
+	assert.Equal(t, 2, *month.Models[0].MedianSeconds)
+}
+
+// TestHwQualityTrafficWithoutLogsIsEmpty pins the honest empty answer: both
+// windows are there, without a single model and without made-up figures.
+func TestHwQualityTrafficWithoutLogsIsEmpty(t *testing.T) {
+	hwTrafficTestSetup(t)
+	traffic, err := HwReadQualityTrafficAt(time.Unix(1_800_000_000, 0))
+	require.NoError(t, err)
+	require.Len(t, traffic.Windows, 2)
+	for _, window := range traffic.Windows {
+		require.NotNil(t, window.Models)
+		assert.Empty(t, window.Models)
+	}
+}
+
+// TestHwObservedModelQualityEdges covers the shapes a quiet or broken model
+// produces: every request failed, every answer under a second, the minimum.
+func TestHwObservedModelQualityEdges(t *testing.T) {
+	allFailed := HwObservedModelQuality("m", nil, 25)
+	assert.True(t, allFailed.EnoughData)
+	require.NotNil(t, allFailed.SuccessPercent)
+	assert.Equal(t, 0.0, *allFailed.SuccessPercent)
+	assert.Nil(t, allFailed.MedianSeconds)
+	assert.Nil(t, allFailed.OutputTokensPerSecond)
+
+	subSecond := HwObservedModelQuality("m", []model.HwQualityLatencyBucket{{ModelName: "m", UseTime: 0, Requests: 20, OutputTokens: 400}}, 0)
+	require.NotNil(t, subSecond.MedianSeconds)
+	assert.Equal(t, 0, *subSecond.MedianSeconds)
+	require.NotNil(t, subSecond.SuccessPercent)
+	assert.Equal(t, 100.0, *subSecond.SuccessPercent)
+	assert.Nil(t, subSecond.OutputTokensPerSecond, "no measurable time, no speed")
+
+	justBelow := HwObservedModelQuality("m", []model.HwQualityLatencyBucket{{ModelName: "m", UseTime: 1, Requests: HwQualityTrafficMinRequests - 1}}, 0)
+	assert.False(t, justBelow.EnoughData)
+	assert.Equal(t, int64(HwQualityTrafficMinRequests-1), justBelow.Requests)
+}
+
+// TestHwQualityTrafficNowRefreshesAfterTenMinutes keeps the public read cheap:
+// within the refresh period a new log row does not trigger a new read, after
+// it the figures follow the log.
+func TestHwQualityTrafficNowRefreshesAfterTenMinutes(t *testing.T) {
+	hwTrafficTestSetup(t)
+	now := time.Unix(1_800_000_000, 0)
+	first, err := HwQualityTrafficNow(now)
+	require.NoError(t, err)
+	assert.Empty(t, first.Windows[0].Models)
+
+	hwTrafficTestLog(t, model.LogTypeConsume, "claude-sonnet-5-5", model.HwPaidGroupName, now.Unix(), 2, 10, "fresh")
+
+	cached, err := HwQualityTrafficNow(now.Add(9 * time.Minute))
+	require.NoError(t, err)
+	assert.Empty(t, cached.Windows[0].Models)
+
+	refreshed, err := HwQualityTrafficNow(now.Add(10 * time.Minute))
+	require.NoError(t, err)
+	require.Len(t, refreshed.Windows[0].Models, 1)
+	assert.Equal(t, int64(1), refreshed.Windows[0].Models[0].Requests)
+}

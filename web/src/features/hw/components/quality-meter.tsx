@@ -43,6 +43,7 @@ import { useSingleRetry } from '../hooks/use-single-retry'
 import { formatHwStamp } from '../lib/format'
 import { httpStatus } from '../lib/http-status'
 import { pickHwLanguage, useHwText } from '../texts'
+import { QualityTrafficTable } from './quality-traffic-table'
 
 export function QualityMeter(props: { retryDelayMs?: number } = {}) {
   const t = useHwText()
@@ -67,6 +68,11 @@ export function QualityMeter(props: { retryDelayMs?: number } = {}) {
 
   const summary = quality.data?.data
   const models = summary?.models ?? []
+  // Traffic counts once any window holds a model with requests.
+  const traffic = summary?.traffic
+  const hasTraffic = Boolean(
+    traffic?.windows.some((window) => window.models.length > 0)
+  )
   const sampleNote =
     (language === 'tr' ? summary?.note : summary?.note_en || summary?.note) ||
     t('qualitySampleNote')
@@ -112,7 +118,7 @@ export function QualityMeter(props: { retryDelayMs?: number } = {}) {
           </Alert>
         )}
 
-        {summary && models.length === 0 && (
+        {summary && !hasTraffic && models.length === 0 && (
           <EmptyState
             bordered
             description={t('qualityEmptyBody')}
@@ -120,10 +126,12 @@ export function QualityMeter(props: { retryDelayMs?: number } = {}) {
           />
         )}
 
+        {traffic && hasTraffic && <QualityTrafficTable traffic={traffic} />}
+
         {summary && models.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle>{t('qualityTitle')}</CardTitle>
+              <CardTitle>{t('qualityJudgedTitle')}</CardTitle>
               <p className='text-muted-foreground text-sm'>
                 {t('qualityRunLine', {
                   tasks: formatNumber(summary.task_count, locale),
@@ -162,7 +170,7 @@ export function QualityMeter(props: { retryDelayMs?: number } = {}) {
           </Card>
         )}
 
-        {summary && (
+        {summary && models.length > 0 && (
           <p className='text-muted-foreground text-sm'>{sampleNote}</p>
         )}
       </PageTransition>
