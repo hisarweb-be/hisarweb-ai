@@ -95,8 +95,10 @@ export function TopUpForm(props: TopUpFormProps) {
             <AlertTitle>{hw('topUpClosedTitle')}</AlertTitle>
             <AlertDescription className='space-y-3'>
               <p>{hw('topUpClosedBody')}</p>
+              {/* AlertDescription underlines links; keep this one a button. */}
               <Button
                 size='sm'
+                className='hover:text-primary-foreground! no-underline!'
                 render={
                   <Link
                     to='/dashboard/$section'
