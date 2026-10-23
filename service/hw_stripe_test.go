@@ -28,8 +28,8 @@ const (
 
 type hwFakeStripeSession struct {
 	id, reference, currency, email, locale, successURL, idempotencyKey string
-	amount                                                              int64
-	status, paymentStatus                                               string
+	amount                                                             int64
+	status, paymentStatus                                              string
 }
 
 // hwFakeStripe mimics the Stripe endpoints the integration uses. It reads the
