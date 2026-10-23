@@ -124,6 +124,37 @@ export type HwQualityLatest = {
   models: HwQualityModel[]
   note: string
   note_en: string
+  /** Observed quality of the real customer traffic; absent on older servers. */
+  traffic?: HwQualityTraffic | null
+}
+
+/**
+ * Observed quality of one own model in one window. The figures are null when
+ * the model has fewer than `min_requests` requests or nothing to measure.
+ */
+export type HwQualityTrafficModel = {
+  model: string
+  requests: number
+  failed: number
+  enough_data: boolean
+  success_percent: number | null
+  median_seconds: number | null
+  p95_seconds: number | null
+  output_tokens_per_second: number | null
+}
+
+/** One window (7 or 30 days) of the observed quality. */
+export type HwQualityTrafficWindow = {
+  days: number
+  models: HwQualityTrafficModel[]
+}
+
+/** Observed quality, computed by the server from its own request logs. */
+export type HwQualityTraffic = {
+  computed_at: number
+  refresh_seconds: number
+  min_requests: number
+  windows: HwQualityTrafficWindow[]
 }
 
 /** The three public state names of `GET /api/hw/status`. */

@@ -187,10 +187,10 @@ const tr = {
 
   qualityTitle: 'Kalite ölçümleri',
   qualityLead:
-    'Modelleri aynı görev setiyle ölçüp ortalama puanı ve yanıt süresini yayınlıyoruz.',
-  qualityEmpty: 'İlk ölçüm yakında',
+    'Her modelimizin başarı oranı, yanıt süresi ve çıktı hızı; son 7 ve 30 günün gerçek müşteri isteklerinden otomatik olarak hesaplanır.',
+  qualityEmpty: 'Henüz ölçülecek istek yok',
   qualityEmptyBody:
-    'Henüz yayınlanmış bir ölçüm yok. İlk ölçüm tamamlandığında sonuçlar burada görünecek.',
+    'Son 30 günde modellerimize gelen müşteri isteği yok. Rakam uydurmuyoruz: ilk istekler geldiğinde sonuçlar burada kendiliğinden görünür.',
   qualityMeasuredAt: 'Ölçüm tarihi',
   qualityTaskCount: 'Görev sayısı',
   qualityModelColumn: 'Model',
@@ -202,6 +202,23 @@ const tr = {
     'Bu sonuçlar sınırlı sayıda görevden oluşan bir örneklem ölçümüdür; her kullanım senaryosunu temsil etmez.',
   qualityError: 'Ölçüm verisi okunamadı. Lütfen tekrar deneyin.',
   qualityLoading: 'Ölçüm verisi yükleniyor…',
+  qualityTrafficTitle: 'Gerçek müşteri isteklerinden ölçüm',
+  qualityWindowsLabel: 'Ölçüm dönemi',
+  qualityWindowTab: 'Son {days} gün',
+  qualityRequests: 'İstek',
+  qualitySuccess: 'Başarı oranı',
+  qualityMedian: 'Medyan yanıt süresi',
+  qualityP95: 'p95 yanıt süresi',
+  qualitySpeed: 'Çıktı hızı',
+  qualityPercentUnit: '%{value}',
+  qualitySecondsUnit: '{value} sn',
+  qualityUnderSecond: '<1 sn',
+  qualitySpeedUnit: '{value} token/sn',
+  qualityTooFew: 'Yeterli veri yok (en az {min} istek)',
+  qualityWindowEmpty: 'Bu dönemde müşteri isteği yok.',
+  qualityTrafficNote:
+    'Rakamlar gerçek müşteri isteklerinden otomatik hesaplanır ve en geç {minutes} dakikada bir yenilenir. Başarısız sayılan istek, tüm denemelere rağmen yanıt alamayan istektir. Yanıt süresi tam saniye olarak kaydedilir; p95, isteklerin %95’inin bu süre içinde yanıtlandığı anlamına gelir. Son hesaplama: {stamp}.',
+  qualityJudgedTitle: 'Görev seti ölçümü',
 
   statusTitle: 'Hizmet durumu',
   statusLead:
@@ -495,10 +512,10 @@ const en: Record<HwTextKey, string> = {
 
   qualityTitle: 'Quality results',
   qualityLead:
-    'We measure the models on the same task set and publish the average score and response time.',
-  qualityEmpty: 'First measurement coming soon',
+    'The success rate, response time and output speed of every model, computed automatically from real customer requests over the last 7 and 30 days.',
+  qualityEmpty: 'No requests to measure yet',
   qualityEmptyBody:
-    'No measurement has been published yet. The results appear here once the first one is complete.',
+    'Our models received no customer requests in the last 30 days. We do not make up figures: the results appear here by themselves once the first requests arrive.',
   qualityMeasuredAt: 'Measured on',
   qualityTaskCount: 'Tasks',
   qualityModelColumn: 'Model',
@@ -510,6 +527,23 @@ const en: Record<HwTextKey, string> = {
     'These results are a sample over a limited task set; they do not represent every use case.',
   qualityError: 'The measurement data could not be loaded. Please try again.',
   qualityLoading: 'Loading the measurement…',
+  qualityTrafficTitle: 'Measured on real customer requests',
+  qualityWindowsLabel: 'Measurement period',
+  qualityWindowTab: 'Last {days} days',
+  qualityRequests: 'Requests',
+  qualitySuccess: 'Success rate',
+  qualityMedian: 'Median response time',
+  qualityP95: 'p95 response time',
+  qualitySpeed: 'Output speed',
+  qualityPercentUnit: '{value}%',
+  qualitySecondsUnit: '{value} s',
+  qualityUnderSecond: '<1 s',
+  qualitySpeedUnit: '{value} tokens/s',
+  qualityTooFew: 'Not enough data (at least {min} requests)',
+  qualityWindowEmpty: 'No customer requests in this period.',
+  qualityTrafficNote:
+    'The figures are computed automatically from real customer requests and refreshed at least every {minutes} minutes. A request counts as failed when none of its attempts got an answer. Response times are recorded in whole seconds; p95 means 95% of the requests were answered within that time. Last computed: {stamp}.',
+  qualityJudgedTitle: 'Task set measurement',
 
   statusTitle: 'Service status',
   statusLead:

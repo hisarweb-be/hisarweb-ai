@@ -14,6 +14,7 @@ package service
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -21,7 +22,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -410,6 +413,9 @@ type HwQualityLatestSummary struct {
 	Models         []HwQualityModelSummary `json:"models"`
 	Note           string                  `json:"note"`
 	NoteEn         string                  `json:"note_en"`
+	// Traffic is the observed quality of the real customer traffic. It is
+	// filled by the public endpoint and stays nil for the judged run alone.
+	Traffic *HwQualityTraffic `json:"traffic"`
 }
 
 // HwLatestQualitySummary aggregates the newest run per model. Without any run
@@ -471,4 +477,170 @@ func HwLatestQualitySummary() (*HwQualityLatestSummary, error) {
 	summary.TaskCount = run.TaskCount
 	summary.JudgeModel = run.JudgeModel
 	return summary, nil
+}
+
+// Observed quality of the real customer traffic. Where the judged run above
+// needs paid test calls, these figures come for free from the rows the relay
+// writes for every customer request anyway: the share of requests that got an
+// answer, the median and 95th percentile of the response time, and the output
+// speed. They cover the last seven and thirty days and are rebuilt at most
+// every ten minutes, so they stay current without a job and without letting a
+// public read scan the log table on every visit.
+const (
+	// HwQualityTrafficMinRequests is the request count of a window below which
+	// a model shows its request count only: a percentile over a handful of
+	// requests says nothing.
+	HwQualityTrafficMinRequests = 20
+
+	hwQualityTrafficRefresh = 10 * time.Minute
+	hwQualityTrafficDay     = 24 * 3600
+)
+
+// hwQualityTrafficWindowDays are the windows of the public figures.
+var hwQualityTrafficWindowDays = []int{7, 30}
+
+// HwQualityTrafficModel is the observed quality of one own model in one
+// window. The figures are null while the window has fewer than
+// HwQualityTrafficMinRequests requests, and the latency figures stay null when
+// no request was served at all.
+type HwQualityTrafficModel struct {
+	Model      string `json:"model"`
+	Requests   int64  `json:"requests"`
+	Failed     int64  `json:"failed"`
+	EnoughData bool   `json:"enough_data"`
+	// SuccessPercent is the share of requests that got an answer, two decimals.
+	SuccessPercent *float64 `json:"success_percent"`
+	// MedianSeconds and P95Seconds are the full response time of a served
+	// request in whole seconds, as the relay records it.
+	MedianSeconds *int `json:"median_seconds"`
+	P95Seconds    *int `json:"p95_seconds"`
+	// OutputTokensPerSecond is the output tokens of the served requests over
+	// their total response time, one decimal.
+	OutputTokensPerSecond *float64 `json:"output_tokens_per_second"`
+}
+
+// HwQualityTrafficWindow lists the own models with at least one request in the
+// window, in catalog order.
+type HwQualityTrafficWindow struct {
+	Days   int                     `json:"days"`
+	Models []HwQualityTrafficModel `json:"models"`
+}
+
+// HwQualityTraffic is the public observed-quality answer.
+type HwQualityTraffic struct {
+	ComputedAt     int64                    `json:"computed_at"`
+	RefreshSeconds int                      `json:"refresh_seconds"`
+	MinRequests    int                      `json:"min_requests"`
+	Windows        []HwQualityTrafficWindow `json:"windows"`
+}
+
+var hwQualityTrafficCache struct {
+	sync.Mutex
+	builtAt time.Time
+	traffic *HwQualityTraffic
+}
+
+// HwQualityTrafficNow answers the observed quality, rebuilt from the logs at
+// most once per refresh period. The lock is held while rebuilding, so a burst
+// of visitors after the period ends costs one read, not one per visitor.
+func HwQualityTrafficNow(now time.Time) (*HwQualityTraffic, error) {
+	hwQualityTrafficCache.Lock()
+	defer hwQualityTrafficCache.Unlock()
+	cached := hwQualityTrafficCache.traffic
+	if cached != nil && !now.Before(hwQualityTrafficCache.builtAt) && now.Sub(hwQualityTrafficCache.builtAt) < hwQualityTrafficRefresh {
+		return cached, nil
+	}
+	traffic, err := HwReadQualityTrafficAt(now)
+	if err != nil {
+		return nil, err
+	}
+	hwQualityTrafficCache.builtAt = now
+	hwQualityTrafficCache.traffic = traffic
+	return traffic, nil
+}
+
+// HwReadQualityTrafficAt builds the observed quality of every own model for
+// the windows ending at now, straight from the logs.
+func HwReadQualityTrafficAt(now time.Time) (*HwQualityTraffic, error) {
+	models := HwSoldModelNames()
+	traffic := &HwQualityTraffic{
+		ComputedAt:     now.Unix(),
+		RefreshSeconds: int(hwQualityTrafficRefresh.Seconds()),
+		MinRequests:    HwQualityTrafficMinRequests,
+		Windows:        make([]HwQualityTrafficWindow, 0, len(hwQualityTrafficWindowDays)),
+	}
+	// The end is exclusive; one second past now keeps the current second in.
+	to := now.Unix() + 1
+	for _, days := range hwQualityTrafficWindowDays {
+		buckets, failures, err := model.HwReadQualityTraffic(to-int64(days)*hwQualityTrafficDay, to, models)
+		if err != nil {
+			return nil, err
+		}
+		bucketsOf := make(map[string][]model.HwQualityLatencyBucket)
+		for _, bucket := range buckets {
+			bucketsOf[bucket.ModelName] = append(bucketsOf[bucket.ModelName], bucket)
+		}
+		failedOf := make(map[string]int64, len(failures))
+		for _, failure := range failures {
+			failedOf[failure.ModelName] = failure.Failed
+		}
+		window := HwQualityTrafficWindow{Days: days, Models: []HwQualityTrafficModel{}}
+		for _, name := range models {
+			entry := HwObservedModelQuality(name, bucketsOf[name], failedOf[name])
+			if entry.Requests > 0 {
+				window.Models = append(window.Models, entry)
+			}
+		}
+		traffic.Windows = append(traffic.Windows, window)
+	}
+	return traffic, nil
+}
+
+// HwObservedModelQuality folds the latency buckets and the failed count of one
+// model into its public figures. The percentiles use the nearest rank over the
+// whole-second durations the relay records.
+func HwObservedModelQuality(name string, buckets []model.HwQualityLatencyBucket, failed int64) HwQualityTrafficModel {
+	entry := HwQualityTrafficModel{Model: name, Failed: max(failed, 0)}
+	sorted := slices.Clone(buckets)
+	slices.SortFunc(sorted, func(a, b model.HwQualityLatencyBucket) int { return cmp.Compare(a.UseTime, b.UseTime) })
+	var served, outputTokens, busySeconds int64
+	for _, bucket := range sorted {
+		served += bucket.Requests
+		if bucket.UseTime > 0 {
+			outputTokens += bucket.OutputTokens
+			busySeconds += int64(bucket.UseTime) * bucket.Requests
+		}
+	}
+	entry.Requests = served + entry.Failed
+	if entry.Requests < HwQualityTrafficMinRequests {
+		return entry
+	}
+	entry.EnoughData = true
+	success := math.Round(float64(served)*10000/float64(entry.Requests)) / 100
+	entry.SuccessPercent = &success
+	if served == 0 {
+		return entry
+	}
+	median := hwLatencyAtRank(sorted, (served+1)/2)
+	p95 := hwLatencyAtRank(sorted, (served*95+99)/100)
+	entry.MedianSeconds = &median
+	entry.P95Seconds = &p95
+	if busySeconds > 0 {
+		speed := math.Round(float64(outputTokens)*10/float64(busySeconds)) / 10
+		entry.OutputTokensPerSecond = &speed
+	}
+	return entry
+}
+
+// hwLatencyAtRank returns the duration of the request at the given 1-based
+// rank of buckets sorted by duration.
+func hwLatencyAtRank(sorted []model.HwQualityLatencyBucket, rank int64) int {
+	var seen int64
+	for _, bucket := range sorted {
+		seen += bucket.Requests
+		if seen >= rank {
+			return bucket.UseTime
+		}
+	}
+	return sorted[len(sorted)-1].UseTime
 }
