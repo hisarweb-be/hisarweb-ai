@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createInstance } from 'i18next'
 import { I18nextProvider } from 'react-i18next'
@@ -244,11 +244,49 @@ describe('quality meter page', () => {
     expect(screen.getByText('9 sn')).toBeInTheDocument()
     expect(screen.getByText('32,6 token/sn')).toBeInTheDocument()
     expect(screen.queryByText('İlk ölçüm yakında')).not.toBeInTheDocument()
-    expect(screen.queryByText('Henüz ölçülecek istek yok')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Henüz ölçülecek istek yok')
+    ).not.toBeInTheDocument()
     // Without a judged run there is no judged table and no sample note.
     expect(screen.queryByText('Görev seti ölçümü')).not.toBeInTheDocument()
     expect(screen.queryByText(sampleNote)).not.toBeInTheDocument()
-    expect(screen.getByText(/en geç 10 dakikada bir yenilenir/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/en geç 10 dakikada bir yenilenir/)
+    ).toBeInTheDocument()
+  })
+
+  it('shows one card per model with all figures on a 390px phone', async () => {
+    const width = window.innerWidth
+    window.innerWidth = 390
+    try {
+      mockQuality(observed)
+      renderPage()
+
+      const cards = await screen.findAllByTestId('hw-quality-traffic-card')
+      expect(cards).toHaveLength(2)
+      expect(screen.queryByRole('table')).not.toBeInTheDocument()
+      const sonnet = within(cards[0])
+      expect(sonnet.getByText('claude-sonnet-5-5')).toBeInTheDocument()
+      for (const value of [
+        '1.234',
+        '%99,76',
+        '2 sn',
+        '9 sn',
+        '32,6 token/sn',
+      ]) {
+        expect(sonnet.getByText(value)).toBeInTheDocument()
+      }
+      expect(sonnet.getByText('p95 yanıt süresi')).toBeInTheDocument()
+      // A model below the minimum shows its count and the reason, no figures.
+      const haiku = within(cards[1])
+      expect(haiku.getByText('5')).toBeInTheDocument()
+      expect(
+        haiku.getByText('Yeterli veri yok (en az 20 istek)')
+      ).toBeInTheDocument()
+      expect(haiku.queryByText('p95 yanıt süresi')).not.toBeInTheDocument()
+    } finally {
+      window.innerWidth = width
+    }
   })
 
   it('shows only the count for a model below the minimum', async () => {
