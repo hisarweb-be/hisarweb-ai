@@ -1,7 +1,7 @@
 // One measurement pass of the status meter.
 //
-// The pass measures the share of failed paid customer requests of the last full
-// minute from the rows the relay already writes: a failed request leaves an
+// The pass measures, per model, the share of failed paid customer requests of
+// the last full minute from the rows the relay already writes: a failed request leaves an
 // error row in the paid group and a served request leaves a consume row. It
 // records one sample per own model, opens or closes an outage from the sample
 // chain and applies the credit extension of every closed but unhandled outage.
@@ -25,20 +25,20 @@ import (
 func HwMeasureStatusOnce(at time.Time, models []string) error {
 	minute := hwStatusMinuteNow(at)
 	from := minute - hwStatusMinuteSeconds
-	failed, measured, err := HwCountPaidRequests(from, minute)
+	counts, err := HwCountPaidRequests(from, minute)
 	if err != nil {
 		return err
 	}
-	verdict := HwEvaluateStatusMinute(failed, measured)
 	var routed map[string]bool
-	if verdict.Idle {
-		routed = hwRoutedModels()
-	}
 	for _, name := range models {
+		verdict := HwEvaluateStatusMinute(counts[name].Failed, counts[name].Measured)
 		ok, reason := verdict.Ok, verdict.Reason
 		if verdict.Idle {
 			// Without traffic the evidence is the route: a sold model with an
 			// enabled channel in the paid group can be served.
+			if routed == nil {
+				routed = hwRoutedModels()
+			}
 			ok, reason = routed[name], ""
 			if !ok {
 				reason = HwStatusReasonNoRoute

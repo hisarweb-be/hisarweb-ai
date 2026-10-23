@@ -387,33 +387,55 @@ type hwStatusAvailabilityRow struct {
 	Good  int64
 }
 
+// HwPaidCounts is the number of failed and served paid requests of one model in
+// one window.
+type HwPaidCounts struct {
+	Failed   int64
+	Measured int64
+}
+
+// hwPaidCountRow is one aggregate row of the paid request count.
+type hwPaidCountRow struct {
+	ModelName string
+	Total     int64
+}
+
 // HwCountPaidRequests counts the paid customer requests and the failed ones in
-// one window. The consume rows are the measured requests and the error rows of
-// the same paid group are the failures, so the share comes from the rows the
-// relay already writes. The window is bounded in plain comparisons instead of
-// dialect-specific time functions, because the log table can live on any of the
-// supported databases.
-func HwCountPaidRequests(from int64, to int64) (failed int64, measured int64, err error) {
+// one window, per requested model name. The consume rows are the measured
+// requests and the error rows of the same paid group are the failures, so the
+// share comes from the rows the relay already writes. Counting per model keeps
+// one broken model from turning every other model red (22 Oct 2026: a 404 on
+// claude-haiku-4-5 marked all ten models bad). The window is bounded in plain
+// comparisons instead of dialect-specific time functions, because the log table
+// can live on any of the supported databases.
+func HwCountPaidRequests(from int64, to int64) (map[string]HwPaidCounts, error) {
 	if from <= 0 || to <= from {
-		return 0, 0, errors.New("invalid status measurement window")
+		return nil, errors.New("invalid status measurement window")
 	}
-	err = LOG_DB.Model(&Log{}).
-		Where("type = ?", LogTypeConsume).
-		Where("created_at >= ? AND created_at < ?", from, to).
-		Where(logGroupCol+" = ?", HwPaidGroupName).
-		Count(&measured).Error
-	if err != nil {
-		return 0, 0, err
+	counts := make(map[string]HwPaidCounts)
+	for _, logType := range []int{LogTypeConsume, LogTypeError} {
+		var rows []hwPaidCountRow
+		err := LOG_DB.Model(&Log{}).
+			Select("model_name, COUNT(*) AS total").
+			Where("type = ?", logType).
+			Where("created_at >= ? AND created_at < ?", from, to).
+			Where(logGroupCol+" = ?", HwPaidGroupName).
+			Group("model_name").
+			Scan(&rows).Error
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			c := counts[row.ModelName]
+			if logType == LogTypeConsume {
+				c.Measured = row.Total
+			} else {
+				c.Failed = row.Total
+			}
+			counts[row.ModelName] = c
+		}
 	}
-	err = LOG_DB.Model(&Log{}).
-		Where("type = ?", LogTypeError).
-		Where("created_at >= ? AND created_at < ?", from, to).
-		Where(logGroupCol+" = ?", HwPaidGroupName).
-		Count(&failed).Error
-	if err != nil {
-		return 0, 0, err
-	}
-	return failed, measured, nil
+	return counts, nil
 }
 
 // HwReadStatusSnapshot reads the public status of the named own models: their
