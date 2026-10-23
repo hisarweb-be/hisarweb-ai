@@ -128,12 +128,19 @@ For commercial licensing, please contact support@quantumnous.com
 }
 
 /* ---------- the best-price column on the price table ---------- */
-.hwp-best {
+/* The pill also stands alone on the phone card, so it carries the colour too. */
+.hwp-best,
+.hwp-best-pill {
   --hwp-best: oklch(0.62 0.16 155);
+}
+.dark .hwp-best,
+.dark .hwp-best-pill {
+  --hwp-best: oklch(0.74 0.16 155);
+}
+.hwp-best {
   background: color-mix(in oklch, var(--hwp-best) 9%, transparent);
 }
 .dark .hwp-best {
-  --hwp-best: oklch(0.74 0.16 155);
   background: color-mix(in oklch, var(--hwp-best) 12%, transparent);
 }
 .hwp-best-edge {
