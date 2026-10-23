@@ -2417,6 +2417,7 @@
     "Failed to create the Discovery request: {{error}}": "Discovery リクエストの作成に失敗しました: {{error}}",
     "Failed to create the plan product": "プラン商品の作成に失敗しました",
     "Failed to create the Telegram link": "Failed to create the Telegram link",
+    "Failed to read the Telegram link status": "Failed to read the Telegram link status",
     "Exchange rate must be greater than 0": "為替レートは 0 より大きくする必要があります",
     "Excludes the first attempt. Counted per group.": "初回を除く、グループごとの回数です。",
     "Execute code in a sandbox during the response": "応答中にサンドボックスでコードを実行",

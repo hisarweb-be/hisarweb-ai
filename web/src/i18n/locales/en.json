@@ -2417,6 +2417,7 @@
     "Failed to create the Discovery request: {{error}}": "Failed to create the Discovery request: {{error}}",
     "Failed to create the plan product": "Failed to create the plan product",
     "Failed to create the Telegram link": "Failed to create the Telegram link",
+    "Failed to read the Telegram link status": "Failed to read the Telegram link status",
     "Exchange rate must be greater than 0": "Exchange rate must be greater than 0",
     "Excludes the first attempt. Counted per group.": "Excludes the first attempt. Counted per group.",
     "Execute code in a sandbox during the response": "Execute code in a sandbox during the response",

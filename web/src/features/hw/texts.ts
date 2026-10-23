@@ -129,6 +129,10 @@ const tr = {
   topUpErrorUnavailable:
     'Ödeme şu anda kullanılamıyor. Lütfen biraz sonra tekrar deneyin.',
   topUpErrorDefault: 'Sipariş başlatılamadı. Lütfen tekrar deneyin.',
+  topUpClosedTitle: 'Online ödeme çok yakında açılıyor',
+  topUpClosedBody:
+    'Kartla ödeme henüz açık değil. Bu arada 250 TL başlangıç bonusunu ücretsiz alabilirsiniz: e-postanızı onaylayın, Telegram’ı bağlayın ve numaranızı botla paylaşın.',
+  topUpClosedBonusButton: '250 TL bonusu al',
   topUpReturnTitle: 'Ödeme sayfasından döndünüz',
   topUpReturnPending: 'Bakiye, ödeme onaydan sonra görünür.',
   topUpReturnBody:
@@ -283,6 +287,27 @@ const tr = {
     'Telegram’ı bağla düğmesine basın, Telegram’da Başlat’a dokunun ve numaranızı botun düğmesiyle paylaşın.',
   bonusHintPhone:
     'Botu açın, Başlat’a basın ve Numaramı paylaş düğmesine dokunun.',
+  tgDialogTitle: 'Telegram’ı bağlayın',
+  tgDialogLead:
+    'Telefonunuzun kamerasıyla QR kodu tarayın ya da aşağıdaki düğmelerden birini kullanın. Telegram’da Başlat’a basın, ardından botun Numaramı paylaş düğmesine dokunun.',
+  tgDialogQrLabel: 'Telefonunuzla tarayın',
+  tgDialogOpenWeb: 'Telegram Web’de aç',
+  tgDialogOpenApp: 'Telegram uygulamasında aç',
+  tgDialogNoAppHint:
+    'Bu bilgisayarda Telegram uygulaması yoksa Telegram Web’i kullanın veya QR kodu telefonunuzla tarayın.',
+  tgDialogFallback: 'Açılmıyor mu? Bu bağlantıyı Telegram’da açın:',
+  tgDialogValidity:
+    'Bağlantı 15 dakika geçerlidir ve yalnızca bir kez kullanılabilir.',
+  tgDialogLoading: 'Bağlantı hazırlanıyor…',
+  tgDialogWaiting: 'Telegram’dan onay bekleniyor…',
+  tgDialogLinked:
+    'Telegram bağlandı. Şimdi bottaki Numaramı paylaş düğmesine dokunun.',
+  tgDialogPhoneShared: 'Numaranız alındı. Bonus hesabınıza işleniyor…',
+  tgDialogDone: 'Bağlandı, 250 TL bonus hesabınızda',
+  tgDialogStopped:
+    'Bir süredir yanıt gelmedi. Telegram’da işlemi bitirdiyseniz yeni bir bağlantı alın.',
+  tgDialogRetry: 'Yeni bağlantı al',
+  tgDialogClose: 'Kapat',
   noCreditTitle: 'Bakiyeniz bitti',
   noCreditBody:
     'Bu isteği göndermek için hesabınızda yeterli bakiye yok. Yeni hesaplar 250 TL başlangıç bonusu alır; bonusu henüz almadıysanız aşağıdan talep edin ya da TL ile bakiye yükleyin.',
@@ -455,6 +480,10 @@ const en: Record<HwTextKey, string> = {
   topUpErrorUnavailable:
     'Payment is not available right now. Please try again a bit later.',
   topUpErrorDefault: 'The order could not be started. Please try again.',
+  topUpClosedTitle: 'Online payment opens very soon',
+  topUpClosedBody:
+    'Card payment is not open yet. Meanwhile you can claim the TRY 250 start bonus for free: confirm your e-mail, link Telegram and share your number with the bot.',
+  topUpClosedBonusButton: 'Claim the TRY 250 bonus',
   topUpReturnTitle: 'You are back from the payment page',
   topUpReturnPending: 'The balance appears after the payment is confirmed.',
   topUpReturnBody:
@@ -609,6 +638,26 @@ const en: Record<HwTextKey, string> = {
     'Press Link Telegram, tap Start in Telegram and share your number with the bot’s button.',
   bonusHintPhone:
     'Open the bot, press Start and tap the Share my number button.',
+  tgDialogTitle: 'Link Telegram',
+  tgDialogLead:
+    'Scan the QR code with your phone camera or use one of the buttons below. Tap Start in Telegram, then tap the bot’s Share my number button.',
+  tgDialogQrLabel: 'Scan with your phone',
+  tgDialogOpenWeb: 'Open in Telegram Web',
+  tgDialogOpenApp: 'Open in the Telegram app',
+  tgDialogNoAppHint:
+    'No Telegram app on this computer? Use Telegram Web or scan the QR code with your phone.',
+  tgDialogFallback: 'Nothing opens? Open this link in Telegram:',
+  tgDialogValidity: 'The link is valid for 15 minutes and works once.',
+  tgDialogLoading: 'Preparing the link…',
+  tgDialogWaiting: 'Waiting for Telegram…',
+  tgDialogLinked:
+    'Telegram is linked. Now tap the Share my number button in the bot.',
+  tgDialogPhoneShared: 'Your number arrived. The bonus is being added…',
+  tgDialogDone: 'Linked, the TRY 250 bonus is in your account',
+  tgDialogStopped:
+    'No answer for a while. If you finished in Telegram, get a new link.',
+  tgDialogRetry: 'Get a new link',
+  tgDialogClose: 'Close',
   noCreditTitle: 'You are out of credit',
   noCreditBody:
     'Your account does not have enough credit for this request. New accounts get a TRY 250 start bonus; claim it below if you have not yet, or top up in TRY.',

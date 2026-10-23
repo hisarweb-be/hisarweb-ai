@@ -18,6 +18,13 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+} from '@tanstack/react-router'
+import {
   act,
   cleanup,
   render,
@@ -33,10 +40,11 @@ import { PurchasePage } from '../components/purchase-page'
 import { hwTexts } from '../texts'
 import type { HwCreditPackages } from '../types'
 
-const { get, post, assign } = vi.hoisted(() => ({
+const { get, post, assign, getStatus } = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
   assign: vi.fn(),
+  getStatus: vi.fn(),
 }))
 
 vi.mock('@/lib/api', () => ({
@@ -44,6 +52,7 @@ vi.mock('@/lib/api', () => ({
     get,
     post,
   },
+  getStatus,
 }))
 
 vi.mock('@/features/hw/lib/checkout', async (importOriginal) => {
@@ -77,6 +86,11 @@ beforeEach(async () => {
   get.mockReset()
   post.mockReset()
   assign.mockReset()
+  getStatus.mockReset()
+  // The status query seeds itself from a localStorage snapshot.
+  localStorage.clear()
+  // A server that does not send the flag yet keeps the form open.
+  getStatus.mockResolvedValue({})
   get.mockResolvedValue({
     data: { success: true, data: packagesAnswer },
   })
@@ -91,10 +105,25 @@ afterEach(() => {
   client.clear()
 })
 
-function renderPage(returnedFromPayment: boolean) {
+// The closed-payment notice links to the start bonus, so the page needs a router.
+async function renderPage(returnedFromPayment: boolean) {
+  const rootRoute = createRootRoute({
+    component: () => <PurchasePage returnedFromPayment={returnedFromPayment} />,
+  })
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([
+      createRoute({
+        getParentRoute: () => rootRoute,
+        path: '/dashboard/$section',
+        component: () => null,
+      }),
+    ]),
+    history: createMemoryHistory({ initialEntries: ['/'] }),
+  })
+  await router.load()
   return render(
     <QueryClientProvider client={client}>
-      <PurchasePage returnedFromPayment={returnedFromPayment} />
+      <RouterProvider router={router} />
     </QueryClientProvider>
   )
 }
@@ -109,7 +138,7 @@ function expectNoVendorName() {
 
 describe('top-up page', () => {
   it('shows the Turkish form and the packages from GET /api/user/hw/packages', async () => {
-    renderPage(false)
+    await renderPage(false)
 
     expect(screen.getByText(tr.topUpPageTitle)).toBeInTheDocument()
     expect(screen.getByText(tr.topUpTitle)).toBeInTheDocument()
@@ -135,7 +164,7 @@ describe('top-up page', () => {
         },
       },
     })
-    renderPage(false)
+    await renderPage(false)
 
     const presets = screen.getByRole('group', { name: tr.topUpPresetLabel })
     await user.click(within(presets).getByRole('button', { name: /500/ }))
@@ -154,7 +183,7 @@ describe('top-up page', () => {
 
   it('refuses an amount outside 100-20000 TL without calling the server', async () => {
     const user = userEvent.setup()
-    renderPage(false)
+    await renderPage(false)
 
     const input = screen.getByLabelText(tr.topUpCustomLabel)
     await user.clear(input)
@@ -172,7 +201,7 @@ describe('top-up page', () => {
   ])('words a %i answer as %s', async (status, expected) => {
     const user = userEvent.setup()
     post.mockRejectedValue({ response: { status } })
-    renderPage(false)
+    await renderPage(false)
 
     await user.click(screen.getByRole('button', { name: tr.topUpSubmit }))
 
@@ -180,8 +209,31 @@ describe('top-up page', () => {
     expect(assign).not.toHaveBeenCalled()
   })
 
+  it('while card payment is not configured shows a calm notice and disables the order', async () => {
+    getStatus.mockResolvedValue({ hw_payment_available: false })
+    await renderPage(false)
+
+    expect(await screen.findByText(tr.topUpClosedTitle)).toBeInTheDocument()
+    expect(screen.getByText(tr.topUpClosedBody)).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: tr.topUpClosedBonusButton })
+    ).toHaveAttribute('href', '/dashboard/overview#startbonus')
+    expect(screen.getByRole('button', { name: tr.topUpSubmit })).toBeDisabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('once card payment is configured keeps the order open', async () => {
+    getStatus.mockResolvedValue({ hw_payment_available: true })
+    await renderPage(false)
+
+    await waitFor(() => expect(getStatus).toHaveBeenCalled())
+    expect(screen.queryByText(tr.topUpClosedTitle)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: tr.topUpSubmit })).toBeEnabled()
+  })
+
   it('after the payment page says only that the balance follows confirmation', async () => {
-    renderPage(true)
+    await renderPage(true)
 
     const alert = await screen.findByText(tr.topUpReturnPending)
     expect(alert).toBeInTheDocument()

@@ -21,7 +21,6 @@ import { Link } from '@tanstack/react-router'
 import { Check, Gift, Wallet } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -30,27 +29,18 @@ import {
 } from '@/features/hw/hooks/use-hw-packages'
 import { type HwTextKey, useHwText } from '@/features/hw/texts'
 import { useStatus } from '@/hooks/use-status'
-import { api, getSelf } from '@/lib/api'
+import { getSelf } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { type AuthUser, useAuthStore } from '@/stores/auth-store'
 
-/** Answer of `POST /api/hw/telegram/link`. */
-type TelegramLinkAnswer = {
-  success: boolean
-  message?: string
-  data?: {
-    linked?: boolean
-    url?: string
-    expires_at?: number
-  }
-}
+import { TelegramLinkDialog } from './telegram-link-dialog'
 
 type BonusStepAction = {
   label: string
   hint?: HwTextKey
   to?: string
   href?: string
-  /** Ask the server for a one-time Telegram deep link instead of navigating. */
+  /** Open the dialog with the one-time bot link instead of navigating. */
   linkTelegram?: boolean
 }
 
@@ -78,7 +68,7 @@ export function StartbonusCard() {
   const { status } = useStatus()
   const packages = useHwPackages()
   const queryClient = useQueryClient()
-  const [linking, setLinking] = useState(false)
+  const [dialogOpen, setDialogOpen] = useState(false)
 
   /** Read the account and the packages again, without polling. */
   const refreshAccount = useCallback(async () => {
@@ -101,43 +91,20 @@ export function StartbonusCard() {
     return () => window.removeEventListener('focus', onFocus)
   }, [refreshAccount])
 
-  const linkTelegram = useCallback(async () => {
-    // Safari and in-app browsers only open a tab straight from the click, not
-    // after the request below, so the tab opens now and gets the link later.
-    const tab = window.open('', '_blank')
-    if (tab) tab.opener = null
-    let opened = false
-    setLinking(true)
-    try {
-      const answer = (
-        await api.post<TelegramLinkAnswer>('/api/hw/telegram/link')
-      ).data
-      if (!answer.success) {
-        toast.error(t(answer.message ?? 'Failed to create the Telegram link'))
-      } else if (answer.data?.url) {
-        opened = true
-        if (tab) tab.location.href = answer.data.url
-        else window.location.assign(answer.data.url)
-      } else if (answer.data?.linked) {
-        await refreshAccount()
-      } else {
-        toast.error(t('Failed to create the Telegram link'))
-      }
-    } catch (error) {
-      const message =
-        error instanceof Error && error.message
-          ? error.message
-          : 'Failed to create the Telegram link'
-      toast.error(t(message))
-    } finally {
-      if (!opened) tab?.close()
-      setLinking(false)
-    }
-  }, [refreshAccount, t])
+  const linkTelegram = () => setDialogOpen(true)
+  const dialog = (
+    <TelegramLinkDialog
+      open={dialogOpen}
+      onOpenChange={setDialogOpen}
+      onProgress={refreshAccount}
+    />
+  )
 
   if (!user || !packages.isSuccess) return null
   const claimed = packages.data.packages.some((pkg) => pkg.source === 'free')
-  if (claimed) return null
+  // The dialog stays on screen to say the bonus arrived, even though the card
+  // itself is no longer needed then.
+  if (claimed) return dialogOpen ? dialog : null
 
   const botName = String(status?.telegram_bot_name ?? '').replace(/^@/, '')
   const telegramOpen =
@@ -174,7 +141,7 @@ export function StartbonusCard() {
           ? {
               label: hw('bonusButtonPhone'),
               hint: 'bonusHintPhone',
-              href: `https://t.me/${botName}`,
+              linkTelegram: true,
             }
           : undefined,
     },
@@ -190,7 +157,7 @@ export function StartbonusCard() {
   } else if (telegramOpen && current === 1) {
     action = { label: t('Link Telegram'), linkTelegram: true }
   } else if (telegramOpen && current === 2 && botName) {
-    action = { label: hw('bonusButtonPhone'), href: `https://t.me/${botName}` }
+    action = { label: hw('bonusButtonPhone'), linkTelegram: true }
   }
 
   return (
@@ -234,13 +201,7 @@ export function StartbonusCard() {
             </Button>
           )}
           {action?.linkTelegram && (
-            <Button
-              size='sm'
-              onClick={() => {
-                void linkTelegram()
-              }}
-              disabled={linking}
-            >
+            <Button size='sm' onClick={linkTelegram}>
               <Gift data-icon='inline-start' />
               {action.label}
             </Button>
@@ -324,10 +285,7 @@ export function StartbonusCard() {
                     variant='link'
                     size='sm'
                     className='self-start'
-                    onClick={() => {
-                      void linkTelegram()
-                    }}
-                    disabled={linking}
+                    onClick={linkTelegram}
                   >
                     {stepAction.label}
                   </Button>
@@ -337,6 +295,7 @@ export function StartbonusCard() {
           )
         })}
       </ol>
+      {dialog}
     </section>
   )
 }

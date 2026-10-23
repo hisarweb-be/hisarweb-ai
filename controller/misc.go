@@ -129,6 +129,10 @@ func GetStatus(c *gin.Context) {
 		"quota_remind_threshold":      common.QuotaRemindThreshold,
 	}
 
+	// HisarWeb AI: the top-up page shows a calm "opening soon" state instead
+	// of an order that fails while card payment is not configured.
+	data["hw_payment_available"] = service.HwRevolutPaymentAvailable()
+
 	// 根据启用状态注入可选内容
 	if cs.ApiInfoEnabled {
 		data["api_info"] = console_setting.GetApiInfo()

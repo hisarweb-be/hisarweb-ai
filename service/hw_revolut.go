@@ -32,7 +32,7 @@ const (
 	hwRevolutDefaultAPIVersion  = "2024-09-01"
 	hwRevolutMaxResponseBytes   = 1 << 20
 	hwRevolutWebhookMaxClockGap = 5 * time.Minute
-	hwRevolutRequestTimeout    = 30 * time.Second
+	hwRevolutRequestTimeout     = 30 * time.Second
 )
 
 // Errors of the Revolut integration. Only these are returned to callers; an
@@ -117,6 +117,18 @@ func HwRevolutConfigFromEnv() (HwRevolutConfig, error) {
 		apiVersion = hwRevolutDefaultAPIVersion
 	}
 	return HwRevolutConfig{BaseURL: baseURL, SecretKey: secretKey, APIVersion: apiVersion}, nil
+}
+
+// HwRevolutPaymentAvailable reports whether a customer can pay by card right
+// now: the merchant key resolves to a usable configuration and the webhook
+// secret is set. Without the secret a paid order would never be confirmed, so
+// the top-up page must not offer the payment then. The answer is a flag only;
+// no part of either secret leaves this function.
+func HwRevolutPaymentAvailable() bool {
+	if _, err := HwRevolutConfigFromEnv(); err != nil {
+		return false
+	}
+	return strings.TrimSpace(os.Getenv(HwRevolutWebhookSecretEnv)) != ""
 }
 
 // The JSON names of the provider live in the types below and nowhere else. They

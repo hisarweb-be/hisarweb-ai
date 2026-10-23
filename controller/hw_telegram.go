@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -59,9 +60,20 @@ func HwTelegramLinkStart(c *gin.Context) {
 		common.ApiError(c, common.NewMessage("Failed to create the Telegram link"))
 		return
 	}
-	if strings.TrimSpace(user.TelegramId) != "" {
-		common.ApiSuccess(c, gin.H{"linked": true})
-		return
+	linked := strings.TrimSpace(user.TelegramId) != ""
+	if linked {
+		// A linked account that still owes the phone step gets a link as well:
+		// opening it in the same Telegram account answers with the share-contact
+		// button, which is what the customer needs next. Only a finished phone
+		// step ends the links.
+		phoneShared, err := model.HwUserHasPhoneSignal(userID)
+		if err != nil {
+			logger.LogError(c.Request.Context(), common.LogText("reading the phone step failed"))
+		}
+		if phoneShared {
+			common.ApiSuccess(c, gin.H{"linked": true})
+			return
+		}
 	}
 	raw, expiresAt, err := model.HwCreateTelegramLinkToken(userID, time.Now().Unix())
 	if err != nil {
@@ -70,8 +82,47 @@ func HwTelegramLinkStart(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, gin.H{
+		"linked":     linked,
 		"url":        "https://t.me/" + botName + "?start=" + raw,
 		"expires_at": expiresAt,
+	})
+}
+
+// HwTelegramLinkStatus answers how far the logged-in user is with the Telegram
+// part of the start bonus, so the link dialog can follow the bot conversation
+// without a reload: linked, phone number shared, and free credit granted. It
+// returns three flags and nothing that identifies the Telegram account.
+func HwTelegramLinkStatus(c *gin.Context) {
+	userID := c.GetInt("id")
+	user, err := model.GetUserById(userID, false)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			common.ApiErrorStatus(c, http.StatusNotFound, common.NewMessage("User not found"))
+			return
+		}
+		logger.LogError(c.Request.Context(), common.LogText("reading the user for the Telegram link status failed"))
+		common.ApiError(c, common.NewMessage("Failed to read the Telegram link status"))
+		return
+	}
+	phoneShared, err := model.HwUserHasPhoneSignal(userID)
+	if err != nil {
+		logger.LogError(c.Request.Context(), common.LogText("reading the phone step failed"))
+		common.ApiError(c, common.NewMessage("Failed to read the Telegram link status"))
+		return
+	}
+	packages, err := model.ListUserCreditPackages(userID)
+	if err != nil {
+		logger.LogError(c.Request.Context(), common.LogText("listing credit packages failed"))
+		common.ApiError(c, common.NewMessage("Failed to read the Telegram link status"))
+		return
+	}
+	bonusGranted := slices.ContainsFunc(packages, func(pkg model.HwPackageView) bool {
+		return pkg.Source == model.HwSourceFree
+	})
+	common.ApiSuccess(c, gin.H{
+		"linked":        strings.TrimSpace(user.TelegramId) != "",
+		"phone_shared":  phoneShared,
+		"bonus_granted": bonusGranted,
 	})
 }
 

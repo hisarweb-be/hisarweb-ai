@@ -16,13 +16,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { CreditCard } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+import { CreditCard, Gift, Hourglass } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { TitledCard } from '@/components/ui/titled-card'
+import { useStatus } from '@/hooks/use-status'
 
 import { HW_TOPUP_MAX_TRY, HW_TOPUP_MIN_TRY, HW_TOPUP_PRESET_TRY } from '../api'
 import { useHwTopUpOrder } from '../hooks/use-hw-top-up-order'
@@ -43,6 +46,10 @@ export function TopUpForm(props: TopUpFormProps) {
   const hw = useHwText()
   const language = useHwLanguage()
   const order = useHwTopUpOrder()
+  const { status } = useStatus()
+  // Only an explicit false closes the form: an older server or a status that
+  // is still loading must not hide a payment that works.
+  const paymentClosed = status?.hw_payment_available === false
   const [amountInput, setAmountInput] = useState('1000')
   const [errorKey, setErrorKey] = useState<HwTextKey | null>(null)
 
@@ -52,9 +59,7 @@ export function TopUpForm(props: TopUpFormProps) {
     Number.isInteger(amount) &&
     amount >= HW_TOPUP_MIN_TRY &&
     amount <= HW_TOPUP_MAX_TRY
-  const selectedPreset = HW_TOPUP_PRESET_TRY.includes(amount)
-    ? amount
-    : null
+  const selectedPreset = HW_TOPUP_PRESET_TRY.includes(amount) ? amount : null
   const showInvalidAmount = amountInput.trim() !== '' && !amountIsValid
 
   function changeAmount(next: string) {
@@ -84,6 +89,29 @@ export function TopUpForm(props: TopUpFormProps) {
       disableHoverEffect
     >
       <form onSubmit={submit} className='flex flex-col gap-5'>
+        {paymentClosed && (
+          <Alert variant='default' role='status'>
+            <Hourglass />
+            <AlertTitle>{hw('topUpClosedTitle')}</AlertTitle>
+            <AlertDescription className='space-y-3'>
+              <p>{hw('topUpClosedBody')}</p>
+              <Button
+                size='sm'
+                render={
+                  <Link
+                    to='/dashboard/$section'
+                    params={{ section: 'overview' }}
+                    hash='startbonus'
+                  />
+                }
+              >
+                <Gift className='mr-1 h-3.5 w-3.5' />
+                {hw('topUpClosedBonusButton')}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className='flex flex-col gap-2'>
           <span id='hw-topup-preset-label' className='text-sm font-medium'>
             {hw('topUpPresetLabel')}
@@ -158,7 +186,7 @@ export function TopUpForm(props: TopUpFormProps) {
 
         <Button
           type='submit'
-          disabled={!amountIsValid || order.isPending}
+          disabled={paymentClosed || !amountIsValid || order.isPending}
           className='w-full sm:w-auto'
         >
           {order.isPending ? hw('topUpSubmitting') : hw('topUpSubmit')}
