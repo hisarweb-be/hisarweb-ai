@@ -79,6 +79,18 @@ func HwRevolutWebhook(c *gin.Context) {
 	c.Status(outcome.HTTPStatus())
 }
 
+// HwStripeWebhook receives Stripe's events. Same rules as the Revolut webhook:
+// anonymous, the Stripe-Signature over the raw body is the authentication.
+func HwStripeWebhook(c *gin.Context) {
+	rawBody, err := io.ReadAll(io.LimitReader(c.Request.Body, hwRevolutWebhookMaxBodyBytes+1))
+	if err != nil || len(rawBody) > hwRevolutWebhookMaxBodyBytes {
+		c.Status(http.StatusRequestEntityTooLarge)
+		return
+	}
+	outcome := service.HwHandleStripeWebhook(c.Request.Context(), rawBody, c.GetHeader("Stripe-Signature"), time.Now())
+	c.Status(outcome.HTTPStatus())
+}
+
 // HwAdminRefundOrder is the admin route that takes back the credit of one paid
 // order (see service.HwAdminRefundOrder). Refund and dispute webhook events are
 // not acted on automatically — their event names are unconfirmed — so this route
@@ -98,6 +110,8 @@ func HwAdminRefundOrder(c *gin.Context) {
 			common.ApiErrorStatus(c, http.StatusNotFound, common.NewMessage("Order not found"))
 		case errors.Is(err, service.ErrHwOrderNotRefundable), errors.Is(err, model.ErrHwInvalidOrder):
 			common.ApiErrorStatus(c, http.StatusConflict, common.NewMessage("Order is not in a refundable state"))
+		case errors.Is(err, service.ErrHwProviderRefundFailed):
+			common.ApiErrorStatus(c, http.StatusBadGateway, common.NewMessage("The credit was taken back but the card refund failed; repeat the refund to retry it"))
 		default:
 			logger.LogError(c.Request.Context(), common.LogText("admin refund failed"))
 			common.ApiError(c, common.NewMessage("Failed to refund the order"))

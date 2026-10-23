@@ -185,19 +185,7 @@ func HwCreateTopUpOrder(ctx context.Context, userID int, request HwTopUpRequest,
 		return HwTopUpOrder{}, err
 	}
 
-	config, err := HwRevolutConfigFromEnv()
-	if err != nil {
-		hwAbandonOrder(merchantRef, releaseClaim, now)
-		return HwTopUpOrder{}, ErrHwPaymentProviderUnavailable
-	}
-	providerOrder, err := config.CreateOrder(ctx, hwRevolutOrderRequest{
-		Amount:            order.PayableTryMinor,
-		Currency:          model.HwOrderCurrency,
-		Description:       hwTopUpDescription(request.Language),
-		MerchantOrderData: &hwRevolutMerchantOrderData{Reference: merchantRef},
-		Customer:          &hwRevolutCustomer{Email: strings.TrimSpace(user.Email)},
-		RedirectURL:       hwOption(model.HwCheckoutReturnURLOption),
-	})
+	providerOrder, err := hwCreateProviderCheckout(ctx, order, user.Email, request.Language)
 	if err != nil {
 		common.SysError(common.LogText("creating the payment order %s failed (class %s)", merchantRef, hwPaymentErrorClass(err)))
 		hwAbandonOrder(merchantRef, releaseClaim, now)
@@ -214,6 +202,30 @@ func HwCreateTopUpOrder(ctx context.Context, userID int, request HwTopUpRequest,
 		common.SysError(common.LogText("could not record the provider order id of order %s (class %s); the webhook settles it by reference", merchantRef, hwPaymentErrorClass(err)))
 	}
 	return HwTopUpOrder{MerchantRef: merchantRef, CheckoutURL: providerOrder.CheckoutURL}, nil
+}
+
+// hwCreateProviderCheckout opens the checkout at the active provider: Stripe
+// when its environment is complete, otherwise Revolut.
+func hwCreateProviderCheckout(ctx context.Context, order *model.HwOrder, email, language string) (hwRevolutOrderResponse, error) {
+	if HwStripePaymentAvailable() {
+		config, err := HwStripeConfigFromEnv()
+		if err != nil {
+			return hwRevolutOrderResponse{}, err
+		}
+		return config.CreateCheckout(ctx, order, email, language, hwCheckoutReturnURL())
+	}
+	config, err := HwRevolutConfigFromEnv()
+	if err != nil {
+		return hwRevolutOrderResponse{}, err
+	}
+	return config.CreateOrder(ctx, hwRevolutOrderRequest{
+		Amount:            order.PayableTryMinor,
+		Currency:          model.HwOrderCurrency,
+		Description:       hwTopUpDescription(language),
+		MerchantOrderData: &hwRevolutMerchantOrderData{Reference: order.MerchantRef},
+		Customer:          &hwRevolutCustomer{Email: strings.TrimSpace(email)},
+		RedirectURL:       hwOption(model.HwCheckoutReturnURLOption),
+	})
 }
 
 // hwAbandonOrder closes an order whose checkout never came to exist and gives
@@ -316,16 +328,17 @@ func HwHandleRevolutWebhook(ctx context.Context, rawBody []byte, timestampHeader
 		}
 		return HwWebhookIgnored
 	}
+	return hwApplyWebhookEvent(ctx, order, event, now)
+}
+
+// hwApplyWebhookEvent acts on one verified provider event for an order of ours.
+// Stripe events are mapped onto the same event names before they get here.
+func hwApplyWebhookEvent(ctx context.Context, order *model.HwOrder, event hwRevolutWebhookEvent, now time.Time) HwWebhookOutcome {
 	switch event.Event {
 	case hwRevolutEventOrderCompleted:
 		return hwCompleteRevolutOrder(ctx, order, event, now)
 	case hwRevolutEventOrderCancelled:
-		config, err := HwRevolutConfigFromEnv()
-		if err != nil {
-			common.SysError(common.LogText("revolut webhook cannot reconcile order %s (class %s)", order.MerchantRef, hwPaymentErrorClass(err)))
-			return HwWebhookUnavailable
-		}
-		outcome, action := hwReconcileOrderBeforeClose(ctx, config, order, model.HwOrderStatusCancelled, now)
+		outcome, action := hwReconcileOrderBeforeClose(ctx, order, model.HwOrderStatusCancelled, now)
 		if outcome == HwWebhookAccepted && action != hwReconcileNone {
 			common.SysLog(common.LogText("revolut webhook %s order %s while handling a cancellation event", action, order.MerchantRef))
 		}
@@ -361,7 +374,7 @@ func hwCompleteRevolutOrder(ctx context.Context, order *model.HwOrder, event hwR
 		common.SysLog(common.LogText("revolut webhook cannot confirm order %s: no provider order id is known; answered unavailable so the event is retried", order.MerchantRef))
 		return HwWebhookUnavailable
 	}
-	config, err := HwRevolutConfigFromEnv()
+	config, err := hwProviderFor(providerOrderID)
 	if err != nil {
 		common.SysError(common.LogText("revolut webhook cannot confirm order %s (class %s)", order.MerchantRef, hwPaymentErrorClass(err)))
 		return HwWebhookUnavailable
@@ -480,7 +493,7 @@ func hwCloseRevolutOrder(order *model.HwOrder, status string, now time.Time) HwW
 // order the provider never knew) releases the first-purchase claim, so a
 // discount that was given back can never be spent on an order that is still
 // payable. The returned action names what happened, for the round's log.
-func hwReconcileOrderBeforeClose(ctx context.Context, config HwRevolutConfig, order *model.HwOrder, closeStatus string, now time.Time) (HwWebhookOutcome, string) {
+func hwReconcileOrderBeforeClose(ctx context.Context, order *model.HwOrder, closeStatus string, now time.Time) (HwWebhookOutcome, string) {
 	if order.Status == model.HwOrderStatusPaid || order.Status == model.HwOrderStatusRefunded {
 		return HwWebhookAccepted, hwReconcileNone
 	}
@@ -494,6 +507,11 @@ func hwReconcileOrderBeforeClose(ctx context.Context, config HwRevolutConfig, or
 		// settled safely: HwSettleOrderPayment credits it without the discount
 		// once the claim is gone.
 		return hwCloseRevolutOrder(order, closeStatus, now), hwReconcileClosed
+	}
+	config, err := hwProviderFor(providerOrderID)
+	if err != nil {
+		common.SysError(common.LogText("could not reach the provider of order %s (class %s); the order stays open and its claim stays held", order.MerchantRef, hwPaymentErrorClass(err)))
+		return HwWebhookUnavailable, hwReconcileNone
 	}
 	providerOrder, err := config.GetOrder(ctx, providerOrderID)
 	if err != nil {
@@ -551,15 +569,9 @@ func HwReconcileExpiredOrders(ctx context.Context, now time.Time) (HwExpiryRun, 
 	if len(orders) == 0 {
 		return run, nil
 	}
-	config, err := HwRevolutConfigFromEnv()
-	if err != nil {
-		common.SysError(common.LogText("order reconciliation round cannot reach the provider (class %s); %d orders stay open", hwPaymentErrorClass(err), len(orders)))
-		run.Retried = len(orders)
-		return run, err
-	}
 	for index := range orders {
 		order := orders[index]
-		outcome, action := hwReconcileOrderBeforeClose(ctx, config, &order, model.HwOrderStatusExpired, now)
+		outcome, action := hwReconcileOrderBeforeClose(ctx, &order, model.HwOrderStatusExpired, now)
 		switch {
 		case outcome == HwWebhookAccepted && action == hwReconcileSettled:
 			run.Settled++
@@ -673,7 +685,9 @@ func HwAdminRefundOrder(merchantRef string, now time.Time) (HwAdminRefundResult,
 	result.SpentQuota = max(revocation.GrantedQuota-revocation.RemainingQuota, 0)
 	if alreadyRefunded {
 		result.Note = order.AdminNote
-		return result, nil
+		// A card refund that failed on the first call is retried here; Stripe's
+		// idempotency key makes a repeat of one that went through harmless.
+		return result, hwRefundAtProvider(order, now)
 	}
 	if err := model.HwRevokeAffiliateReward(merchantRef, now.Unix()); err != nil {
 		common.SysError(common.LogText("could not revoke the affiliate reward of order %s (class %s)", merchantRef, hwPaymentErrorClass(err)))
@@ -687,7 +701,32 @@ func HwAdminRefundOrder(merchantRef string, now time.Time) (HwAdminRefundResult,
 	}
 	result.Refunded = changed
 	common.SysLog(common.LogText("admin refund took back order %s: %d of %d quota returned", merchantRef, result.ReturnedQuota, result.GrantedQuota))
-	return result, nil
+	return result, hwRefundAtProvider(order, now)
+}
+
+// ErrHwProviderRefundFailed: the credit was taken back but the money could not
+// be returned to the card yet; repeating the refund retries only that part.
+var ErrHwProviderRefundFailed = errors.New("credit was taken back but the card refund failed")
+
+// hwRefundAtProvider returns the money of a Stripe order to the card. Orders of
+// other providers are refunded outside this system, as before. The credit is
+// taken back first, so a failure here never leaves the customer with both.
+func hwRefundAtProvider(order *model.HwOrder, now time.Time) error {
+	if order.RevolutOrderId == nil || !strings.HasPrefix(strings.TrimSpace(*order.RevolutOrderId), hwStripeSessionPrefix) {
+		return nil
+	}
+	config, err := HwStripeConfigFromEnv()
+	if err == nil {
+		ctx, cancel := context.WithTimeout(context.Background(), hwRevolutRequestTimeout)
+		defer cancel()
+		err = config.Refund(ctx, strings.TrimSpace(*order.RevolutOrderId), order.MerchantRef)
+	}
+	if err != nil {
+		common.SysError(common.LogText("card refund of order %s failed (class %s)", order.MerchantRef, hwPaymentErrorClass(err)))
+		return ErrHwProviderRefundFailed
+	}
+	common.SysLog(common.LogText("card refund of order %s sent to the provider", order.MerchantRef))
+	return nil
 }
 
 // hwPaymentErrorClass reduces an error to a log-safe class. Log lines carry the
@@ -695,14 +734,15 @@ func HwAdminRefundOrder(merchantRef string, now time.Time) (HwAdminRefundResult,
 // request data.
 func hwPaymentErrorClass(err error) string {
 	var apiErr *HwRevolutAPIError
+	var stripeErr *HwStripeAPIError
 	switch {
-	case errors.Is(err, ErrHwRevolutNotConfigured):
+	case errors.Is(err, ErrHwRevolutNotConfigured), errors.Is(err, ErrHwStripeNotConfigured):
 		return "not_configured"
-	case errors.Is(err, ErrHwRevolutUnusableResponse):
+	case errors.Is(err, ErrHwRevolutUnusableResponse), errors.Is(err, ErrHwStripeUnusableResponse):
 		return "unusable_response"
-	case errors.As(err, &apiErr) && apiErr.Transport:
+	case errors.As(err, &apiErr) && apiErr.Transport, errors.As(err, &stripeErr) && stripeErr.Transport:
 		return "transport"
-	case errors.As(err, &apiErr):
+	case errors.As(err, &apiErr), errors.As(err, &stripeErr):
 		return "provider_status"
 	case errors.Is(err, model.ErrHwInvalidOrder), errors.Is(err, model.ErrHwInvalidCreditGrant):
 		return "invalid_request"

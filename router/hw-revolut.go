@@ -17,6 +17,7 @@ func SetHwRoutes(apiRouter *gin.RouterGroup) {
 	// shared critical limiter (20 requests per 20 minutes per IP) would drop
 	// exactly those retries. The body-size limit stays.
 	apiRouter.POST("/hw/revolut/webhook", middleware.AnonymousRequestBodyLimit(), controller.HwRevolutWebhook)
+	apiRouter.POST("/hw/stripe/webhook", middleware.AnonymousRequestBodyLimit(), controller.HwStripeWebhook)
 
 	hwUserRoute := apiRouter.Group("/user/hw")
 	hwUserRoute.Use(middleware.DisableCache(), middleware.UserAuth())
