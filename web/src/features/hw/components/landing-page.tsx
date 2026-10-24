@@ -203,7 +203,7 @@ function Film(props: { text: Translate }) {
           <video
             controls
             playsInline
-            preload='metadata'
+            preload='none'
             poster='/film/hisarweb-ai-lansman.jpg'
             src='/film/hisarweb-ai-lansman.mp4'
             aria-label={text('filmLabel')}
