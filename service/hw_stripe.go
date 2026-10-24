@@ -220,6 +220,10 @@ func (config HwStripeConfig) CreateCheckout(ctx context.Context, order *model.Hw
 	form := url.Values{}
 	form.Set("mode", "payment")
 	form.Set("payment_method_types[0]", "card")
+	// Adaptive Pricing would let the customer pay 2 to 4 % extra in a local
+	// currency; HisarWeb carries all conversion costs, so it is off per session
+	// whatever the Dashboard default is.
+	form.Set("adaptive_pricing[enabled]", "false")
 	form.Set("client_reference_id", order.MerchantRef)
 	form.Set("metadata[merchant_ref]", order.MerchantRef)
 	form.Set("payment_intent_data[metadata][merchant_ref]", order.MerchantRef)

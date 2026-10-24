@@ -89,6 +89,9 @@ func (fake *hwFakeStripe) handle(w http.ResponseWriter, r *http.Request) {
 		if !require(r.PostForm.Get("mode") == "payment") {
 			return
 		}
+		if !require(r.PostForm.Get("adaptive_pricing[enabled]") == "false") {
+			return
+		}
 		amount, _ := strconv.ParseInt(r.PostForm.Get("line_items[0][price_data][unit_amount]"), 10, 64)
 		session := &hwFakeStripeSession{
 			id:             "cs_test_" + strconv.Itoa(len(fake.sessions)+1),
