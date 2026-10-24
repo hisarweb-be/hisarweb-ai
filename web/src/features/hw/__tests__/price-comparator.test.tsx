@@ -102,7 +102,6 @@ describe('price comparator page', () => {
     renderPage()
 
     expect(screen.getByTestId('public-layout')).toBeInTheDocument()
-    expect(screen.getByTestId('site-footer')).toBeInTheDocument()
     expect(screen.getByLabelText('Model')).toBeInTheDocument()
     expect(
       screen.getByLabelText('Aylık girdi token sayısı')

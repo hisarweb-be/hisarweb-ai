@@ -21,7 +21,6 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { PublicLayout } from '@/components/layout'
-import { Footer } from '@/components/layout/components/footer'
 import { PageTransition } from '@/components/page-transition'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -202,7 +201,6 @@ export function PriceComparator() {
           <p className='text-muted-foreground'>{t('compareEmptyTitle')}</p>
         )}
       </PageTransition>
-      <Footer />
     </PublicLayout>
   )
 }
