@@ -541,6 +541,21 @@ For commercial licensing, please contact support@quantumnous.com
   text-wrap: balance;
 }
 
+/* film */
+.hwl-film {
+  margin-top: 2.5rem;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  border: 1px solid var(--hwl-line);
+  background: #0a0a0b;
+  box-shadow: 0 50px 100px -50px var(--hwl-glow);
+}
+.hwl-film video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+
 /* benefits */
 .hwl-cards {
   display: grid;

@@ -183,6 +183,36 @@ function Ticker(props: { items: string[] }) {
   )
 }
 
+function Film(props: { text: Translate }) {
+  const text = props.text
+  return (
+    <section aria-labelledby='hw-film-title' className='hwl-section'>
+      <div className='mx-auto max-w-5xl'>
+        <h2 id='hw-film-title' className='hwl-h2 text-center' data-reveal>
+          {text('filmTitle')}
+        </h2>
+        <p
+          className='text-muted-foreground mx-auto mt-5 max-w-2xl text-center text-base leading-relaxed md:text-lg'
+          data-reveal
+          style={stagger(1)}
+        >
+          {text('filmBody')}
+        </p>
+        <div className='hwl-film' data-reveal style={stagger(2)}>
+          <video
+            controls
+            playsInline
+            preload='metadata'
+            poster='/film/hisarweb-ai-lansman.jpg'
+            src='/film/hisarweb-ai-lansman.mp4'
+            aria-label={text('filmLabel')}
+          />
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function Benefits(props: { text: Translate }) {
   const text = props.text
   const benefits = [
@@ -482,6 +512,7 @@ export function LandingPage() {
           text('step4Title'),
         ]}
       />
+      <Film text={text} />
       <Benefits text={text} />
       <Compare text={text} />
       <Trial text={text} />
