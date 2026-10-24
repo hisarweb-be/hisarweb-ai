@@ -338,47 +338,20 @@ describe('vibe coding page', () => {
     expect(film).not.toHaveAttribute('autoplay')
   })
 
-  it('offers Turkish and English subtitles, Turkish on by default on the Turkish page', () => {
+  it('has no subtitle track, the words are already in the picture', () => {
     const { container } = renderVibe(trI18n)
 
-    const tracks = container.querySelectorAll('track')
-    expect(tracks).toHaveLength(2)
-    const turkish = container.querySelector('track[srclang="tr"]')
-    const english = container.querySelector('track[srclang="en"]')
-    expect(turkish).toHaveAttribute('kind', 'subtitles')
-    expect(turkish).toHaveAttribute('label', 'Türkçe')
-    expect(turkish).toHaveAttribute(
-      'src',
-      '/film/hisarweb-ai-vibe-kodlama.tr.vtt'
-    )
-    expect(turkish).toHaveAttribute('default')
-    expect(english).toHaveAttribute('kind', 'subtitles')
-    expect(english).toHaveAttribute('label', 'English')
-    expect(english).toHaveAttribute(
-      'src',
-      '/film/hisarweb-ai-vibe-kodlama.en.vtt'
-    )
-    expect(english).not.toHaveAttribute('default')
+    expect(container.querySelector('track')).toBeNull()
   })
 
-  it('switches the English subtitles on by default on the English page', () => {
-    const { container } = renderVibe(enI18n)
-
-    expect(container.querySelector('track[srclang="en"]')).toHaveAttribute(
-      'default'
-    )
-    expect(container.querySelector('track[srclang="tr"]')).not.toHaveAttribute(
-      'default'
-    )
-  })
-
-  it('labels the film in English when the page is English', () => {
+  it('shows no film on the English page while there is no English voice version', () => {
     renderVibe(enI18n)
 
     expect(
-      screen.getByLabelText('HisarWeb AI film for new vibecoders')
-    ).toBeInTheDocument()
+      screen.queryByLabelText('HisarWeb AI film for new vibecoders')
+    ).toBeNull()
   })
+
 
   it('offers the film with controls, a poster and no autoplay once it exists', () => {
     render(

@@ -39,28 +39,21 @@ import {
 } from './vibe-parts'
 import { AiHelp, Fit, Tools } from './vibe-tools'
 
-type FilmTrack = { src: string; srclang: 'tr' | 'en'; label: string }
-type Film = { src: string; poster: string; tracks?: FilmTrack[] }
+type Film = { src: string; poster: string }
 
 /**
- * The film for beginners; the poster is the frame shown before play. The file
- * name carries a version because browsers cache the mp4 for a week.
+ * One film per page language, each with its own voice and on-screen text, so
+ * there is no subtitle track on top of the words already in the picture. The
+ * poster is the frame shown before play. The file names carry a version
+ * because browsers cache the mp4 for a week.
  */
-const VIBE_FILM: Film | undefined = {
-  src: '/film/hisarweb-ai-vibe-kodlama-v2.mp4',
-  poster: '/film/hisarweb-ai-vibe-kodlama.jpg',
-  tracks: [
-    {
-      src: '/film/hisarweb-ai-vibe-kodlama.tr.vtt',
-      srclang: 'tr',
-      label: 'Türkçe',
-    },
-    {
-      src: '/film/hisarweb-ai-vibe-kodlama.en.vtt',
-      srclang: 'en',
-      label: 'English',
-    },
-  ],
+const VIBE_FILMS: Partial<Record<'tr' | 'en', Film>> = {
+  tr: {
+    src: '/film/hisarweb-ai-vibe-kodlama-v2.mp4',
+    poster: '/film/hisarweb-ai-vibe-kodlama.jpg',
+  },
+  // The English page shows no film until the English voice version exists;
+  // a Turkish film on an English page is the wrong language.
 }
 
 /** Same key, two models: only the `model` field changes between the requests. */
@@ -116,8 +109,6 @@ function Layers(props: { text: VibeTranslate }) {
 /** Renders nothing while there is no film, so the page has no empty box. */
 export function VibeFilm(props: {
   film?: Film
-  /** The subtitle language switched on at the start; the other one stays selectable. */
-  subtitleLanguage?: 'tr' | 'en'
   title: string
   caption?: string
   label: string
@@ -128,6 +119,7 @@ export function VibeFilm(props: {
       {props.caption ? <Paragraph>{props.caption}</Paragraph> : null}
       <div className='overflow-hidden rounded-xl border bg-black'>
         <video
+          key={props.film.src}
           controls
           playsInline
           preload='metadata'
@@ -135,18 +127,7 @@ export function VibeFilm(props: {
           src={props.film.src}
           aria-label={props.label}
           className='block aspect-video w-full'
-        >
-          {props.film.tracks?.map((track) => (
-            <track
-              key={track.srclang}
-              kind='subtitles'
-              src={track.src}
-              srcLang={track.srclang}
-              label={track.label}
-              default={track.srclang === (props.subtitleLanguage ?? 'tr')}
-            />
-          ))}
-        </video>
+        />
       </div>
     </Section>
   )
@@ -168,8 +149,7 @@ export function VibePage() {
         </header>
 
         <VibeFilm
-          film={VIBE_FILM}
-          subtitleLanguage={language}
+          film={VIBE_FILMS[language]}
           title={text('filmTitle')}
           caption={text('filmBody')}
           label={text('filmLabel')}
