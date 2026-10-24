@@ -31,13 +31,13 @@ const tr = {
 
   forWhoTitle: 'Bu sayfa kimin için?',
   forWhoBody:
-    'Kod yazmayı bilmeden ya da yeni öğrenirken yapay zekayla uygulama, site ya da otomasyon yapıyorsunuz. Buna vibe coding denir. En ucuz Claude ya da ChatGPT aboneliğini aldınız, ama haftanın ortasında kullanım hakkınız bitiyor ve yeni yenilenmesini beklemek zorunda kalıyorsunuz.',
+    'Kod yazmayı bilmeden ya da yeni öğrenirken yapay zekayla uygulama, site ya da otomasyon geliştiriyorsunuz. Buna vibe coding denir. Bir Claude ya da ChatGPT aboneliğiniz var, ancak 5 saatlik oturum limitiniz doluyor ya da haftalık kullanım hakkınız haftanın ortasında bitiyor ve yenilenmesini beklemek zorunda kalıyorsunuz.',
 
   ruleTitle: 'Kural tek cümle',
   ruleSentence: 'Düşünmeyi abonelik yapar, işi HisarWeb AI yapar.',
   ruleBody:
-    'İşi iki katmana bölün. Abonelik pahalı ve sınırlıdır, o yüzden sadece zor düşünme işinde kullanın. Geri kalan bütün çalışma, yani yazma, deneme ve tekrar işleri, HisarWeb AI anahtarınızla resmî fiyatın yarısına yapılır. Böylece abonelik haftanın sonuna kadar yeter.',
-  expertTitle: 'Uzman katman: en ucuz abonelik',
+    'İşi iki katmana bölün. Abonelikli Claude Code’u (ya da ChatGPT aboneliğinizdeki Codex’i) yalnızca yüksek düşünme gücü gerektiren görevlerde kullanın. Diğer tüm işler için HisarWeb AI anahtarınızı kullanın. Böylece aboneliğinizin kullanım kotası korunur, gereksiz tüketim önlenir ve 5 saatlik oturum limitiniz ya da haftalık kullanım hakkınız dolduğunda da işinize devam edebilirsiniz.',
+  expertTitle: 'Uzman katman: aboneliğiniz',
   expertBody: 'Aboneliğinizi şu işler için saklayın:',
   expertItem1: 'Proje planı ve mimari (neyi nasıl kuracağınız)',
   expertItem2: 'Kodu daha iyi ve daha hızlı hale getirmek',
@@ -49,13 +49,24 @@ const tr = {
   workItem2: 'Tekrar eden ve toplu işler',
   workItem3: 'Gün boyu çalışan ajanlar ve iş akışları',
   workItem4: 'Otomasyonlar (n8n, Make gibi)',
+  diagramLabel:
+    'Şema: göreviniz iki katmana ayrılır. Plan, mimari, inceleme ve zor hata aboneliğinize gider. Kod, test, tekrar eden iş ve ajanlar HisarWeb AI anahtarınıza gider.',
+  diagramTask: 'Göreviniz',
+  diagramExpert: 'Aboneliğiniz',
+  diagramExpert1: 'Plan',
+  diagramExpert2: 'Mimari',
+  diagramExpert3: 'İnceleme',
+  diagramExpert4: 'Zor hata',
+  diagramWork: 'HisarWeb AI anahtarı',
+  diagramWork1: 'Kod',
+  diagramWork2: 'Test',
+  diagramWork3: 'Tekrar eden iş',
+  diagramWork4: 'Ajanlar',
   priceTitle: 'Abonelik fiyatları',
   priceBody:
-    'Claude ve ChatGPT abonelik fiyatları ülkeye ve ödeme yöntemine göre değişir. Bu sayfada bir TL fiyatı yazmıyoruz, çünkü Türkiye için resmî sayfadan ölçemedik. Güncel fiyatı resmî sayfadan görün:',
-  priceLinkClaude: 'Claude fiyatları (claude.com)',
-  priceLinkChatgpt: 'ChatGPT fiyatları (chatgpt.com)',
-  priceMeasured:
-    'Ölçüm tarihi: 24 Ekim 2026. Her iki sayfa da ziyaretçinin ülkesine göre fiyat gösterir.',
+    'Claude ve ChatGPT abonelik ücretleri bölgeye, vergi uygulamalarına ve para birimine göre değişebilir. En güncel fiyat bilgilerini resmî fiyatlandırma sayfalarından kontrol edebilirsiniz:',
+  priceLinkClaude: 'Claude: claude.com/pricing',
+  priceLinkChatgpt: 'ChatGPT: chatgpt.com/pricing',
 
   oneKeyTitle: 'Tek anahtar, bütün modeller',
   oneKeyBody:
@@ -77,11 +88,13 @@ const tr = {
     'Konuşmayı sıkıştırmayı (compact) sadece iş bitince, bir kırılma noktasında yapın.',
   cacheTip5: 'Görevleri kısa tutun: bir görev, bir sonuç.',
   cacheNote:
-    'Önbellek indirimi için bir söz vermiyoruz. Sağlayıcının önbellek davranışı geçer, ama biz bunun için ayrı bir indirim oranı ölçmedik ve yazmıyoruz.',
+    'Önbellekleme (prompt caching) model sağlayıcısı tarafından uygulanır. Gerçek indirim oranı sağlayıcıya ve modele göre değişir; bu nedenle sabit bir oran belirtmiyoruz.',
 
-  toolsTitle: 'Araç araç ayarlar',
+  toolsTitle: 'Araç Ayarları',
   toolsBody:
-    'Aşağıdaki araçlar kendi adres ve anahtarınızı kabul eder (HisarWeb AI rehberlerinde gerçek anahtarla denendi). Adım adım kurulum için /docs sayfasındaki rehbere bakın, burada sadece rolleri nasıl böleceğinizi gösteriyoruz.',
+    'Aşağıdaki araçlar kendi API adresinizi ve anahtarınızı kullanacak şekilde yapılandırılabilir. HisarWeb AI rehberlerinde yer alan kurulumlar gerçek API anahtarlarıyla test edilmiştir.',
+  toolsBody2:
+    'Adım adım kurulum talimatları için /docs sayfasındaki rehberlere bakın. Bu bölüm yalnızca araçların rol dağılımını ve kullanım şeklini açıklamaktadır.',
   toolsDocsLink: 'Adım adım kurulum rehberleri',
   toolClaudeName: 'Claude Code',
   toolClaudeBody:
@@ -106,6 +119,11 @@ const tr = {
   toolRouteNote:
     'Bütün araçlarda kural aynı: her rol için sabit bir model seçin, oturumun ortasında değiştirmeyin.',
 
+  aiHelpTitle: 'Kod bilmiyor musunuz? Kurulumu yapay zekaya yaptırın',
+  aiHelpBody:
+    'Ayarları kendiniz yapmanız gerekmez. /docs sayfasında Claude Code ve Codex için hazır bir prompt var: anahtarınızı ekleyip aracınıza yapıştırırsınız, kurulumu araç kendisi yapar. Hangi modeli seçeceğinizi ve izin ayarını da orada adım adım anlatıyoruz.',
+  aiHelpLink: 'Kurulumu yapay zekaya yaptırma rehberi',
+
   promptTitle: 'Yönlendirme promptu',
   promptBody:
     'Aşağıdaki metni projenizin CLAUDE.md ya da AGENTS.md dosyasının en başına yapıştırın. Yapay zekaya işi nasıl bölüştüreceğini söyler ve önbellek için sabit kuralları başta tutar.',
@@ -123,18 +141,32 @@ Rol dağılımı:
 4. Her iş bitince güçlü model sonucu kontrol eder: testler geçiyor mu, plana uyuyor mu.
 5. Emin olmadığın şeyi uydurma, açıkça söyle.`,
 
-  fitTitle: 'HisarWeb AI ne zaman işinize yarar?',
-  fitYesTitle: 'Kesinlikle ilginizi çeker',
-  fitYesProjectsTitle: 'Projeler',
-  fitYesProject1: 'Web sitesi ve açılış sayfaları',
-  fitYesProject2: 'SaaS için ilk sürüm (MVP)',
-  fitYesProject3: 'Sohbet botu ya da WhatsApp botu',
-  fitYesProject4: 'n8n ya da Make ile otomasyon',
-  fitYesProject5: 'Gün boyu çalışan ajanlar',
-  fitYesProject6: 'Toplu işler (çok sayıda metin ya da dosya)',
-  fitYesPlatformsTitle: 'Platformlar',
-  fitYesPlatforms:
-    'Yukarıdaki araçlara ek olarak n8n, Make, Dify, Flowise, Open WebUI ve LibreChat. Bunlar kendi OpenAI ya da Anthropic anahtarınızı kabul ediyorsa HisarWeb AI ile çalışır. Kendi aracınızda anahtar alanını kontrol edin.',
+  fitTitle: 'HisarWeb AI hangi durumlarda avantaj sağlar?',
+  fitIntro:
+    'HisarWeb AI; yapay zeka uygulamaları, otomasyonlar ve dijital ürünler geliştiren kişi ve ekipler için tasarlanmıştır. API maliyetlerini optimize etmek, farklı modelleri tek noktadan kullanmak ve mevcut iş akışlarını yapay zeka ile güçlendirmek isteyenler için uygundur.',
+  fitUsesTitle: 'Örnek kullanım alanları',
+  fitUse1: 'Web siteleri ve açılış sayfaları',
+  fitUse2: 'SaaS ürünleri ve MVP geliştirme',
+  fitUse3: 'OpenClaw ve benzeri AI çalışma alanları',
+  fitUse4: 'Çok ajanlı (multi-agent) sistemler',
+  fitUse5: 'Kurumsal AI platformları',
+  fitUse6: 'AI destekli operasyon merkezleri',
+  fitUse7: 'AI sohbet botları ve sanal asistanlar',
+  fitUse8: 'WhatsApp ve Telegram botları',
+  fitUse9: 'n8n ve Make otomasyonları',
+  fitUse10: 'Otonom AI ajanları',
+  fitUse11: 'İçerik üretimi ve belge işleme',
+  fitUse12: 'Toplu metin, veri ve dosya işleme süreçleri',
+  fitUse13: 'API tabanlı AI entegrasyonları',
+  fitPlatformsTitle: 'Uyumlu Platformlar',
+  fitPlatforms:
+    'HisarWeb AI; n8n, Make, Dify, Flowise, Open WebUI, LibreChat ve OpenAI uyumlu API desteği sunan diğer platformlarla kullanılabilir.',
+  fitPlatforms2:
+    'Kullandığınız aracın özel API adresi (Custom API Base URL) ya da harici sağlayıcı desteği sunması yeterlidir. Böylece mevcut iş akışlarınızı değiştirmeden HisarWeb AI altyapısını mevcut sistemlerinize bağlayabilirsiniz.',
+  fitPlatforms3:
+    'Örneğin OpenClaw gibi özel API adresi kabul eden AI çalışma alanları, ajan sistemleri ve şirket içi AI çözümleri, HisarWeb AI altyapısı üzerinden birden fazla modeli tek noktadan kullanabilir.',
+  fitDocs:
+    'Kurulum ve entegrasyon adımları için /docs sayfasındaki rehberleri inceleyebilirsiniz.',
   fitNoTitle: 'Gerek olmayabilir',
   fitNo1:
     'Yapay zekayı sadece ara sıra, abonelik kotanızın içinde sohbet için kullanıyorsanız ayrı bir anahtara ihtiyacınız yok.',
@@ -165,13 +197,13 @@ const en: Record<keyof typeof tr, string> = {
 
   forWhoTitle: 'Who is this page for?',
   forWhoBody:
-    'You build apps, sites or automations with an AI without knowing how to code, or while you are still learning. This is called vibe coding. You bought the cheapest Claude or ChatGPT subscription, but your usage runs out halfway through the week and you have to wait for it to renew.',
+    'You build apps, sites or automations with AI without knowing how to code, or while you are still learning. This is called vibe coding. You have a Claude or ChatGPT subscription, but your 5-hour session limit fills up or your weekly usage runs out halfway through the week, and you have to wait for it to renew.',
 
   ruleTitle: 'The rule in one sentence',
   ruleSentence: 'The subscription thinks, HisarWeb AI does the work.',
   ruleBody:
-    'Split the work into two layers. A subscription is expensive and limited, so use it only for hard thinking. All the rest, writing, trying and repeat work, runs on your HisarWeb AI key at half the official price. That way the subscription lasts until the end of the week.',
-  expertTitle: 'Expert layer: the cheapest subscription',
+    'Split the work into two layers. Use Claude Code on your subscription (or Codex in your ChatGPT subscription) only for tasks that need a lot of thinking power. Use your HisarWeb AI key for all other work. That way the usage quota of your subscription is protected, needless use is avoided, and you can keep working when your 5-hour session limit or your weekly usage runs out.',
+  expertTitle: 'Expert layer: your subscription',
   expertBody: 'Keep your subscription for these jobs:',
   expertItem1: 'The project plan and architecture (what you build and how)',
   expertItem2: 'Making the code better and faster',
@@ -183,13 +215,24 @@ const en: Record<keyof typeof tr, string> = {
   workItem2: 'Repeat and batch work',
   workItem3: 'Agents and workflows that run all day',
   workItem4: 'Automations (such as n8n or Make)',
+  diagramLabel:
+    'Diagram: your task is split into two layers. Planning, architecture, review and hard bugs go to your subscription. Code, tests, repeat work and agents go to your HisarWeb AI key.',
+  diagramTask: 'Your task',
+  diagramExpert: 'Your subscription',
+  diagramExpert1: 'Plan',
+  diagramExpert2: 'Architecture',
+  diagramExpert3: 'Review',
+  diagramExpert4: 'Hard bug',
+  diagramWork: 'HisarWeb AI key',
+  diagramWork1: 'Code',
+  diagramWork2: 'Tests',
+  diagramWork3: 'Repeat work',
+  diagramWork4: 'Agents',
   priceTitle: 'Subscription prices',
   priceBody:
-    'Claude and ChatGPT subscription prices differ by country and payment method. We do not print a Turkish lira price on this page, because we could not measure one for Turkey on the official page. See the current price on the official page:',
-  priceLinkClaude: 'Claude pricing (claude.com)',
-  priceLinkChatgpt: 'ChatGPT pricing (chatgpt.com)',
-  priceMeasured:
-    'Measured on 24 October 2026. Both pages show a price for the visitor’s own country.',
+    'Claude and ChatGPT subscription prices can vary by region, tax rules and currency. Check the official pricing pages for the most current prices:',
+  priceLinkClaude: 'Claude: claude.com/pricing',
+  priceLinkChatgpt: 'ChatGPT: chatgpt.com/pricing',
 
   oneKeyTitle: 'One key, every model',
   oneKeyBody:
@@ -211,11 +254,13 @@ const en: Record<keyof typeof tr, string> = {
     'Compact the conversation only when a job is done, at a breakpoint.',
   cacheTip5: 'Keep tasks short: one task, one result.',
   cacheNote:
-    'We do not promise a cache discount. The provider’s cache behaviour passes through, but we have not measured a separate discount rate for it, so we do not state one.',
+    'Prompt caching is applied by the model provider. The actual discount depends on the provider and the model, so we do not state a fixed rate.',
 
-  toolsTitle: 'Settings per tool',
+  toolsTitle: 'Tool settings',
   toolsBody:
-    'The tools below accept your own address and key (tried with a real key in the HisarWeb AI guides). For step-by-step setup see the guide on the /docs page. Here we only show how to split the roles.',
+    'The tools below can be configured to use your own API address and key. The setups in the HisarWeb AI guides have been tested with real API keys.',
+  toolsBody2:
+    'For step-by-step setup instructions, see the guides on the /docs page. This section only explains how the roles are split between the tools and how to use them.',
   toolsDocsLink: 'Step-by-step setup guides',
   toolClaudeName: 'Claude Code',
   toolClaudeBody:
@@ -240,6 +285,11 @@ const en: Record<keyof typeof tr, string> = {
   toolRouteNote:
     'The rule is the same in every tool: pick one fixed model per role and do not change it in the middle of a session.',
 
+  aiHelpTitle: 'Do not know how to code? Let the AI do the setup',
+  aiHelpBody:
+    'You do not have to change the settings yourself. The /docs page has a ready prompt for Claude Code and Codex: you add your key, paste it into your tool and the tool does the setup itself. It also explains step by step which model to pick and which permission setting to use.',
+  aiHelpLink: 'Guide: let the AI do the setup',
+
   promptTitle: 'Routing prompt',
   promptBody:
     'Paste the text below at the very top of your project’s CLAUDE.md or AGENTS.md file. It tells the AI how to split the work and keeps the fixed rules at the start for the cache.',
@@ -257,18 +307,32 @@ Working rules:
 4. When each job is done, the strong model checks the result: do the tests pass, does it follow the plan.
 5. Do not make up what you are unsure about, say so openly.`,
 
-  fitTitle: 'When is HisarWeb AI worth it?',
-  fitYesTitle: 'Certainly interesting',
-  fitYesProjectsTitle: 'Projects',
-  fitYesProject1: 'Websites and landing pages',
-  fitYesProject2: 'A first version (MVP) of a SaaS',
-  fitYesProject3: 'A chatbot or a WhatsApp bot',
-  fitYesProject4: 'Automation with n8n or Make',
-  fitYesProject5: 'Agents that run all day',
-  fitYesProject6: 'Batch work (many texts or files)',
-  fitYesPlatformsTitle: 'Platforms',
-  fitYesPlatforms:
-    'On top of the tools above: n8n, Make, Dify, Flowise, Open WebUI and LibreChat. If they accept your own OpenAI or Anthropic key, they work with HisarWeb AI. Check the key field in your own tool.',
+  fitTitle: 'When does HisarWeb AI give you an advantage?',
+  fitIntro:
+    'HisarWeb AI is designed for people and teams who build AI applications, automations and digital products. It suits anyone who wants to optimise API costs, use different models from one place and strengthen existing workflows with AI.',
+  fitUsesTitle: 'Example use cases',
+  fitUse1: 'Websites and landing pages',
+  fitUse2: 'SaaS products and MVP development',
+  fitUse3: 'OpenClaw and similar AI workspaces',
+  fitUse4: 'Multi-agent systems',
+  fitUse5: 'Enterprise AI platforms',
+  fitUse6: 'AI-assisted operations centres',
+  fitUse7: 'AI chatbots and virtual assistants',
+  fitUse8: 'WhatsApp and Telegram bots',
+  fitUse9: 'n8n and Make automations',
+  fitUse10: 'Autonomous AI agents',
+  fitUse11: 'Content creation and document processing',
+  fitUse12: 'Batch processing of text, data and files',
+  fitUse13: 'API-based AI integrations',
+  fitPlatformsTitle: 'Compatible platforms',
+  fitPlatforms:
+    'HisarWeb AI works with n8n, Make, Dify, Flowise, Open WebUI, LibreChat and other platforms that support an OpenAI compatible API.',
+  fitPlatforms2:
+    'It is enough that your tool offers a custom API address (Custom API Base URL) or support for an external provider. That way you connect the HisarWeb AI infrastructure to your existing systems without changing your workflows.',
+  fitPlatforms3:
+    'For example, AI workspaces that accept a custom API address such as OpenClaw, agent systems and in-house AI solutions can use several models from one place through the HisarWeb AI infrastructure.',
+  fitDocs:
+    'See the guides on the /docs page for the setup and integration steps.',
   fitNoTitle: 'You may not need it',
   fitNo1:
     'If you only chat with the AI now and then, inside your subscription quota, you do not need a separate key.',

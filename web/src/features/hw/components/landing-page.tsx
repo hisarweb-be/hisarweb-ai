@@ -26,6 +26,7 @@ import {
   KeyRound,
   MailCheck,
   Send,
+  ShieldCheck,
   UserPlus,
 } from 'lucide-react'
 /*
@@ -453,6 +454,15 @@ function Steps(props: { text: Translate }) {
             </li>
           ))}
         </ol>
+        <div className='hwl-why' data-reveal>
+          <span className='hwl-icon' aria-hidden='true'>
+            <ShieldCheck className='size-5' />
+          </span>
+          <div>
+            <h3>{text('stepsPhoneWhyTitle')}</h3>
+            <p>{text('stepsPhoneWhyBody')}</p>
+          </div>
+        </div>
       </div>
     </section>
   )
