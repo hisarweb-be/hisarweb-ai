@@ -54,6 +54,7 @@ import '@/styles/hw-landing.css'
 
 import { useLandingMotion } from '../hooks/use-landing-motion'
 import { useHwText } from '../texts'
+import { useVibeText } from '../vibe-texts'
 
 type Translate = ReturnType<typeof useHwText>
 
@@ -254,6 +255,35 @@ function Benefits(props: { text: Translate }) {
             </li>
           ))}
         </ul>
+      </div>
+    </section>
+  )
+}
+
+function Vibe() {
+  const text = useVibeText()
+  return (
+    <section aria-labelledby='hw-vibe-title' className='hwl-section'>
+      <div className='mx-auto max-w-3xl text-center'>
+        <h2 id='hw-vibe-title' className='hwl-h2' data-reveal>
+          {text('landingTitle')}
+        </h2>
+        <p
+          className='text-muted-foreground mx-auto mt-5 max-w-2xl text-base leading-relaxed md:text-lg'
+          data-reveal
+          style={stagger(1)}
+        >
+          {text('landingBody')}
+        </p>
+        <div className='mt-8' data-reveal style={stagger(2)}>
+          <Button
+            size='lg'
+            variant='outline'
+            render={<a href='/vibe-kodlama' />}
+          >
+            {text('landingButton')}
+          </Button>
+        </div>
       </div>
     </section>
   )
@@ -514,6 +544,7 @@ export function LandingPage() {
       />
       <Film text={text} />
       <Benefits text={text} />
+      <Vibe />
       <Compare text={text} />
       <Trial text={text} />
       <Steps text={text} />

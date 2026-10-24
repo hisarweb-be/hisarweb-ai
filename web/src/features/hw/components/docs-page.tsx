@@ -337,6 +337,11 @@ export function DocsPage() {
                 {text('docsLinkCompare')}
               </a>
             </li>
+            <li>
+              <a href='/vibe-kodlama' className='text-primary hover:underline'>
+                {text('docsLinkVibe')}
+              </a>
+            </li>
           </ul>
         </DocSection>
       </PageTransition>
