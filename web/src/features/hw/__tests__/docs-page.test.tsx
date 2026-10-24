@@ -344,14 +344,20 @@ describe('vibe coding page', () => {
     expect(container.querySelector('track')).toBeNull()
   })
 
-  it('shows no film on the English page while there is no English voice version', () => {
-    renderVibe(enI18n)
+  it('plays the English film with its own poster on the English page', () => {
+    const { container } = renderVibe(enI18n)
 
-    expect(
-      screen.queryByLabelText('HisarWeb AI film for new vibecoders')
-    ).toBeNull()
+    const film = screen.getByLabelText('HisarWeb AI film for new vibecoders')
+    expect(film).toHaveAttribute(
+      'src',
+      '/film/hisarweb-ai-vibe-kodlama-en-v1.mp4'
+    )
+    expect(film).toHaveAttribute(
+      'poster',
+      '/film/hisarweb-ai-vibe-kodlama-en.jpg'
+    )
+    expect(container.querySelector('track')).toBeNull()
   })
-
 
   it('offers the film with controls, a poster and no autoplay once it exists', () => {
     render(
