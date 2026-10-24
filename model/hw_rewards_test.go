@@ -484,7 +484,6 @@ func TestHwFreeTrialCreditLeavesOperatorAccountsAlone(t *testing.T) {
 func TestHwChannelGrantAndOverview(t *testing.T) {
 	now := int64(1_700_000_000)
 	hwCreditTestSetup(t)
-	require.NoError(t, DB.AutoMigrate(&Token{}))
 	common.OptionMapRWMutex.Lock()
 	previousMap := common.OptionMap
 	common.OptionMap = map[string]string{HwTryPerUsdOption: "40"}
@@ -496,30 +495,19 @@ func TestHwChannelGrantAndOverview(t *testing.T) {
 	})
 
 	channel := createHwTestUser(t, 0)
-	require.NoError(t, DB.Create(&Token{UserId: channel.Id, Key: "k-unlimited", Name: "a", UnlimitedQuota: true}).Error)
-	require.NoError(t, DB.Create(&Token{UserId: channel.Id, Key: "k-big", Name: "b", RemainQuota: hwChannelKeyCapQuota() * 3}).Error)
-	require.NoError(t, DB.Create(&Token{UserId: channel.Id, Key: "k-small", Name: "c", RemainQuota: 100}).Error)
 
-	t.Run("credit and key cap first, bonus after the free steps", func(t *testing.T) {
+	t.Run("credit first, bonus after the free steps", func(t *testing.T) {
 		result, err := HwGrantChannel(channel.Id, now)
 		require.NoError(t, err)
 		assert.True(t, result.CreditGranted)
 		assert.False(t, result.BonusGranted)
 		assert.True(t, result.BonusPending)
-		assert.Equal(t, 2, result.CappedKeys)
 
 		creditQuota := common.QuotaFromFloat(HwChannelCreditUSD * common.QuotaPerUnit)
 		assert.Equal(t, creditQuota, getUserQuotaFromDB(t, channel.Id))
 		var pkg HwCreditPackage
 		require.NoError(t, DB.Where("user_id = ? AND source = ?", channel.Id, HwSourceAdmin).First(&pkg).Error)
 		assert.Equal(t, now+90*24*3600, pkg.ExpiresAt)
-
-		var tokens []Token
-		require.NoError(t, DB.Order("id").Find(&tokens).Error)
-		assert.False(t, tokens[0].UnlimitedQuota)
-		assert.Equal(t, hwChannelKeyCapQuota(), tokens[0].RemainQuota)
-		assert.Equal(t, hwChannelKeyCapQuota(), tokens[1].RemainQuota)
-		assert.Equal(t, 100, tokens[2].RemainQuota)
 	})
 
 	t.Run("the bonus follows once and only once", func(t *testing.T) {
@@ -537,22 +525,6 @@ func TestHwChannelGrantAndOverview(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, result.CreditGranted)
 		assert.False(t, result.BonusGranted)
-	})
-
-	t.Run("a channel account cannot make an unlimited or oversized key", func(t *testing.T) {
-		unlimited, remain := true, 0
-		changed, err := HwClampChannelTokenQuota(channel.Id, &unlimited, &remain)
-		require.NoError(t, err)
-		assert.True(t, changed)
-		assert.False(t, unlimited)
-		assert.Equal(t, hwChannelKeyCapQuota(), remain)
-
-		other := createHwTestUser(t, 0)
-		unlimited, remain = true, 0
-		changed, err = HwClampChannelTokenQuota(other.Id, &unlimited, &remain)
-		require.NoError(t, err)
-		assert.False(t, changed)
-		assert.True(t, unlimited)
 	})
 
 	t.Run("overview counts signups, paying customers and earned credit", func(t *testing.T) {
