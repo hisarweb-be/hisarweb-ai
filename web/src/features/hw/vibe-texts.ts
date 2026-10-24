@@ -141,8 +141,10 @@ Rol dağılımı:
   fitNo2:
     'Aracınız kendi anahtarınızı kabul etmiyorsa kullanamazsınız. Lovable, Bolt.new, v0 ve Replit Agent kendi kredileriyle çalışır. Bunları ölçmedik, kendi aracınızın ayarlarına bakın.',
 
-  filmTitle: 'Filmi izleyin',
-  filmLabel: 'HisarWeb AI vibe coding filmi',
+  filmTitle: 'Kısa film: aboneliğiniz düşünsün, HisarWeb AI işi yapsın',
+  filmBody:
+    'Yeni başlayanlar için kısa bir film. Film Türkçe seslendirmeli ve Türkçe altyazılıdır; görseller yapay zekâ ile üretilmiştir.',
+  filmLabel: 'HisarWeb AI vibe kodlama tanıtım filmi',
 
   ctaTitle: 'Önce ücretsiz deneyin',
   ctaBody:
@@ -273,8 +275,11 @@ Working rules:
   fitNo2:
     'If your tool does not accept your own key, you cannot use it. Lovable, Bolt.new, v0 and Replit Agent work on their own credit. We did not measure them, check the settings of your own tool.',
 
-  filmTitle: 'Watch the film',
-  filmLabel: 'HisarWeb AI vibe coding film',
+  filmTitle:
+    'Short film: let your subscription think, let HisarWeb AI do the work',
+  filmBody:
+    'A short film for new vibecoders. It has a Turkish voice-over with Turkish subtitles; the images are AI-generated.',
+  filmLabel: 'HisarWeb AI film for new vibecoders',
 
   ctaTitle: 'Try it for free first',
   ctaBody:
