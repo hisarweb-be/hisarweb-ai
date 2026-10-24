@@ -28,7 +28,6 @@ import { useTranslation } from 'react-i18next'
 
 import { EmptyState } from '@/components/empty-state'
 import { PublicLayout } from '@/components/layout'
-import { Footer } from '@/components/layout/components/footer'
 import { PageTransition } from '@/components/page-transition'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -295,7 +294,6 @@ export function StatusPage(props: { retryDelayMs?: number } = {}) {
           </p>
         )}
       </PageTransition>
-      <Footer />
     </PublicLayout>
   )
 }

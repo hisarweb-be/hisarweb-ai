@@ -21,7 +21,6 @@ import {
   CodeBlockCopyButton,
 } from '@/components/ai-elements/code-block'
 import { PublicLayout } from '@/components/layout'
-import { Footer } from '@/components/layout/components/footer'
 import { PageTransition } from '@/components/page-transition'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -226,7 +225,6 @@ export function VibePage() {
           </div>
         </Section>
       </PageTransition>
-      <Footer />
     </PublicLayout>
   )
 }

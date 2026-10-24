@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -5,6 +6,8 @@ import { defineConfig, loadEnv } from '@rsbuild/core'
 import { pluginReact } from '@rsbuild/plugin-react'
 import { pluginTailwindcss } from '@rsbuild/plugin-tailwindcss'
 import { tanstackRouter } from '@tanstack/router-plugin/rspack'
+
+import { formatBuildStamp } from './src/lib/build-stamp'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -16,6 +19,16 @@ export default defineConfig(({ envMode }) => {
     'http://localhost:3000'
 
   const isProd = envMode === 'production'
+  // The Docker build passes the repo VERSION file; a local build reads it.
+  let appVersion = process.env.VITE_REACT_APP_VERSION || ''
+  if (!appVersion) {
+    try {
+      appVersion = readFileSync(path.resolve(__dirname, '../VERSION'), 'utf8')
+    } catch {
+      appVersion = ''
+    }
+  }
+  const buildStamp = formatBuildStamp(appVersion, new Date())
   const devProxy = Object.fromEntries(
     (['/api', '/v1', '/mj', '/pg'] as const).map((key) => [
       key,
@@ -53,6 +66,9 @@ export default defineConfig(({ envMode }) => {
       },
     },
     source: {
+      define: {
+        __BUILD_STAMP__: JSON.stringify(buildStamp),
+      },
       entry: {
         index: './src/main.tsx',
       },

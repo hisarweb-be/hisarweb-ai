@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils'
 
 import { AppHeader } from './app-header'
 import { AppSidebar } from './app-sidebar'
+import { Footer } from './footer'
 
 type AuthenticatedLayoutProps = {
   children?: React.ReactNode
@@ -52,6 +53,7 @@ export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
               )}
             >
               {props.children ?? <AnimatedOutlet />}
+              <Footer variant='compact' />
             </SidebarInset>
           </div>
         </SidebarProvider>

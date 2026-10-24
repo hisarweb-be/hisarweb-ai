@@ -24,6 +24,10 @@ import { expect, test, vi } from 'vitest'
 
 import { PublicLayout } from '../public-layout'
 
+vi.mock('../footer', () => ({
+  Footer: () => <footer data-testid='site-footer' />,
+}))
+
 vi.mock('../public-header', () => ({
   PublicHeader: () => <header>nav</header>,
 }))
@@ -43,6 +47,7 @@ test('every public page gets the landing tokens and the aurora backdrop', () => 
   expect(backdrop.querySelectorAll('.hwl-blob')).toHaveLength(3)
   // The default container starts below the 64px fixed nav, with room to spare.
   expect(screen.getByText('page').closest('main')).toHaveClass('pt-24')
+  expect(screen.getByTestId('site-footer')).toBeInTheDocument()
 })
 
 test('the landing page keeps its own hero and opts out of the backdrop', () => {

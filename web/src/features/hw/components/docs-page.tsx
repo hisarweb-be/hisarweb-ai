@@ -25,7 +25,6 @@ import {
 } from '@/components/ai-elements/code-block'
 import { CopyButton } from '@/components/copy-button'
 import { PublicLayout } from '@/components/layout'
-import { Footer } from '@/components/layout/components/footer'
 import { PageTransition } from '@/components/page-transition'
 import {
   Accordion,
@@ -371,7 +370,6 @@ export function DocsPage() {
           </ul>
         </DocSection>
       </PageTransition>
-      <Footer />
     </PublicLayout>
   )
 }
