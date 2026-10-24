@@ -32,9 +32,6 @@ export const HW_SOLD_MODELS = [
   'claude-sonnet-5',
   'claude-haiku-4-5',
   'claude-fable-5-1',
-  'gpt-6-astra',
-  'gpt-6.1-sol',
-  'gpt-6-luna',
   'gemini-3.8-flash',
 ] as const
 

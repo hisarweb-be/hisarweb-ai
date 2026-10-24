@@ -82,9 +82,6 @@ var hwSoldModels = []HwSoldModel{
 	{Name: "claude-sonnet-5", PriceKey: "claude-sonnet-5", InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000},
 	{Name: "claude-haiku-4-5", PriceKey: "claude-haiku-4-5", InputMicroUsd: 1_000_000, OutputMicroUsd: 5_000_000},
 	{Name: "claude-fable-5-1", PriceKey: "claude-fable-5-1", InputMicroUsd: 10_000_000, OutputMicroUsd: 50_000_000},
-	{Name: "gpt-6-astra", PriceKey: "gpt-6-astra", InputMicroUsd: 10_000_000, OutputMicroUsd: 50_000_000},
-	{Name: "gpt-6.1-sol", PriceKey: "gpt-6.1-sol", InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000},
-	{Name: "gpt-6-luna", PriceKey: "gpt-6-luna", InputMicroUsd: 100_000, OutputMicroUsd: 500_000},
 	{Name: "gemini-3.8-flash", PriceKey: "gemini-3.8-flash", InputMicroUsd: 750_000, OutputMicroUsd: 3_750_000},
 }
 

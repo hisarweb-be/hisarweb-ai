@@ -132,7 +132,7 @@ describe('recommended sorting', () => {
     'claude-opus-5-5',
     'aa-unknown',
     'claude-fable-5-1',
-    'gpt-6-luna',
+    'claude-sonnet-5',
   ].map((name) => pricingModel(name, {}))
 
   test('puts Fable first, then Opus, and unknown models last by name', () => {
@@ -141,7 +141,7 @@ describe('recommended sorting', () => {
     ).toEqual([
       'claude-fable-5-1',
       'claude-opus-5-5',
-      'gpt-6-luna',
+      'claude-sonnet-5',
       'gemini-3.8-flash',
       'aa-unknown',
       'zz-unknown',

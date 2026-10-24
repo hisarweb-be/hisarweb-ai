@@ -126,9 +126,6 @@ func TestHwSeedDefaultOptions(t *testing.T) {
 			"claude-sonnet-5":   0.5,
 			"claude-haiku-4-5":  0.25,
 			"claude-fable-5-1":  2.5,
-			"gpt-6-astra":       2.5,
-			"gpt-6.1-sol":       0.5,
-			"gpt-6-luna":        0.025,
 			"gemini-3.8-flash":  0.1875,
 		}
 		for name, expected := range expectedModelRatios {
@@ -177,7 +174,7 @@ func TestHwSeedDefaultOptions(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, 3.5, ratio, "an operator price is never replaced")
 		assert.Equal(t, 4.0, ratio_setting.GetCompletionRatio("claude-opus-5-5"))
-		ratio, ok, _ = ratio_setting.GetModelRatio("gpt-6-astra")
+		ratio, ok, _ = ratio_setting.GetModelRatio("claude-fable-5-1")
 		require.True(t, ok, "a missing sold model is filled in")
 		assert.Equal(t, 2.5, ratio)
 		ratio, ok, _ = ratio_setting.GetModelRatio("gpt-4o")
@@ -285,7 +282,7 @@ func TestHwApplySnapshotModelRatios(t *testing.T) {
 
 	snapshot := &model.HwPriceSnapshot{
 		Models: `{"claude-opus-5-5":{"in":6000000,"out":30000000},` +
-			`"gpt-6.1-sol":{"in":2000000,"out":10000000},` +
+			`"claude-haiku-5-5":{"in":100000,"out":500000},` +
 			`"gemini-3.8-flash":{"in":0,"out":9000000}}`,
 	}
 	require.NoError(t, HwApplySnapshotModelRatios(snapshot))
@@ -296,10 +293,10 @@ func TestHwApplySnapshotModelRatios(t *testing.T) {
 	assert.Equal(t, 1.5, ratio)
 	assert.Equal(t, 5.0, ratio_setting.GetCompletionRatio("claude-opus-5-5"))
 	// A sold model the snapshot prices for the first time gets both ratios.
-	ratio, ok, _ = ratio_setting.GetModelRatio("gpt-6.1-sol")
+	ratio, ok, _ = ratio_setting.GetModelRatio("claude-haiku-5-5")
 	require.True(t, ok)
-	assert.Equal(t, 0.5, ratio)
-	assert.Equal(t, 5.0, ratio_setting.GetCompletionRatio("gpt-6.1-sol"))
+	assert.Equal(t, 0.025, ratio)
+	assert.Equal(t, 5.0, ratio_setting.GetCompletionRatio("claude-haiku-5-5"))
 	// A model outside the catalog keeps its operator ratio.
 	ratio, ok, _ = ratio_setting.GetModelRatio("gpt-4o")
 	require.True(t, ok)
