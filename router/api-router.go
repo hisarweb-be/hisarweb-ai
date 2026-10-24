@@ -35,6 +35,8 @@ func SetApiRouter(router *gin.Engine) {
 		// Partner channels: grant the channel credit, list the results.
 		apiRouter.POST("/hw/admin/channel-grant", middleware.AdminAuth(), controller.HwAdminChannelGrant)
 		apiRouter.GET("/hw/admin/channels", middleware.AdminAuth(), controller.HwAdminChannels)
+		// Update check: the upstream release list, fetched and cached by the server.
+		apiRouter.GET("/hw/upstream-releases", middleware.AdminAuth(), controller.HwUpstreamReleases)
 		apiRouter.GET("/notice", controller.GetNotice)
 		apiRouter.GET("/user-agreement", controller.GetUserAgreement)
 		apiRouter.GET("/privacy-policy", controller.GetPrivacyPolicy)

@@ -136,13 +136,8 @@ describe('administrator update entry', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
       expect(fetchMock).toHaveBeenCalledTimes(1)
       const [url, options] = fetchMock.mock.calls[0]
-      expect(String(url)).toBe(
-        'https://api.github.com/repos/QuantumNous/new-api/releases?per_page=100'
-      )
-      expect(options?.credentials).toBe('omit')
-      expect(options?.headers).toEqual({
-        Accept: 'application/vnd.github+json',
-      })
+      expect(String(url)).toBe('/api/hw/upstream-releases')
+      expect(options?.credentials).toBe('same-origin')
     }
   )
 
@@ -795,7 +790,9 @@ describe('update cache and scheduling', () => {
   })
 
   test.each([
-    [403, '[]', 'rate-limit'],
+    [429, '[]', 'rate-limit'],
+    [403, '[]', 'network'],
+    [502, '', 'network'],
     [500, '[]', 'network'],
     [200, '{}', 'payload'],
     [200, '[{"tag_name":42}]', 'payload'],
