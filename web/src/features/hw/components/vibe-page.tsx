@@ -38,12 +38,11 @@ import {
 } from './vibe-parts'
 import { AiHelp, Fit, Tools } from './vibe-tools'
 
-/**
- * The film for beginners is made in a separate task. Until its file exists
- * this stays `undefined` and the page shows no player at all. Fill in the
- * paths here once `public/film/` holds the video and its poster.
- */
-export const VIBE_FILM: { src: string; poster: string } | undefined = undefined
+/** The film for beginners; the poster is the frame shown before play. */
+const VIBE_FILM: { src: string; poster: string } | undefined = {
+  src: '/film/hisarweb-ai-vibe-kodlama.mp4',
+  poster: '/film/hisarweb-ai-vibe-kodlama.jpg',
+}
 
 /** Same key, two models: only the `model` field changes between the requests. */
 const TWO_MODELS_EXAMPLE = ['claude-opus-5-5', 'claude-sonnet-5-5']
@@ -99,11 +98,13 @@ function Layers(props: { text: VibeTranslate }) {
 export function VibeFilm(props: {
   film?: { src: string; poster: string }
   title: string
+  caption?: string
   label: string
 }) {
   if (!props.film) return null
   return (
     <Section title={props.title}>
+      {props.caption ? <Paragraph>{props.caption}</Paragraph> : null}
       <div className='overflow-hidden rounded-xl border bg-black'>
         <video
           controls
@@ -132,6 +133,13 @@ export function VibePage() {
           </h1>
           <p className='text-muted-foreground'>{text('lead')}</p>
         </header>
+
+        <VibeFilm
+          film={VIBE_FILM}
+          title={text('filmTitle')}
+          caption={text('filmBody')}
+          label={text('filmLabel')}
+        />
 
         <Section title={text('forWhoTitle')}>
           <Paragraph>{text('forWhoBody')}</Paragraph>
@@ -188,12 +196,6 @@ export function VibePage() {
         </Section>
 
         <Fit text={text} />
-
-        <VibeFilm
-          film={VIBE_FILM}
-          title={text('filmTitle')}
-          label={text('filmLabel')}
-        />
 
         <Section title={text('ctaTitle')}>
           <Paragraph>{text('ctaBody')}</Paragraph>

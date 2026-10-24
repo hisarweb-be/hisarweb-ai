@@ -183,6 +183,7 @@ describe('vibe coding page', () => {
       ...document.querySelectorAll('[data-slot="card-title"]'),
     ].map((heading) => heading.textContent)
     expect(headings).toEqual([
+      'Kısa film: aboneliğiniz düşünsün, HisarWeb AI işi yapsın',
       'Bu sayfa kimin için?',
       'Kural tek cümle',
       'Tek anahtar, bütün modeller',
@@ -318,11 +319,31 @@ describe('vibe coding page', () => {
     expect(screen.getByText('Gerek olmayabilir')).toBeInTheDocument()
   })
 
-  it('shows no film player until a film file is set', () => {
+  it('offers the vibecoder film on the page with controls, poster and no autoplay', () => {
     renderVibe(trI18n)
 
-    expect(document.querySelector('video')).toBeNull()
-    expect(screen.queryByText('Filmi izleyin')).toBeNull()
+    expect(
+      screen.getByText(
+        'Kısa film: aboneliğiniz düşünsün, HisarWeb AI işi yapsın'
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/görseller yapay zekâ ile üretilmiştir/)
+    ).toBeInTheDocument()
+    const film = screen.getByLabelText('HisarWeb AI vibe kodlama tanıtım filmi')
+    expect(film).toHaveAttribute('controls')
+    expect(film).toHaveAttribute('preload', 'metadata')
+    expect(film).toHaveAttribute('poster', '/film/hisarweb-ai-vibe-kodlama.jpg')
+    expect(film).toHaveAttribute('src', '/film/hisarweb-ai-vibe-kodlama.mp4')
+    expect(film).not.toHaveAttribute('autoplay')
+  })
+
+  it('labels the film in English when the page is English', () => {
+    renderVibe(enI18n)
+
+    expect(
+      screen.getByLabelText('HisarWeb AI film for new vibecoders')
+    ).toBeInTheDocument()
   })
 
   it('offers the film with controls, a poster and no autoplay once it exists', () => {
