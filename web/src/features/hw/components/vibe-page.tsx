@@ -47,15 +47,13 @@ type Film = { src: string; poster: string }
  * poster is the frame shown before play. The file names carry a version
  * because browsers cache the mp4 for a week.
  */
-const VIBE_FILMS: Record<'tr' | 'en', Film> = {
+const VIBE_FILMS: Partial<Record<'tr' | 'en', Film>> = {
   tr: {
     src: '/film/hisarweb-ai-vibe-kodlama-v2.mp4',
     poster: '/film/hisarweb-ai-vibe-kodlama.jpg',
   },
-  en: {
-    src: '/film/hisarweb-ai-vibe-kodlama-en-v1.mp4',
-    poster: '/film/hisarweb-ai-vibe-kodlama-en.jpg',
-  },
+  // The English page shows no film until the English voice version exists;
+  // a Turkish film on an English page is the wrong language.
 }
 
 /** Same key, two models: only the `model` field changes between the requests. */
