@@ -27,6 +27,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 
 import { KEY_PLACEHOLDER, OPENAI_BASE_URL } from '../docs-tool-guides'
+import { useHwLanguage } from '../texts'
 import { useVibeText, type VibeTextKey } from '../vibe-texts'
 import { VibeDiagram } from './vibe-diagram'
 import {
@@ -38,10 +39,28 @@ import {
 } from './vibe-parts'
 import { AiHelp, Fit, Tools } from './vibe-tools'
 
-/** The film for beginners; the poster is the frame shown before play. */
-const VIBE_FILM: { src: string; poster: string } | undefined = {
-  src: '/film/hisarweb-ai-vibe-kodlama.mp4',
+type FilmTrack = { src: string; srclang: 'tr' | 'en'; label: string }
+type Film = { src: string; poster: string; tracks?: FilmTrack[] }
+
+/**
+ * The film for beginners; the poster is the frame shown before play. The file
+ * name carries a version because browsers cache the mp4 for a week.
+ */
+const VIBE_FILM: Film | undefined = {
+  src: '/film/hisarweb-ai-vibe-kodlama-v2.mp4',
   poster: '/film/hisarweb-ai-vibe-kodlama.jpg',
+  tracks: [
+    {
+      src: '/film/hisarweb-ai-vibe-kodlama.tr.vtt',
+      srclang: 'tr',
+      label: 'Türkçe',
+    },
+    {
+      src: '/film/hisarweb-ai-vibe-kodlama.en.vtt',
+      srclang: 'en',
+      label: 'English',
+    },
+  ],
 }
 
 /** Same key, two models: only the `model` field changes between the requests. */
@@ -96,7 +115,9 @@ function Layers(props: { text: VibeTranslate }) {
 
 /** Renders nothing while there is no film, so the page has no empty box. */
 export function VibeFilm(props: {
-  film?: { src: string; poster: string }
+  film?: Film
+  /** The subtitle language switched on at the start; the other one stays selectable. */
+  subtitleLanguage?: 'tr' | 'en'
   title: string
   caption?: string
   label: string
@@ -114,7 +135,18 @@ export function VibeFilm(props: {
           src={props.film.src}
           aria-label={props.label}
           className='block aspect-video w-full'
-        />
+        >
+          {props.film.tracks?.map((track) => (
+            <track
+              key={track.srclang}
+              kind='subtitles'
+              src={track.src}
+              srcLang={track.srclang}
+              label={track.label}
+              default={track.srclang === (props.subtitleLanguage ?? 'tr')}
+            />
+          ))}
+        </video>
       </div>
     </Section>
   )
@@ -123,6 +155,7 @@ export function VibeFilm(props: {
 /** `/vibe-kodlama`: how a beginner splits the work between subscription and key. */
 export function VibePage() {
   const text = useVibeText()
+  const language = useHwLanguage()
 
   return (
     <PublicLayout showMainContainer={false}>
@@ -136,6 +169,7 @@ export function VibePage() {
 
         <VibeFilm
           film={VIBE_FILM}
+          subtitleLanguage={language}
           title={text('filmTitle')}
           caption={text('filmBody')}
           label={text('filmLabel')}
