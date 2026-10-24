@@ -47,18 +47,16 @@ type BonusStepAction = {
 type BonusStep = {
   key: HwTextKey
   done: boolean
-  /** Telegram and the phone step wait until verification opens. */
-  closed: boolean
-  /** What the customer does next; empty while the step is closed. */
+  /** What the customer does next; empty when the step cannot be done here. */
   action?: BonusStepAction
 }
 
 /**
  * Tells a new customer how to receive the start bonus: confirm the e-mail
  * address, link Telegram, share the phone number with the bot. It disappears
- * once the free credit package exists. When the Telegram step is not open on
- * this installation, the card says so instead of sending the customer to a
- * button that cannot work.
+ * once the free credit package exists. When Telegram verification is not open
+ * on this installation the card is not shown at all: the bonus cannot be
+ * claimed then, and a promise that cannot be kept only confuses a customer.
  */
 export function StartbonusCard() {
   const hw = useHwText()
@@ -109,11 +107,11 @@ export function StartbonusCard() {
   const botName = String(status?.telegram_bot_name ?? '').replace(/^@/, '')
   const telegramOpen =
     Boolean(botName) || Boolean(status?.telegram_oauth_configured)
+  if (!telegramOpen) return dialogOpen ? dialog : null
   const steps: BonusStep[] = [
     {
       key: 'bonusStepEmail',
       done: Boolean(user.email),
-      closed: false,
       action: {
         label: hw('bonusButtonEmail'),
         hint: 'bonusHintEmail',
@@ -123,40 +121,33 @@ export function StartbonusCard() {
     {
       key: 'bonusStepTelegram',
       done: Boolean(user.telegram_id),
-      closed: !telegramOpen,
-      action: telegramOpen
-        ? {
-            label: t('Link Telegram'),
-            hint: 'bonusHintTelegram',
-            linkTelegram: true,
-          }
-        : undefined,
+      action: {
+        label: t('Link Telegram'),
+        hint: 'bonusHintTelegram',
+        linkTelegram: true,
+      },
     },
     {
       key: 'bonusStepPhone',
       done: Boolean(packages.data.phone_shared),
-      closed: !telegramOpen,
-      action:
-        telegramOpen && botName
-          ? {
-              label: hw('bonusButtonPhone'),
-              hint: 'bonusHintPhone',
-              linkTelegram: true,
-            }
-          : undefined,
+      action: botName
+        ? {
+            label: hw('bonusButtonPhone'),
+            hint: 'bonusHintPhone',
+            linkTelegram: true,
+          }
+        : undefined,
     },
   ]
   const current = steps.findIndex((step) => !step.done)
   const stepNumber = current + 1
 
-  // The e-mail step can always be done, so its call to action stays visible
-  // while Telegram verification is closed; the other two cannot work then.
   let action: BonusStepAction | null = null
   if (current === 0) {
     action = { label: hw('bonusButtonEmail'), to: '/security' }
-  } else if (telegramOpen && current === 1) {
+  } else if (current === 1) {
     action = { label: t('Link Telegram'), linkTelegram: true }
-  } else if (telegramOpen && current === 2 && botName) {
+  } else if (current === 2 && botName) {
     action = { label: hw('bonusButtonPhone'), linkTelegram: true }
   }
 
@@ -179,9 +170,7 @@ export function StartbonusCard() {
             {hw('bonusTitle')}
           </h3>
           <p className='text-muted-foreground text-sm leading-relaxed'>
-            {telegramOpen
-              ? hw('bonusLead', { step: stepNumber })
-              : hw('bonusClosed')}
+            {hw('bonusLead', { step: stepNumber })}
           </p>
         </div>
         <div className='flex flex-wrap items-center gap-2'>
@@ -217,8 +206,6 @@ export function StartbonusCard() {
           let statusKey: HwTextKey = 'bonusStatusTodo'
           if (step.done) {
             statusKey = 'bonusStatusDone'
-          } else if (step.closed) {
-            statusKey = 'bonusStatusClosed'
           }
           const stepAction = step.done ? undefined : step.action
           return (
@@ -226,9 +213,7 @@ export function StartbonusCard() {
               key={step.key}
               className={cn(
                 'flex items-start gap-3 rounded-xl border p-3 text-sm',
-                index === current &&
-                  telegramOpen &&
-                  'border-primary bg-primary/5'
+                index === current && 'border-primary bg-primary/5'
               )}
             >
               <span

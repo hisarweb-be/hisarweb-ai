@@ -127,7 +127,9 @@ afterEach(async () => {
 it('applies the selected mobile date range directly and resets pagination while retaining filters', async () => {
   const router = await renderMobileFilter()
   const user = userEvent.setup()
-  await user.click(screen.getByRole('button', { name: /^\d{4}-\d{2}/ }))
+  await user.click(
+    screen.getByRole('button', { name: /^[0-9]{2}[.][0-9]{2}[.][0-9]{4}/ })
+  )
   fireEvent.change(screen.getByLabelText('Start Time'), {
     target: { value: '2026-09-07T09:30' },
   })
@@ -257,7 +259,7 @@ it('collapses only date and statistics while keeping the right-hand quick action
   const user = userEvent.setup()
   const date =
     screen
-      .getByRole('button', { name: /^\d{4}-\d{2}/ })
+      .getByRole('button', { name: /^[0-9]{2}[.][0-9]{2}[.][0-9]{4}/ })
       .getAttribute('aria-label') ?? ''
   expect(await screen.findByText('Usage')).toBeVisible()
   await user.click(screen.getByRole('button', { name: 'Collapse' }))
@@ -302,7 +304,9 @@ it.each([
         onChange={onChange}
       />
     )
-    await user.click(screen.getByRole('button', { name: /^2026/ }))
+    await user.click(
+      screen.getByRole('button', { name: /^[0-9]{2}[.][0-9]{2}[.]2026/ })
+    )
     const preset = screen.getByRole('button', { name: '本月' })
     expect(preset).toBeVisible()
     await user.click(preset)
@@ -323,7 +327,9 @@ it('keeps the seconds of the current range when it is confirmed again', async ()
       onChange={onChange}
     />
   )
-  await user.click(screen.getByRole('button', { name: /^2026/ }))
+  await user.click(
+    screen.getByRole('button', { name: /^[0-9]{2}[.][0-9]{2}[.]2026/ })
+  )
   await user.click(screen.getByRole('button', { name: 'Confirm' }))
   expect(onChange).toHaveBeenCalledWith({
     start: new Date(2026, 8, 7, 9, 30, 15),
@@ -341,7 +347,7 @@ it('shows the seconds of the selected range on the trigger', () => {
   )
   expect(
     screen.getByRole('button', {
-      name: '2026-09-07 09:30:15 ~ 2026-09-08 17:45:59',
+      name: '07.09.2026 09:30:15 ~ 08.09.2026 17:45:59',
     })
   ).toBeVisible()
 })

@@ -19,6 +19,8 @@ For commercial licensing, please contact support@quantumnous.com
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 
+import { formatDecimal } from '@/lib/format'
+import { formatTimeObject } from '@/lib/time'
 import { cn } from '@/lib/utils'
 
 import type { MessageAlignment } from '../../lib'
@@ -34,11 +36,7 @@ function formatMessageTime(timestamp?: number): string | undefined {
     return undefined
   }
 
-  return new Intl.DateTimeFormat(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).format(new Date(timestamp))
+  return formatTimeObject(new Date(timestamp))
 }
 
 function formatDuration(
@@ -53,7 +51,7 @@ function formatDuration(
     return t('{{value}}ms', { value: Math.max(1, Math.round(durationMs)) })
   }
 
-  return t('{{value}}s', { value: (durationMs / 1000).toFixed(2) })
+  return t('{{value}}s', { value: formatDecimal(durationMs / 1000, 2, 2) })
 }
 
 export function MessageMetadata(props: MessageMetadataProps) {

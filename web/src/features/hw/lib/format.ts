@@ -1,3 +1,8 @@
+import { formatDateTimeStr } from '@/lib/format'
+import { getFormatLocale } from '@/lib/format-locale'
+import { formatDateObject } from '@/lib/time'
+
+import { HW_COMPARE_MAX_MONTHLY_TOKENS } from '../constants'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -17,8 +22,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { HwLanguage, HwTextKey, HwTextVars } from '../texts'
-import { formatDateTimeStr } from '@/lib/format'
-import { HW_COMPARE_MAX_MONTHLY_TOKENS } from '../constants'
 import type { HwMoneyText } from '../types'
 import type { HwCurrency } from './currency'
 
@@ -35,21 +38,19 @@ export function formatHwAmount(
 ): string {
   if (!Number.isFinite(amount)) return '-'
   const fractionDigits = Number.isInteger(amount) ? 0 : 2
-  return new Intl.NumberFormat(locale, {
+  return new Intl.NumberFormat(locale ?? getFormatLocale(), {
     style: 'currency',
     currency,
-    currencyDisplay: currency === 'TRY' ? 'symbol' : 'narrowSymbol',
+    currencyDisplay: 'narrowSymbol',
     minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits,
   }).format(amount)
 }
 
 /** Formats a unix-seconds timestamp as a date; an empty stamp stays empty. */
-export function formatHwDate(unixSeconds: number, locale?: string): string {
+export function formatHwDate(unixSeconds: number, _locale?: string): string {
   if (!Number.isFinite(unixSeconds) || unixSeconds <= 0) return '-'
-  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(
-    unixSeconds * 1000
-  )
+  return formatDateObject(new Date(unixSeconds * 1000))
 }
 
 /** Text key of a package source; unknown sources are shown as the raw value. */
@@ -96,10 +97,10 @@ export function formatHwMoney(
   if (value == null || !Number.isFinite(value)) return '-'
   const maximumFractionDigits =
     Math.abs(value) > 0 && Math.abs(value) < 1 ? 6 : 2
-  return new Intl.NumberFormat(locale, {
+  return new Intl.NumberFormat(locale ?? getFormatLocale(), {
     style: 'currency',
     currency,
-    currencyDisplay: currency === 'TRY' ? 'symbol' : 'narrowSymbol',
+    currencyDisplay: 'narrowSymbol',
     minimumFractionDigits: 2,
     maximumFractionDigits,
   }).format(value)
@@ -126,9 +127,11 @@ export function formatHwStamp(
   value: string | number | null | undefined
 ): string {
   if (value == null || value === '') return '-'
-  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
-    return value.trim()
-  }
+  const bareDay =
+    typeof value === 'string'
+      ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim())
+      : null
+  if (bareDay) return `${bareDay[3]}.${bareDay[2]}.${bareDay[1]}`
   const date =
     typeof value === 'number' ? new Date(value * 1000) : new Date(value)
   if (Number.isNaN(date.getTime())) return '-'

@@ -218,7 +218,7 @@ describe('expression price summaries', () => {
       { tokenUnit: 'M' }
     )
     expect(summary?.primaryEntries[0]?.value).toBe(0)
-    expect(summary?.primaryEntries[0]?.formattedRange).toBe('$0 – $0.8')
+    expect(summary?.primaryEntries[0]?.formattedRange).toBe('$0.00 – $0.80')
   })
 })
 
@@ -369,7 +369,7 @@ describe('task dynamic pricing', () => {
         shortLabel: 'Input',
         labelKind: 'i18n',
         value: 2,
-        formatted: '$2',
+        formatted: '$2.00',
         unit: 'token',
         variable: {
           key: 'p',
@@ -703,7 +703,7 @@ describe('shared plugin price summaries', () => {
       field: 'seconds',
       minValue: 0.4,
       maxValue: 1.2,
-      formattedRange: '$0.4 – $1.2',
+      formattedRange: '$0.40 – $1.20',
       unit: 'second',
     })
   })
@@ -794,7 +794,7 @@ describe('shared plugin price summaries', () => {
     expect(getCardExamplePrice(model, summaryOptions)).toEqual({
       label: 'Beta sample',
       total: 3,
-      formatted: '$3',
+      formatted: '$3.00',
     })
   })
 })

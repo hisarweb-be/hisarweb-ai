@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { formatDecimal } from '@/lib/format'
+
 import type { PricingModel } from '../types'
 import {
   hashStringToSeed,
@@ -485,10 +487,10 @@ export function aggregateUptime(points: UptimeDayPoint[]): {
 /** Compact integer formatter for token counts in apps tab. */
 export function formatTokenVolume(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return '0'
-  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return n.toString()
+  if (n >= 1_000_000_000) return `${formatDecimal(n / 1_000_000_000, 1, 1)}B`
+  if (n >= 1_000_000) return `${formatDecimal(n / 1_000_000, 1, 1)}M`
+  if (n >= 1_000) return `${formatDecimal(n / 1_000, 1, 1)}K`
+  return formatDecimal(n, 0)
 }
 
 // ---------------------------------------------------------------------------
@@ -835,8 +837,9 @@ export function buildRateLimits(model: PricingModel): RateLimit[] {
 /** Format an integer rate-limit value compactly. */
 export function formatRateLimit(value: number): string {
   if (value <= 0) return '—'
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
-  if (value >= 1_000)
-    return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}K`
-  return value.toLocaleString()
+  if (value >= 1_000_000) return `${formatDecimal(value / 1_000_000, 1, 1)}M`
+  if (value >= 1_000) {
+    return `${formatDecimal(value / 1_000, value >= 10_000 ? 0 : 1)}K`
+  }
+  return formatDecimal(value, 0)
 }

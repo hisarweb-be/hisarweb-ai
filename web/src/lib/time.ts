@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 /**
  * Time utility functions for consistent time handling across the application
  */
-import dayjs from '@/lib/dayjs'
+import { APP_LOCALE, APP_TIME_ZONE } from '@/lib/format-locale'
 
 /**
  * Time granularity type
@@ -34,52 +34,119 @@ export function dateToUnixTimestamp(date: Date): number {
 }
 
 /**
- * Get start of day for a Unix timestamp (seconds)
- * Sets time to 00:00:00
+ * Wall-clock parts of an instant in Istanbul time. `hourCycle: 'h23'` keeps
+ * midnight as 00 and never as 24, and the formatter is built once.
+ */
+const istanbulPartsFormatter = new Intl.DateTimeFormat(APP_LOCALE, {
+  timeZone: APP_TIME_ZONE,
+  hourCycle: 'h23',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+})
+
+export type IstanbulParts = {
+  year: number
+  month: number
+  day: number
+  hour: number
+  minute: number
+  second: number
+}
+
+/** Istanbul wall-clock parts of a Date or of milliseconds since the epoch. */
+export function getIstanbulParts(input: Date | number): IstanbulParts {
+  const parts: Record<string, number> = {}
+  for (const part of istanbulPartsFormatter.formatToParts(input)) {
+    if (part.type !== 'literal') parts[part.type] = Number(part.value)
+  }
+  return {
+    year: parts.year,
+    month: parts.month,
+    day: parts.day,
+    hour: parts.hour,
+    minute: parts.minute,
+    second: parts.second,
+  }
+}
+
+/**
+ * Milliseconds since the epoch of an Istanbul wall-clock moment. Out-of-range
+ * parts roll over like `Date.UTC` (day 0 is the last day of the month before).
+ * The zone offset is read back from the formatter instead of being hard coded.
+ */
+export function istanbulWallClockToMs(
+  year: number,
+  month: number,
+  day: number,
+  hour = 0,
+  minute = 0,
+  second = 0,
+  ms = 0
+): number {
+  const target = Date.UTC(year, month - 1, day, hour, minute, second)
+  let guess = target
+  for (let i = 0; i < 2; i++) {
+    const p = getIstanbulParts(guess)
+    const shown = Date.UTC(
+      p.year,
+      p.month - 1,
+      p.day,
+      p.hour,
+      p.minute,
+      p.second
+    )
+    guess += target - shown
+  }
+  return guess + ms
+}
+
+/**
+ * Get the Istanbul start of day (00:00:00) for a Unix timestamp (seconds)
  */
 export function toStartOfDay(tsSec: number): number {
-  const d = new Date(tsSec * 1000)
-  d.setHours(0, 0, 0, 0)
-  return Math.floor(d.getTime() / 1000)
+  const p = getIstanbulParts(tsSec * 1000)
+  return Math.floor(istanbulWallClockToMs(p.year, p.month, p.day) / 1000)
 }
 
 /**
- * Get start of day for a Date object
- * Returns new Date with time set to 00:00:00
+ * Get the Istanbul start of day of a Date object
+ * Returns new Date with the time set to 00:00:00 Istanbul time
  */
 export function getStartOfDay(date: Date = new Date()): Date {
-  const d = new Date(date)
-  d.setHours(0, 0, 0, 0)
-  return d
+  const p = getIstanbulParts(date)
+  return new Date(istanbulWallClockToMs(p.year, p.month, p.day))
 }
 
 /**
- * Get end of day for a Date object
- * Returns new Date with time set to 23:59:59.999
+ * Get the Istanbul end of day of a Date object
+ * Returns new Date with the time set to 23:59:59.999 Istanbul time
  */
 export function getEndOfDay(date: Date = new Date()): Date {
-  const d = new Date(date)
-  d.setHours(23, 59, 59, 999)
-  return d
+  const p = getIstanbulParts(date)
+  return new Date(
+    istanbulWallClockToMs(p.year, p.month, p.day, 23, 59, 59, 999)
+  )
 }
 
 /**
  * Calculate date range with start and end of day normalization
  * @param days Number of days to go back
  * @param fromDate Starting point (defaults to now)
- * @returns Object with normalized start (00:00:00) and end (23:59:59) dates
+ * @returns Object with normalized start (00:00:00) and end (23:59:59) dates in
+ * Istanbul time
  */
 export function getNormalizedDateRange(
   days: number,
   fromDate: Date = new Date()
 ): { start: Date; end: Date } {
-  const end = new Date(fromDate)
-  const start = new Date(fromDate)
-  start.setDate(end.getDate() - days)
-
+  const p = getIstanbulParts(fromDate)
   return {
-    start: getStartOfDay(start),
-    end: getEndOfDay(end),
+    start: new Date(istanbulWallClockToMs(p.year, p.month, p.day - days)),
+    end: getEndOfDay(fromDate),
   }
 }
 
@@ -139,38 +206,80 @@ export function computeTimeRange(
   return { start_timestamp: start, end_timestamp: end }
 }
 
-/**
- * Format Unix timestamp (seconds) to YYYY-MM-DD
- */
+function pad2(value: number): string {
+  return String(value).padStart(2, '0')
+}
+
+function isValidDate(date: Date): boolean {
+  return !Number.isNaN(date.getTime())
+}
+
+/** Format a Date object to dd.MM.yyyy in Istanbul time */
+export function formatDateObject(date: Date): string {
+  if (!isValidDate(date)) return '-'
+  const p = getIstanbulParts(date)
+  return `${pad2(p.day)}.${pad2(p.month)}.${p.year}`
+}
+
+/** Format a Date object to HH:mm:ss (or HH:mm) on the 24-hour clock in Istanbul time */
+export function formatTimeObject(date: Date, withSeconds = true): string {
+  if (!isValidDate(date)) return '-'
+  const p = getIstanbulParts(date)
+  const time = `${pad2(p.hour)}:${pad2(p.minute)}`
+  return withSeconds ? `${time}:${pad2(p.second)}` : time
+}
+
+/** Format a Date object to dd.MM.yyyy HH:mm:ss (or HH:mm) in Istanbul time */
+export function formatDateTimeObject(date: Date, withSeconds = true): string {
+  if (!isValidDate(date)) return '-'
+  return `${formatDateObject(date)} ${formatTimeObject(date, withSeconds)}`
+}
+
+/** Format Unix timestamp (seconds) to dd.MM.yyyy in Istanbul time */
 export function formatDate(tsSec: number): string {
-  return dayjs(tsSec * 1000).format('YYYY-MM-DD')
+  return formatDateObject(new Date(tsSec * 1000))
 }
 
 /**
- * Format Date object to YYYY-MM-DD HH:mm:ss
+ * Format a calendar day picked in a date picker to dd.MM.yyyy. A picked day is
+ * a local Date at midnight, so its local year, month and day are the day the
+ * visitor chose and no time zone conversion applies.
  */
-export function formatDateTimeObject(date: Date): string {
-  return dayjs(date).format('YYYY-MM-DD HH:mm:ss')
+export function formatCalendarDate(date: Date): string {
+  if (!isValidDate(date)) return '-'
+  return `${pad2(date.getDate())}.${pad2(date.getMonth() + 1)}.${date.getFullYear()}`
+}
+
+/**
+ * Format a date and time picked in a date-time picker to dd.MM.yyyy HH:mm:ss
+ * (or HH:mm). The visitor typed these wall-clock values into a local input, so
+ * the local components are shown as chosen and no time zone conversion applies.
+ */
+export function formatPickedDateTime(date: Date, withSeconds = true): string {
+  if (!isValidDate(date)) return '-'
+  const time = `${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+  return `${formatCalendarDate(date)} ${withSeconds ? `${time}:${pad2(date.getSeconds())}` : time}`
 }
 
 /**
  * Format timestamp for chart display based on time granularity
  * @param timestamp Unix timestamp in seconds
  * @param granularity Time granularity: 'hour', 'day', or 'week'
- * @returns Formatted string suitable for chart axis
+ * @returns Formatted string (dd.MM.yyyy, Istanbul time) suitable for chart axis
  */
 export function formatChartTime(
   timestamp: number,
   granularity: TimeGranularity = 'day'
 ): string {
-  const d = dayjs(timestamp * 1000)
-  let result = d.format('MM-DD')
+  const date = new Date(timestamp * 1000)
+  let result = formatDateObject(date)
 
   if (granularity === 'hour') {
-    result += ` ${d.format('HH')}:00`
+    result += ` ${pad2(getIstanbulParts(date).hour)}:00`
   } else if (granularity === 'week') {
-    const weekEnd = d.add(6, 'day')
-    result += ` - ${weekEnd.format('MM-DD')}`
+    const p = getIstanbulParts(date)
+    const weekEnd = new Date(istanbulWallClockToMs(p.year, p.month, p.day + 6))
+    result += ` - ${formatDateObject(weekEnd)}`
   }
 
   return result

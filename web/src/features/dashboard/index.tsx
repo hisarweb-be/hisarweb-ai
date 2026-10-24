@@ -248,7 +248,9 @@ export function Dashboard() {
   const visibleSections = useMemo(
     () =>
       DASHBOARD_SECTION_IDS.filter(
-        (section) => section !== 'overview' && (section !== 'users' || isAdmin)
+        (section) =>
+          section !== 'overview' &&
+          ((section !== 'users' && section !== 'flow') || isAdmin)
       ),
     [isAdmin]
   )
@@ -266,10 +268,12 @@ export function Dashboard() {
   const modelActions =
     activeSection === 'models' ? (
       <>
-        <ModelsChartPreferences
-          preferences={chartPreferences}
-          onPreferencesChange={handleChartPreferencesChange}
-        />
+        {isAdmin && (
+          <ModelsChartPreferences
+            preferences={chartPreferences}
+            onPreferencesChange={handleChartPreferencesChange}
+          />
+        )}
         <ModelsFilter
           preferences={chartPreferences}
           currentFilters={modelFilters}

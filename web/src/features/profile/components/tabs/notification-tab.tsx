@@ -39,12 +39,17 @@ import {
   quotaUnitsToDollars,
 } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
-import { ROLE } from '@/lib/roles'
+import { isOrdinaryCustomer, ROLE } from '@/lib/roles'
 
 import { updateUserSettings } from '../../api'
 import { NOTIFICATION_METHODS } from '../../constants'
 import { normalizeUserSettings } from '../../lib/user-settings'
 import type { UserProfile, NotifyType } from '../../types'
+
+/** Threshold in display units without floating point noise (for example 0.09930800000000001). */
+function toEditableDollars(units: number): number {
+  return Number(quotaUnitsToDollars(units).toFixed(6))
+}
 
 const NOTIFICATION_ICONS: Record<NotifyType, typeof Mail> = {
   email: Mail,
@@ -75,6 +80,8 @@ export function NotificationTab({
   const { t } = useTranslation()
   const role = profile?.role ?? 0
   const isAdmin = role >= ROLE.ADMIN
+  // Ordinary customers only get email reminders, without developer options.
+  const isCustomer = isOrdinaryCustomer(role)
   const [loading, setLoading] = useState(false)
   const [settings, setSettings] = useState(() => normalizeUserSettings())
   const [thresholdInput, setThresholdInput] = useState('')
@@ -97,7 +104,7 @@ export function NotificationTab({
       // 0 means the site default and shows as an empty input.
       setThresholdInput(
         next.quota_warning_threshold
-          ? String(quotaUnitsToDollars(next.quota_warning_threshold))
+          ? String(toEditableDollars(next.quota_warning_threshold))
           : ''
       )
     }
@@ -123,6 +130,9 @@ export function NotificationTab({
   }
 
   const notifyType = settings.notify_type
+  // A customer on plain email never sees the Webhook, Bark and Gotify choices.
+  // A customer who already chose another method keeps the full controls.
+  const showMethodChoices = !isCustomer || notifyType !== 'email'
   // Switches the user never chose: reminders stay on, and root alone gets
   // channel notifications.
   const quotaWarningEnabled = settings.quota_warning_enabled ?? true
@@ -141,39 +151,41 @@ export function NotificationTab({
       {(quotaRemindEnabled || isAdmin) && (
         <>
           {/* Notification Type */}
-          <div className='space-y-2.5'>
-            <Label>{t('Notification Method')}</Label>
-            <ToggleGroup
-              value={[notifyType]}
-              onValueChange={(value) => {
-                const nextValue = value.find((item) => item !== notifyType)
-                if (nextValue) {
-                  updateField('notify_type', nextValue as NotifyType)
-                }
-              }}
-              aria-label={t('Notification Method')}
-              variant='outline'
-              size='lg'
-              spacing={2}
-              className='grid w-full grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3'
-            >
-              {NOTIFICATION_METHODS.map((method) => {
-                const Icon = NOTIFICATION_ICONS[method.value]
-                return (
-                  <ToggleGroupItem
-                    key={method.value}
-                    value={method.value}
-                    className='h-auto min-h-14 w-full flex-col gap-1.5 px-3 py-3 sm:min-h-16'
-                  >
-                    <Icon className='h-4 w-4 sm:h-5 sm:w-5' />
-                    <span className='max-w-full truncate text-xs font-medium sm:text-sm'>
-                      {t(method.label)}
-                    </span>
-                  </ToggleGroupItem>
-                )
-              })}
-            </ToggleGroup>
-          </div>
+          {showMethodChoices && (
+            <div className='space-y-2.5'>
+              <Label>{t('Notification Method')}</Label>
+              <ToggleGroup
+                value={[notifyType]}
+                onValueChange={(value) => {
+                  const nextValue = value.find((item) => item !== notifyType)
+                  if (nextValue) {
+                    updateField('notify_type', nextValue as NotifyType)
+                  }
+                }}
+                aria-label={t('Notification Method')}
+                variant='outline'
+                size='lg'
+                spacing={2}
+                className='grid w-full grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3'
+              >
+                {NOTIFICATION_METHODS.map((method) => {
+                  const Icon = NOTIFICATION_ICONS[method.value]
+                  return (
+                    <ToggleGroupItem
+                      key={method.value}
+                      value={method.value}
+                      className='h-auto min-h-14 w-full flex-col gap-1.5 px-3 py-3 sm:min-h-16'
+                    >
+                      <Icon className='h-4 w-4 sm:h-5 sm:w-5' />
+                      <span className='max-w-full truncate text-xs font-medium sm:text-sm'>
+                        {t(method.label)}
+                      </span>
+                    </ToggleGroupItem>
+                  )
+                })}
+              </ToggleGroup>
+            </div>
+          )}
 
           {/* Email Settings */}
           {notifyType === 'email' && (
@@ -359,7 +371,7 @@ export function NotificationTab({
                           )
                         }}
                         placeholder={String(
-                          quotaUnitsToDollars(quotaRemindThreshold)
+                          toEditableDollars(quotaRemindThreshold)
                         )}
                       />
                       <p className='text-muted-foreground text-xs'>
@@ -405,38 +417,42 @@ export function NotificationTab({
         </>
       )}
 
-      {/* Divider */}
-      <div className='border-t' />
+      {!isCustomer && (
+        <>
+          {/* Divider */}
+          <div className='border-t' />
 
-      {/* Preferences Section */}
-      <div className='space-y-3'>
-        <div>
-          <h4 className='text-sm font-medium'>{t('Preferences')}</h4>
-          <p className='text-muted-foreground mt-1 text-xs'>
-            {t('Configure your account behavior preferences')}
-          </p>
-        </div>
+          {/* Preferences Section */}
+          <div className='space-y-3'>
+            <div>
+              <h4 className='text-sm font-medium'>{t('Preferences')}</h4>
+              <p className='text-muted-foreground mt-1 text-xs'>
+                {t('Configure your account behavior preferences')}
+              </p>
+            </div>
 
-        {/* Accept Unset Model Price */}
-        <div className='flex items-start justify-between gap-3 rounded-lg border p-3 sm:items-center sm:p-4'>
-          <div className='space-y-0.5'>
-            <Label htmlFor='acceptUnsetPrice'>
-              {t('Accept Unpriced Models')}
-            </Label>
-            <p className='text-muted-foreground text-xs sm:text-sm'>
-              {t('Allow using models without price configuration')}
-            </p>
+            {/* Accept Unset Model Price */}
+            <div className='flex items-start justify-between gap-3 rounded-lg border p-3 sm:items-center sm:p-4'>
+              <div className='space-y-0.5'>
+                <Label htmlFor='acceptUnsetPrice'>
+                  {t('Accept Unpriced Models')}
+                </Label>
+                <p className='text-muted-foreground text-xs sm:text-sm'>
+                  {t('Allow using models without price configuration')}
+                </p>
+              </div>
+              <Switch
+                id='acceptUnsetPrice'
+                className='shrink-0'
+                checked={settings.accept_unset_model_ratio_model}
+                onCheckedChange={(checked) =>
+                  updateField('accept_unset_model_ratio_model', checked)
+                }
+              />
+            </div>
           </div>
-          <Switch
-            id='acceptUnsetPrice'
-            className='shrink-0'
-            checked={settings.accept_unset_model_ratio_model}
-            onCheckedChange={(checked) =>
-              updateField('accept_unset_model_ratio_model', checked)
-            }
-          />
-        </div>
-      </div>
+        </>
+      )}
 
       {/* Save Button */}
       <div className='flex justify-end'>

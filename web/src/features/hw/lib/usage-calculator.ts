@@ -16,13 +16,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { getFormatLocale } from '@/lib/format-locale'
+
 import {
   MODEL_PRICES,
   MODEL_PRICES_TRY_PER_USD,
   blendedPrice,
   type ModelPrice,
 } from '../data/model-prices'
-import { hwTryAmountIn, niceFloor, type HwCurrency, type HwRates } from './currency'
+import {
+  hwTryAmountIn,
+  niceFloor,
+  type HwCurrency,
+  type HwRates,
+} from './currency'
 
 /**
  * "What does my credit buy?" estimate for people who are new to AI coding tools.
@@ -53,10 +60,7 @@ export const REFERENCE_MODEL = 'claude-sonnet-5-5'
 export const USAGE_BUDGETS_TRY = [250, 500, 1000, 2500] as const
 
 /** The budget buttons in `currency`: the TRY budgets, converted via USD. */
-export function usageBudgetsIn(
-  currency: HwCurrency,
-  rates: HwRates
-): number[] {
+export function usageBudgetsIn(currency: HwCurrency, rates: HwRates): number[] {
   return USAGE_BUDGETS_TRY.map((budget) =>
     niceFloor(hwTryAmountIn(budget, currency, rates))
   )
@@ -115,7 +119,7 @@ export function formatEstimate(value: number, locale?: string): string {
   if (!Number.isFinite(value)) return '-'
   if (value < 1) return '<1'
   const digits = value < 10 ? 1 : 0
-  return new Intl.NumberFormat(locale, {
+  return new Intl.NumberFormat(locale ?? getFormatLocale(), {
     minimumFractionDigits: 0,
     maximumFractionDigits: digits,
   }).format(value)

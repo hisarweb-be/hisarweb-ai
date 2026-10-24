@@ -487,7 +487,11 @@ function renderMobile<TData>(
     }
   }
 
-  return <div className='min-h-0 flex-1 overflow-y-auto'>{mobileContent}</div>
+  return (
+    <div className='min-h-0 flex-1 overflow-y-auto' tabIndex={0}>
+      {mobileContent}
+    </div>
+  )
 }
 
 function renderDesktop<TData>(

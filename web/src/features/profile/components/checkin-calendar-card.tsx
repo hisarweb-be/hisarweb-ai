@@ -376,7 +376,7 @@ export function CheckinCalendarCard({
                 {/* Month navigation */}
                 <div className='flex items-center justify-between'>
                   <h4 className='text-xs font-semibold sm:text-sm'>
-                    {dayjs(currentMonth).format('YYYY-MM')}
+                    {dayjs(currentMonth).format('MM.YYYY')}
                   </h4>
                   <div className='flex items-center gap-0.5 sm:gap-1'>
                     <Button

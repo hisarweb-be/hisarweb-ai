@@ -69,6 +69,7 @@ export function useSidebarData(): SidebarData {
             title: t('Chat'),
             icon: MessageSquare,
             type: 'chat-presets',
+            requiredRole: ROLE.ADMIN,
           },
         ],
       },
@@ -85,6 +86,7 @@ export function useSidebarData(): SidebarData {
             title: t('Dashboard'),
             url: '/dashboard/models',
             icon: LayoutDashboard,
+            requiredRole: ROLE.ADMIN,
           },
           {
             title: t('API Keys'),
@@ -100,6 +102,7 @@ export function useSidebarData(): SidebarData {
             title: t('Audit Logs'),
             url: '/usage-logs/audit',
             icon: ClipboardList,
+            requiredRole: ROLE.ADMIN,
           },
           {
             title: t('Task Logs'),
@@ -107,6 +110,7 @@ export function useSidebarData(): SidebarData {
             activeUrls: ['/usage-logs/drawing'],
             configUrls: ['/usage-logs/drawing', '/usage-logs/task'],
             icon: ListTodo,
+            requiredRole: ROLE.ADMIN,
           },
         ],
       },

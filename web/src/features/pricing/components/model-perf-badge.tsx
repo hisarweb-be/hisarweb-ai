@@ -25,6 +25,7 @@ import {
   getSuccessRateDotClass,
 } from '@/features/performance-metrics/lib/format'
 import type { SuccessRatePoint } from '@/features/performance-metrics/types'
+import { formatDecimal } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 import { wordsPerSecond } from '../lib/plain-metrics'
@@ -117,7 +118,7 @@ export const ModelPerfBadge = memo(function ModelPerfBadge(
               )}
             </span>
             <span className='font-mono'>
-              {hasSuccessRate ? `${successRate.toFixed(2)}%` : '—'}
+              {hasSuccessRate ? `${formatDecimal(successRate, 2, 2)}%` : '—'}
             </span>
           </dd>
         </div>

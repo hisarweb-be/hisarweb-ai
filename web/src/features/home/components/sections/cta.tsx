@@ -60,7 +60,7 @@ export function CTA(props: CTAProps) {
             {t('your AI integration?')}
           </span>
         </h2>
-        <p className='text-muted-foreground/80 mx-auto mt-5 max-w-md text-sm leading-relaxed md:text-base'>
+        <p className='text-muted-foreground mx-auto mt-5 max-w-md text-sm leading-relaxed md:text-base'>
           {t(
             'Deploy your own gateway and start routing requests through your configured upstream services.'
           )}

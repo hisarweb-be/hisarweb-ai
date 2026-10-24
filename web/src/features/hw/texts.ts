@@ -30,6 +30,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useHwCurrency } from './hooks/use-hw-currency'
 import { hwCurrencyTextVars } from './lib/currency-text'
+import { useHwBonusRules } from './lib/hw-bonus'
 
 export type HwLanguage = 'tr' | 'en'
 
@@ -70,9 +71,9 @@ const tr = {
   benefitDiscountTitle: 'Her zaman resmî fiyatın yarısı',
   benefitDiscountBody:
     'Tüm modellerde token fiyatı resmî liste fiyatının %50 altındadır, her istekte ve anında. İlk alışverişinizde {firstCap} değerine kadar ayrıca %50 hoş geldin indirimi alırsınız. Aylık abonelik ücreti yok.',
-  benefitExpiryTitle: 'Bakiyeniz 30 gün geçerli',
+  benefitExpiryTitle: 'Bakiyeniz {validityDays} gün geçerli',
   benefitExpiryBody:
-    'Yüklediğiniz bakiye yükleme tarihinden itibaren 30 gün geçerlidir. Kullanmadığınız süre için ödeme yapmazsınız.',
+    'Bakiyeniz son yüklemeden itibaren {validityDays} gün geçerlidir. Kullanmadığınız süre için ödeme yapmazsınız.',
 
   trialTitle: 'Önce ücretsiz deneyin',
   trialBody:
@@ -110,7 +111,7 @@ const tr = {
     'Kredi kartı veya Revolut ile TL olarak ödeyebilirsiniz. Ödeme sayfası sipariş sırasında açılır.',
   faq3Q: 'Bakiyem ne kadar süre geçerli?',
   faq3A:
-    'Satın aldığınız bakiye 30 gün, ücretsiz deneme bakiyesi 14 gün geçerlidir. Süresi dolan bakiye kullanılamaz.',
+    'Satın aldığınız bakiye {validityDays} gün, ücretsiz deneme bakiyesi 14 gün geçerlidir. Süresi dolan bakiye kullanılamaz.',
   faq4Q: 'Abonelik var mı?',
   faq4A:
     'Hayır. Aylık ücret yok; yalnızca yüklediğiniz bakiyeyi kullanırsınız.',
@@ -150,10 +151,31 @@ const tr = {
   topUpErrorUnavailable:
     'Ödeme şu anda kullanılamıyor. Lütfen biraz sonra tekrar deneyin.',
   topUpErrorDefault: 'Sipariş başlatılamadı. Lütfen tekrar deneyin.',
-  topUpClosedTitle: 'Online ödeme çok yakında açılıyor',
+  topUpClosedTitle: 'Kartla ödeme şu anda kapalı',
   topUpClosedBody:
-    'Kartla ödeme henüz açık değil. Bu arada {bonus} başlangıç bonusunu ücretsiz alabilirsiniz: e-postanızı onaylayın, Telegram’ı bağlayın ve numaranızı botla paylaşın.',
+    'Ödeme yöntemi şu anda kullanılamıyor, bu yüzden bakiye yükleyemezsiniz. Biraz sonra tekrar deneyin. Bu arada {bonus} başlangıç bonusunu ücretsiz alabilirsiniz: e-postanızı onaylayın, Telegram’ı bağlayın ve numaranızı botla paylaşın.',
   topUpClosedBonusButton: '{bonus} bonusu al',
+  topUpSubmitHintClosed:
+    'Ödeme şu anda kapalı olduğu için devam edemezsiniz. Biraz sonra tekrar deneyin.',
+  topUpSubmitHintAmount:
+    'Devam etmek için {min} ile {max} arasında bir tutar seçin.',
+  topUpPayableMax: 'Ödenecek tutar: en fazla {amount}',
+  bonusExplainTitle: 'Bakiye yüklediğinizde bonus kazanırsınız',
+  bonusExplainLead:
+    'Aşağıdaki tutarlara ulaşan yüklemelerde hesabınıza ek bonus bakiye eklenir.',
+  bonusRuleLine: '{min} ve üzeri yükleme: {amount} bonus',
+  bonusValidityNote:
+    'Bakiyeniz son yüklemeden itibaren {validityDays} gün geçerlidir.',
+  trustPayments: 'Ödemeler Stripe ile güvenli şekilde işlenir',
+  trustFees:
+    'Tüm işlem ücretlerini biz karşılıyoruz. Sadece kullandığınız kadar ödersiniz.',
+  trustLogosLabel: 'Ödeme ortağı, kabul edilen kartlar ve güvenlik',
+  trustAltStripe: 'Stripe logosu',
+  trustAltVisa: 'Visa logosu',
+  trustAltMastercard: 'Mastercard logosu',
+  trustAltTroy: 'Troy logosu',
+  trustAltAmex: 'American Express logosu',
+  trustLabel3ds: '3D Secure',
   topUpReturnTitle: 'Ödeme sayfasından döndünüz',
   topUpReturnPending: 'Bakiye, ödeme onaydan sonra görünür.',
   topUpReturnBody:
@@ -444,9 +466,9 @@ const en: Record<HwTextKey, string> = {
   benefitDiscountTitle: 'Always half the official price',
   benefitDiscountBody:
     'Every model costs 50% less per token than the official list price, on every request and in real time. Your first purchase also gets a 50% welcome discount on up to {firstCap} of value. No monthly subscription.',
-  benefitExpiryTitle: 'Your balance lasts 30 days',
+  benefitExpiryTitle: 'Your balance lasts {validityDays} days',
   benefitExpiryBody:
-    'A top-up stays valid for 30 days from the day you buy it. You pay nothing for time you do not use.',
+    'Your balance is valid for {validityDays} days after your last top-up. You pay nothing for time you do not use.',
 
   trialTitle: 'Try it for free first',
   trialBody:
@@ -484,7 +506,7 @@ const en: Record<HwTextKey, string> = {
     'With a card or Revolut, in Turkish lira. The payment page opens while you order.',
   faq3Q: 'How long is my balance valid?',
   faq3A:
-    'Balance you buy is valid for 30 days; trial credit for 14 days. Expired balance cannot be used.',
+    'Balance you buy is valid for {validityDays} days; trial credit for 14 days. Expired balance cannot be used.',
   faq4Q: 'Is there a subscription?',
   faq4A: 'No. There is no monthly fee; you only spend the balance you top up.',
   faq5Q: 'Which models can I use?',
@@ -524,10 +546,30 @@ const en: Record<HwTextKey, string> = {
   topUpErrorUnavailable:
     'Payment is not available right now. Please try again a bit later.',
   topUpErrorDefault: 'The order could not be started. Please try again.',
-  topUpClosedTitle: 'Online payment opens very soon',
+  topUpClosedTitle: 'Card payment is closed right now',
   topUpClosedBody:
-    'Card payment is not open yet. Meanwhile you can claim the {bonus} start bonus for free: confirm your e-mail, link Telegram and share your number with the bot.',
+    'The payment method is not available at the moment, so you cannot top up. Please try again a bit later. Meanwhile you can claim the {bonus} start bonus for free: confirm your e-mail, link Telegram and share your number with the bot.',
   topUpClosedBonusButton: 'Claim the {bonus} bonus',
+  topUpSubmitHintClosed:
+    'You cannot continue because payment is closed right now. Please try again a bit later.',
+  topUpSubmitHintAmount:
+    'Choose an amount between {min} and {max} to continue.',
+  topUpPayableMax: 'You pay: at most {amount}',
+  bonusExplainTitle: 'You earn a bonus when you top up',
+  bonusExplainLead:
+    'Top-ups that reach the amounts below add extra bonus balance to your account.',
+  bonusRuleLine: 'Top up {min} or more: {amount} bonus',
+  bonusValidityNote:
+    'Your balance is valid for {validityDays} days after your last top-up.',
+  trustPayments: 'Payments are processed securely by Stripe',
+  trustFees: 'We cover all transaction fees. You only pay for what you use.',
+  trustLogosLabel: 'Payment partner, accepted cards and security',
+  trustAltStripe: 'Stripe logo',
+  trustAltVisa: 'Visa logo',
+  trustAltMastercard: 'Mastercard logo',
+  trustAltTroy: 'Troy logo',
+  trustAltAmex: 'American Express logo',
+  trustLabel3ds: '3D Secure',
   topUpReturnTitle: 'You are back from the payment page',
   topUpReturnPending: 'The balance appears after the payment is confirmed.',
   topUpReturnBody:
@@ -800,7 +842,7 @@ export function fillHwText(text: string, vars?: HwTextVars): string {
 
 /**
  * Fills a text of `dictionary` for the active currency: the `{bonus}`,
- * `{firstCap}`, `{currencyName}` and `{currencyLong}` placeholders, and the
+ * `{firstCap}`, `{currencyName}`, `{currencyLong}` and `{validityDays}` placeholders, and the
  * `<key>Foreign` variant of a text (no Turkish KDV wording) when the currency
  * is not TRY. Shared by every HisarWeb text hook; reads the currency store, not
  * react-query, so it also works where no query client exists.
@@ -810,7 +852,11 @@ export function useHwCurrencyText<Key extends string>(
   language: HwLanguage
 ): (key: Key, vars?: HwTextVars) => string {
   const { currency, rates } = useHwCurrency()
-  const currencyVars = hwCurrencyTextVars(currency, rates, language)
+  const { validityDays } = useHwBonusRules()
+  const currencyVars = {
+    ...hwCurrencyTextVars(currency, rates, language),
+    validityDays,
+  }
   return (key, vars) => {
     const foreign = `${key}Foreign` as Key
     const text =

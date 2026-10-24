@@ -45,7 +45,8 @@ export function ProfileDropdown() {
   const navigate = useNavigate()
   const [open, setOpen] = useDialogState()
   const user = useAuthStore((state) => state.auth.user)
-  const { displayName, roleLabel } = useUserDisplay(user)
+  const { displayName, roleLabel, secondaryText } = useUserDisplay(user)
+  const isAdmin = (user?.role ?? ROLE.GUEST) >= ROLE.ADMIN
   const isSuperAdmin = user?.role === ROLE.SUPER_ADMIN
   const isWalletVisible = useIsSidebarModuleVisible('/wallet')
   const isSecurityVisible = useIsSidebarModuleVisible('/security')
@@ -85,19 +86,25 @@ export function ProfileDropdown() {
               <p className='text-foreground truncate text-sm font-medium'>
                 {displayName}
               </p>
-              <div className='flex items-center gap-1.5'>
-                <span className='text-muted-foreground text-xs'>
-                  {roleLabel}
-                </span>
-                {user?.group && (
-                  <>
-                    <span className='text-muted-foreground text-xs'>·</span>
-                    <span className='text-muted-foreground truncate text-xs'>
-                      {String(user.group)}
-                    </span>
-                  </>
-                )}
-              </div>
+              {isAdmin ? (
+                <div className='flex items-center gap-1.5'>
+                  <span className='text-muted-foreground text-xs'>
+                    {roleLabel}
+                  </span>
+                  {user?.group && (
+                    <>
+                      <span className='text-muted-foreground text-xs'>·</span>
+                      <span className='text-muted-foreground truncate text-xs'>
+                        {String(user.group)}
+                      </span>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <p className='text-muted-foreground truncate text-xs'>
+                  {secondaryText}
+                </p>
+              )}
             </div>
           </div>
 

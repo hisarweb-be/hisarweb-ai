@@ -30,6 +30,7 @@ import {
   getSuccessRateDotClass,
   getSuccessRateTextClass,
 } from '@/features/performance-metrics/lib/format'
+import { formatDecimal } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 import { aggregateUptime, type UptimeDayPoint } from '../lib/mock-stats'
@@ -90,7 +91,7 @@ export function UptimeSparkline(props: UptimeSparklineProps) {
       <div
         className={cn('flex items-end', containerHeight, gap)}
         role='img'
-        aria-label={`30 day uptime ${overall.toFixed(2)}%`}
+        aria-label={`30 day uptime ${formatDecimal(overall, 2, 2)}%`}
       >
         {props.series.map((day) => (
           <Tooltip key={day.date}>

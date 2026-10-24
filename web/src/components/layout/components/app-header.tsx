@@ -18,15 +18,18 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { ConfigDrawer } from '@/components/config-drawer'
 import { LanguageSwitcher } from '@/components/language-switcher'
-import { HwCurrencySwitch } from '@/features/hw/components/currency-switch'
 import { NotificationPopover } from '@/components/notification-popover'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
+import { HwCurrencySwitch } from '@/features/hw/components/currency-switch'
 import { SystemUpdateAction } from '@/features/system-update/system-update-action'
 import { useNotifications } from '@/hooks/use-notifications'
 import { useTopNavLinks } from '@/hooks/use-top-nav-links'
+import { ROLE } from '@/lib/roles'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { defaultTopNavLinks } from '../config/top-nav.config'
+import { filterTopNavLinksByRole } from '../lib/role-visibility'
 import type { TopNavLink } from '../types'
 import { Header } from './header'
 import { SystemBrand } from './system-brand'
@@ -107,7 +110,12 @@ export function AppHeader({
 }: AppHeaderProps) {
   // Prioritize dynamically generated links from backend
   const dynamicLinks = useTopNavLinks()
-  const links = dynamicLinks.length > 0 ? dynamicLinks : navLinks
+  const role = useAuthStore((s) => s.auth.user?.role) ?? ROLE.GUEST
+  const isAdmin = role >= ROLE.ADMIN
+  const links = filterTopNavLinksByRole(
+    dynamicLinks.length > 0 ? dynamicLinks : navLinks,
+    role
+  )
 
   // Notifications hook
   const notifications = useNotifications()
@@ -130,7 +138,7 @@ export function AppHeader({
               <TopNav links={links} />
             </div>
           )}
-          {showSearch && (
+          {showSearch && isAdmin && (
             <Search className='w-8 flex-none [&>span]:hidden sm:[&>span]:inline' />
           )}
           {showNotifications && (
@@ -147,7 +155,7 @@ export function AppHeader({
           )}
           <LanguageSwitcher variant='toggle' />
           <HwCurrencySwitch />
-          {showConfigDrawer && <ConfigDrawer />}
+          {showConfigDrawer && isAdmin && <ConfigDrawer />}
           {showProfileDropdown && <ProfileDropdown />}
         </div>
       )}

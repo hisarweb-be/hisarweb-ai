@@ -19,7 +19,6 @@ For commercial licensing, please contact support@quantumnous.com
 import { Link } from '@tanstack/react-router'
 import { CreditCard, Gift, Hourglass } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import { useTranslation } from 'react-i18next'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -28,12 +27,14 @@ import { Label } from '@/components/ui/label'
 import { TitledCard } from '@/components/ui/titled-card'
 import { useStatus } from '@/hooks/use-status'
 
-import type { HwTopUpLimits } from '../lib/currency'
 import { useHwCurrency } from '../hooks/use-hw-currency'
 import { useHwTopUpOrder } from '../hooks/use-hw-top-up-order'
 import { hwOrderErrorTextKey, openCheckout } from '../lib/checkout'
+import type { HwTopUpLimits } from '../lib/currency'
 import { formatHwAmount } from '../lib/format'
 import { useHwLanguage, useHwText, type HwTextKey } from '../texts'
+import { BonusExplainer } from './bonus-explainer'
+import { TrustBlock } from './trust-block'
 
 interface TopUpFormProps {
   locale?: string
@@ -52,7 +53,6 @@ function defaultAmount(topUp: HwTopUpLimits): string {
  * worked out itself.
  */
 export function TopUpForm(props: TopUpFormProps) {
-  const { t } = useTranslation()
   const hw = useHwText()
   const language = useHwLanguage()
   const order = useHwTopUpOrder()
@@ -78,6 +78,10 @@ export function TopUpForm(props: TopUpFormProps) {
     amount <= topUp.max
   const selectedPreset = topUp.presets.includes(amount) ? amount : null
   const showInvalidAmount = amountInput.trim() !== '' && !amountIsValid
+  const submitBlocked = paymentClosed || !amountIsValid
+  const submitHintKey: HwTextKey = paymentClosed
+    ? 'topUpSubmitHintClosed'
+    : 'topUpSubmitHintAmount'
 
   function changeAmount(next: string) {
     setAmountInput(next)
@@ -188,7 +192,8 @@ export function TopUpForm(props: TopUpFormProps) {
         <div className='bg-muted/40 flex flex-col gap-1.5 rounded-md p-3 text-sm'>
           {amountIsValid && (
             <p className='font-medium'>
-              {hw('topUpValueLabel')}: {formatHwAmount(amount, currency, props.locale)}
+              {hw('topUpValueLabel')}:{' '}
+              {formatHwAmount(amount, currency, props.locale)}
             </p>
           )}
           <p>{hw('topUpDiscountRule')}</p>
@@ -199,22 +204,41 @@ export function TopUpForm(props: TopUpFormProps) {
           </p>
         </div>
 
+        <BonusExplainer />
+
         {errorKey !== null && (
           <p role='alert' className='text-destructive text-sm'>
             {hw(errorKey)}
           </p>
         )}
 
+        {amountIsValid && (
+          <p className='text-base font-semibold'>
+            {hw('topUpPayableMax', {
+              amount: formatHwAmount(amount, currency, props.locale),
+            })}
+          </p>
+        )}
         <Button
           type='submit'
-          disabled={paymentClosed || !amountIsValid || order.isPending}
+          disabled={submitBlocked || order.isPending}
+          aria-describedby={submitBlocked ? 'hw-topup-submit-hint' : undefined}
           className='w-full sm:w-auto'
         >
           {order.isPending ? hw('topUpSubmitting') : hw('topUpSubmit')}
         </Button>
-        <p className='text-muted-foreground text-xs'>
-          {t('HisarWeb pays the payment and currency conversion costs. You get the full credit for what you pay, with no surcharge or deduction.')}
-        </p>
+        {submitBlocked && (
+          <p
+            id='hw-topup-submit-hint'
+            className='text-muted-foreground text-sm'
+          >
+            {hw(submitHintKey, {
+              min: formatHwAmount(topUp.min, currency, props.locale),
+              max: formatHwAmount(topUp.max, currency, props.locale),
+            })}
+          </p>
+        )}
+        <TrustBlock />
       </form>
     </TitledCard>
   )

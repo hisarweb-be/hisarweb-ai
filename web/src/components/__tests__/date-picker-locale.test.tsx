@@ -40,7 +40,7 @@ async function setInterfaceLanguage(language: string) {
 }
 
 async function openCalendar() {
-  await userEvent.click(screen.getByRole('button', { name: /2026-10-11/ }))
+  await userEvent.click(screen.getByRole('button', { name: /11.10.2026/ }))
   return screen.findByTestId('calendar-locale')
 }
 

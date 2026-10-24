@@ -92,7 +92,7 @@ export function LanguageSwitcher(props: LanguageSwitcherProps = {}) {
               className='h-7 rounded-md px-2 text-xs font-semibold'
             >
               {lang.short}
-              <span className='sr-only'> — {lang.label}</span>
+              <span className='sr-only'> {lang.label}</span>
             </Button>
           )
         })}
