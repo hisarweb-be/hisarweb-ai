@@ -84,7 +84,7 @@ import type {
   FlowOverflowMode,
   FlowRole,
 } from '@/features/dashboard/types'
-import { formatQuota } from '@/lib/format'
+import { formatDecimal, formatQuota } from '@/lib/format'
 import { ROLE } from '@/lib/roles'
 import { requireServerSuccess } from '@/lib/server-error-message'
 import { useThemeColor } from '@/lib/theme-color'
@@ -249,9 +249,7 @@ function toggleSelectedNodeFilter(
 }
 
 function formatFlowMetricNumber(value: number): string {
-  return Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-    value
-  )
+  return formatDecimal(value, 0)
 }
 
 export function FlowCharts(props: FlowChartsProps) {

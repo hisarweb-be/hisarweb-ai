@@ -56,6 +56,7 @@ import '@/styles/hw-landing.css'
 import { useLandingMotion } from '../hooks/use-landing-motion'
 import { useHwText } from '../texts'
 import { useVibeText } from '../vibe-texts'
+import { BonusExplainer } from './bonus-explainer'
 
 type Translate = ReturnType<typeof useHwText>
 
@@ -256,6 +257,9 @@ function Benefits(props: { text: Translate }) {
             </li>
           ))}
         </ul>
+        <div className='mx-auto mt-6 max-w-2xl' data-reveal>
+          <BonusExplainer />
+        </div>
       </div>
     </section>
   )

@@ -21,6 +21,7 @@ import { PieChart } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { formatDecimal } from '@/lib/format'
 import { useChartTheme } from '@/lib/use-chart-theme'
 import { VCHART_OPTION } from '@/lib/vchart'
 
@@ -172,7 +173,7 @@ export function MarketShareSection(props: MarketShareSectionProps) {
               key: (datum: Record<string, unknown>) =>
                 String(datum?.vendor ?? ''),
               value: (datum: Record<string, unknown>) =>
-                `${(Number(datum?.share) * 100).toFixed(1)}% · ${formatTokens(Number(datum?.tokens) || 0)}`,
+                `${formatDecimal(Number(datum?.share) * 100, 1, 1)}% · ${formatTokens(Number(datum?.tokens) || 0)}`,
             },
           ],
         },
@@ -197,7 +198,7 @@ export function MarketShareSection(props: MarketShareSectionProps) {
               .sort((a, b) => Number(b.value) - Number(a.value))
               .map((item) => ({
                 key: item.key,
-                value: `${(Number(item.value) * 100).toFixed(1)}%`,
+                value: `${formatDecimal(Number(item.value) * 100, 1, 1)}%`,
               }))
           },
         },

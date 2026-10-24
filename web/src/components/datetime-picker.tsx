@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { ChevronDownIcon } from 'lucide-react'
 import * as React from 'react'
-import { enUS, fr, ja, ru, vi, zhCN, zhTW } from 'react-day-picker/locale'
+import { enUS, fr, ja, ru, tr, vi, zhCN, zhTW } from 'react-day-picker/locale'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -30,6 +30,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import dayjs from '@/lib/dayjs'
+import { formatCalendarDate } from '@/lib/time'
 import { cn } from '@/lib/utils'
 
 const calendarLocales = {
@@ -39,8 +40,13 @@ const calendarLocales = {
   fr,
   ru,
   ja,
+  tr,
   vi,
 } as const
+
+// 24-hour clock only: HH:mm or HH:mm:ss. A native time input would follow the
+// browser locale and could show AM/PM.
+const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/
 
 interface DateTimePickerProps {
   value?: Date
@@ -64,6 +70,7 @@ export function DateTimePicker({
   const [date, setDate] = React.useState<Date | undefined>(value)
   const [month, setMonth] = React.useState<Date | undefined>(value)
   const [time, setTime] = React.useState<string>('00:00:00')
+  const [draft, setDraft] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     setDate(value)
@@ -91,9 +98,15 @@ export function DateTimePicker({
 
   const handleTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTime = e.target.value
-    // The browser reports an emptied or half-cleared field as ''. Keep the
-    // current time: the field shows it again and no invalid date goes out.
+    // An emptied field keeps the current time: the field shows it again and no
+    // invalid date goes out.
     if (!newTime) return
+    // Half-typed text stays in the field until it is a complete 24-hour time.
+    if (!TIME_PATTERN.test(newTime)) {
+      setDraft(newTime)
+      return
+    }
+    setDraft(null)
     setTime(newTime)
 
     if (date) {
@@ -127,7 +140,7 @@ export function DateTimePicker({
             />
           }
         >
-          {date ? dayjs(date).format('YYYY-MM-DD') : placeholderText}
+          {date ? formatCalendarDate(date) : placeholderText}
           <ChevronDownIcon className='h-4 w-4 opacity-50' />
         </PopoverTrigger>
         <PopoverContent className='w-auto overflow-hidden p-0' align='start'>
@@ -145,12 +158,15 @@ export function DateTimePicker({
         </PopoverContent>
       </Popover>
       <Input
-        type='time'
-        step={1}
-        value={time}
+        type='text'
+        inputMode='numeric'
+        placeholder='HH:mm:ss'
+        maxLength={8}
+        value={draft ?? time}
         aria-label={t('Time')}
         onChange={handleTimeChange}
-        className='w-32 appearance-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none'
+        onBlur={() => setDraft(null)}
+        className='w-32'
         disabled={!date}
       />
       {date && (

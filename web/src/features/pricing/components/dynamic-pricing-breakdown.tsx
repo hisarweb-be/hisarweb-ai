@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next'
 
 import { StaticDataTable } from '@/components/data-table'
 import { Badge } from '@/components/ui/badge'
+import { formatDecimal } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 
@@ -146,12 +147,12 @@ function formatTokenHint(value: string | number): string {
   const n = Number(value)
   if (!Number.isFinite(n) || n === 0) return ''
   if (n >= 1_000_000) {
-    return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`
+    return `${formatDecimal(n / 1_000_000, 1)}M`
   }
   if (n >= 1000) {
-    return `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}K`
+    return `${formatDecimal(n / 1000, 1)}K`
   }
-  return String(n)
+  return formatDecimal(n, 2)
 }
 
 function formatConditionSummary(
@@ -208,7 +209,7 @@ function formatBreakdownPrice(
     field.unit === 'request' ||
     field.unit === 'image'
       ? formatTaskUsageUnitPrice(value, { tokenUnit: 'M', ...taskPriceOptions })
-      : `${symbol}${(value * rate).toFixed(4)}`
+      : `${symbol}${formatDecimal(value * rate, 4, 2)}`
   if (field.unit === 'second') return `${amount}/${t('s')}`
   if (field.unit === 'count') {
     return `${amount}/${taskUsageUnitLabel(field, language, t('unit'))}`

@@ -130,14 +130,14 @@ describe('model cards', () => {
     })
     render(<ModelCard model={model} onClick={vi.fn()} tokenUnit='M' />)
     expect(screen.getByText('Current period price')).toBeVisible()
-    expect(screen.getByText('$1.5')).toBeVisible()
+    expect(screen.getByText('$1.50')).toBeVisible()
     act(() => vi.advanceTimersByTime(1000))
-    expect(screen.getByText('$3')).toBeVisible()
+    expect(screen.getByText('$3.00')).toBeVisible()
     act(() => {
       vi.setSystemTime(new Date('2026-09-07T12:00:00+08:00'))
       fireEvent(document, new Event('visibilitychange'))
     })
-    expect(screen.getByText('$1.5')).toBeVisible()
+    expect(screen.getByText('$1.50')).toBeVisible()
   })
 
   it('copies the complete long model name without opening details', async () => {
@@ -390,14 +390,14 @@ describe('model cards', () => {
     }
     const { rerender } = render(<ModelCard {...props} tokenUnit='M' />)
     expect(screen.getByText('Text you send').closest('div')).toHaveTextContent(
-      /\$3\s*\/\s*1M/
+      /\$3\.00\s*\/\s*1M/
     )
     expect(
       screen.getByText('Text the model writes').closest('div')
-    ).toHaveTextContent(/\$9\s*\/\s*1M/)
+    ).toHaveTextContent(/\$9\.00\s*\/\s*1M/)
     expect(
       screen.getByText('Reused text (cache)').closest('div')
-    ).toHaveTextContent(/\$0\s*\/\s*1M/)
+    ).toHaveTextContent(/\$0\.00\s*\/\s*1M/)
     rerender(<ModelCard {...props} tokenUnit='K' />)
     expect(screen.getByText('Text you send').closest('div')).toHaveTextContent(
       /\$0.003\s*\/\s*1K/
@@ -407,7 +407,7 @@ describe('model cards', () => {
     ).toHaveTextContent(/\$0.009\s*\/\s*1K/)
     expect(
       screen.getByText('Reused text (cache)').closest('div')
-    ).toHaveTextContent(/\$0\s*\/\s*1K/)
+    ).toHaveTextContent(/\$0\.00\s*\/\s*1K/)
   })
 
   it('shows a per-request price with the selected group and recharge multiplier without a token unit', () => {
@@ -422,7 +422,7 @@ describe('model cards', () => {
         tokenUnit='K'
       />
     )
-    expect(screen.getByText(/\$0.6/)).toHaveTextContent(/\$0.6\s*\/\s*request/)
+    expect(screen.getByText(/\$0.6/)).toHaveTextContent(/\$0.60\s*\/\s*request/)
     expect(screen.queryByText(/1K|1M/)).not.toBeInTheDocument()
     expect(screen.getAllByText('Per Request')).toHaveLength(1)
     expect(screen.queryByText('Per-request')).not.toBeInTheDocument()
@@ -467,7 +467,7 @@ describe('model cards', () => {
       /\$0.15\s*\/\s*1M/
     )
     expect(screen.getByText('Output').parentElement).toHaveTextContent(
-      /\$0.6\s*\/\s*1M/
+      /\$0.60\s*\/\s*1M/
     )
     expect(screen.getByText('Cache Read').parentElement).toHaveTextContent(
       /\$0.003\s*\/\s*1M/
@@ -509,7 +509,7 @@ describe('model cards', () => {
       />
     )
     expect(screen.getByText('Cache Read').parentElement).toHaveTextContent(
-      /\$0.5\s*\/\s*1M/
+      /\$0.50\s*\/\s*1M/
     )
   })
 
@@ -529,7 +529,7 @@ describe('model cards', () => {
         tokenUnit='K'
       />
     )
-    expect(screen.getByText(/0.4.*0.8/)).toHaveTextContent(/0.4 – \$0.8/)
+    expect(screen.getByText(/0.4.*0.8/)).toHaveTextContent(/0.40 – \$0.80/)
     expect(screen.getByText(/^\/\s*s$/)).toBeVisible()
     expect(screen.queryByText(/1K|1M/)).not.toBeInTheDocument()
   })
@@ -571,7 +571,7 @@ describe('model cards', () => {
         onClick={vi.fn()}
       />
     )
-    expect(screen.getByText(/^\$0\.4$/)).toBeVisible()
+    expect(screen.getByText(/^\$0\.40$/)).toBeVisible()
     expect(screen.queryByText('(base)')).not.toBeInTheDocument()
   })
 
@@ -609,8 +609,8 @@ describe('model cards', () => {
         tokenUnit='K'
       />
     )
-    expect(screen.getByText('$42 – $70').parentElement).toHaveTextContent(
-      '$42 – $70 / 1M token'
+    expect(screen.getByText('$42.00 – $70.00').parentElement).toHaveTextContent(
+      '$42.00 – $70.00 / 1M token'
     )
     expect(screen.getByText(/480p · 5s ≈/)).toBeVisible()
   })

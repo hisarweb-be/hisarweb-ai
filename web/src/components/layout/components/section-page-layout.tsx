@@ -89,11 +89,11 @@ export function SectionPageLayout(props: SectionPageLayoutProps) {
             <div
               className={
                 props.stackActionsOnMobile
-                  ? 'min-w-0 flex-1 max-sm:basis-full'
-                  : 'min-w-0 flex-1'
+                  ? 'min-w-40 flex-1 max-sm:basis-full'
+                  : 'min-w-40 flex-1'
               }
             >
-              <h2 className='truncate text-base font-bold tracking-tight sm:text-lg'>
+              <h2 className='text-base font-bold tracking-tight break-words sm:text-lg'>
                 {title}
               </h2>
             </div>

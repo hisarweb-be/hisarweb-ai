@@ -59,6 +59,7 @@ import {
   getSuccessRateTextClass,
 } from '@/features/performance-metrics/lib/format'
 import { PluginIcon } from '@/features/task-plugins/components/plugin-icon'
+import { formatDecimal } from '@/lib/format'
 import { getLobeIcon } from '@/lib/lobe-icon'
 import { requireServerSuccess } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
@@ -238,20 +239,17 @@ const MODALITY_LABEL_KEYS: Record<string, string> = {
   file: 'File',
 }
 
-const TOKEN_FORMAT = new Intl.NumberFormat(undefined, {
-  maximumFractionDigits: 1,
-})
 const MODEL_DETAILS_SKELETON_KEYS = ['first', 'second', 'third', 'fourth']
 
 function formatCatalogTokenCount(tokens: number): string {
   if (!Number.isFinite(tokens) || tokens <= 0) return ''
   if (tokens >= 1_000_000) {
-    return `${TOKEN_FORMAT.format(tokens / 1_000_000)}M`
+    return `${formatDecimal(tokens / 1_000_000, 1)}M`
   }
   if (tokens >= 1_000) {
-    return `${TOKEN_FORMAT.format(tokens / 1_000)}K`
+    return `${formatDecimal(tokens / 1_000, 1)}K`
   }
-  return TOKEN_FORMAT.format(tokens)
+  return formatDecimal(tokens, 1)
 }
 
 function formatCatalogYearMonth(value?: string): string {
@@ -260,8 +258,7 @@ function formatCatalogYearMonth(value?: string): string {
   const year = Number(yearStr)
   const month = Number(monthStr)
   if (!Number.isFinite(year) || !Number.isFinite(month)) return value
-  const date = new Date(Date.UTC(year, month - 1, 1))
-  return date.toLocaleString(undefined, { year: 'numeric', month: 'short' })
+  return `${String(month).padStart(2, '0')}.${year}`
 }
 
 function normalizeCatalogItems(items?: readonly string[]): string[] {

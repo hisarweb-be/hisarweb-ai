@@ -65,7 +65,10 @@ vi.mock('@/features/hw/lib/checkout', async (importOriginal) => {
 // The page fills the currency placeholders ({bonus}, {currencyName}); so do the expectations.
 const trVars = hwCurrencyTextVars('TRY', {}, 'tr')
 const tr = Object.fromEntries(
-  Object.entries(hwTexts.tr).map(([key, text]) => [key, fillHwText(text, trVars)])
+  Object.entries(hwTexts.tr).map(([key, text]) => [
+    key,
+    fillHwText(text, trVars),
+  ])
 ) as typeof hwTexts.tr
 
 const packagesAnswer: HwCreditPackages = {
@@ -231,6 +234,51 @@ describe('top-up page', () => {
     expect(screen.getByRole('button', { name: tr.topUpSubmit })).toBeDisabled()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(post).not.toHaveBeenCalled()
+  })
+
+  it('explains why the disabled button is disabled and what to do', async () => {
+    getStatus.mockResolvedValue({ hw_payment_available: false })
+    await renderPage(false)
+
+    const button = await screen.findByRole('button', { name: tr.topUpSubmit })
+    expect(button).toBeDisabled()
+    expect(button).toHaveAccessibleDescription(tr.topUpSubmitHintClosed)
+    // The notice no longer promises an opening date.
+    expect(screen.queryByText(/çok yakında/)).not.toBeInTheDocument()
+  })
+
+  it('shows the payable amount above the button and the hint for a wrong amount', async () => {
+    const user = userEvent.setup()
+    await renderPage(false)
+
+    const payable = screen.getByText(/^Ödenecek tutar: en fazla/)
+    const button = screen.getByRole('button', { name: tr.topUpSubmit })
+    expect(
+      payable.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+
+    const input = screen.getByLabelText(tr.topUpCustomLabel)
+    await user.clear(input)
+    await user.type(input, '50')
+    expect(
+      screen.queryByText(/^Ödenecek tutar: en fazla/)
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/ile .* arasında bir tutar seçin/)
+    ).toBeInTheDocument()
+  })
+
+  it('puts the bonus explainer and the trust block next to the payment form', async () => {
+    await renderPage(false)
+
+    expect(
+      screen.getByRole('heading', { name: tr.bonusExplainTitle })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/Bakiyeniz son yüklemeden itibaren 30 gün geçerlidir\./)
+    ).toBeInTheDocument()
+    expect(screen.getByText(tr.trustPayments)).toBeInTheDocument()
+    expect(screen.getByText(tr.trustFees)).toBeInTheDocument()
   })
 
   it('while card payment is closed the bonus button opts out of the notice link underline', async () => {

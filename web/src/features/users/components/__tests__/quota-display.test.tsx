@@ -188,15 +188,15 @@ it.each([0, 500000])(
       expect(screen.queryByText('Used amount')).not.toBeInTheDocument()
       await userEvent.click(screen.getByRole('button', { name: 'No Quota' }))
       const detail = await screen.findByRole('dialog', { name: 'Quota ($)' })
-      expect(within(detail).getAllByText('0')).toHaveLength(2)
+      expect(within(detail).getAllByText('0.00')).toHaveLength(2)
       return
     }
     expect(screen.queryByText('No Quota')).not.toBeInTheDocument()
     expect(
-      within(screen.getAllByRole('cell')[0]).getByText('0')
+      within(screen.getAllByRole('cell')[0]).getByText('0.00')
     ).toBeInTheDocument()
     expect(
-      within(screen.getAllByRole('cell')[0]).getByText('1')
+      within(screen.getAllByRole('cell')[0]).getByText('1.00')
     ).toBeInTheDocument()
   }
 )
@@ -207,13 +207,13 @@ it('preserves negative balances in details opened with the keyboard', async () =
       <QuotaTable remaining={-500000} used={1000000} />
     </I18nextProvider>
   )
-  expect(screen.getByText('-1')).toHaveClass('text-destructive')
-  expect(screen.getByText('2')).toBeInTheDocument()
+  expect(screen.getByText('-1.00')).toHaveClass('text-destructive')
+  expect(screen.getByText('2.00')).toBeInTheDocument()
   await userEvent.tab()
   await userEvent.keyboard('{Enter}')
   const detail = await screen.findByRole('dialog')
-  expect(within(detail).getByText('-1')).toBeInTheDocument()
-  expect(within(detail).getByText('2')).toBeInTheDocument()
+  expect(within(detail).getByText('-1.00')).toBeInTheDocument()
+  expect(within(detail).getByText('2.00')).toBeInTheDocument()
 })
 
 it('shows the custom symbol only in the column header', () => {
@@ -413,10 +413,10 @@ it('updates the header unit and converted amounts together when currency setting
     screen.getByRole('columnheader', { name: 'Available Balance (¥)' })
   ).toBeInTheDocument()
   expect(
-    within(screen.getAllByRole('cell')[0]).getByText('7')
+    within(screen.getAllByRole('cell')[0]).getByText('7.00')
   ).toBeInTheDocument()
   expect(
-    within(screen.getAllByRole('cell')[0]).getByText('14')
+    within(screen.getAllByRole('cell')[0]).getByText('14.00')
   ).toBeInTheDocument()
   for (const cell of screen.getAllByRole('cell')) {
     expect(cell).not.toHaveTextContent('¥')

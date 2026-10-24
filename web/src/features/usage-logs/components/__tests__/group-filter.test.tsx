@@ -64,7 +64,8 @@ async function renderFilter(
   groups: Record<string, { desc: string; ratio: number }> | null = {
     default: { desc: '', ratio: 1 },
     premium: { desc: '', ratio: 2 },
-  }
+  },
+  waitForGroupFilter = true
 ) {
   vi.spyOn(api, 'get').mockImplementation(async (url) => {
     if (url === '/api/user/self/groups' || url === '/api/group/') {
@@ -103,7 +104,11 @@ async function renderFilter(
       await screen.findByRole('button', { name: /^Filter/ })
     )
   }
-  await screen.findByRole('combobox', { name: 'Group' })
+  if (waitForGroupFilter) {
+    await screen.findByRole('combobox', { name: 'Group' })
+  } else {
+    await screen.findByRole('button', { name: 'Search' })
+  }
   return router
 }
 
@@ -265,7 +270,19 @@ it('lets mobile users select a long group name inside the filter drawer and subm
   )
 })
 
-it.each([1, 10])(
+it('shows an ordinary customer no group filter', async () => {
+  useAuthStore.getState().auth.setUser({ id: 1, username: 'viewer', role: 1 })
+  await renderFilter(
+    '/usage-logs/common',
+    { default: { desc: '', ratio: 1 } },
+    false
+  )
+  expect(
+    screen.queryByRole('combobox', { name: 'Group' })
+  ).not.toBeInTheDocument()
+})
+
+it.each([10, 100])(
   'excludes only auto from group choices for role %s',
   async (role) => {
     useAuthStore.getState().auth.setUser({ id: 1, username: 'viewer', role })

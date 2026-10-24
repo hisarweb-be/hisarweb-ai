@@ -766,7 +766,7 @@ it.each([
   ['fr', /100\s000/, /3\s600 seconds/],
   ['ru', /100\s000/, /3\s600 seconds/],
   ['vi', /100\.000/, '3.600 seconds'],
-  ['invalid_locale', /100,000/, '3,600 seconds'],
+  ['invalid_locale', /100\.000/, '3.600 seconds'],
 ] as const)(
   'renders cache statistics and TTL with the project language code %s and updates formatting after a language switch',
   async (language, capacity, ttl) => {

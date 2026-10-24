@@ -28,6 +28,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import useDialogState from '@/hooks/use-dialog'
 import { useIsSidebarModuleVisible } from '@/hooks/use-sidebar-config'
 import { useUserDisplay } from '@/hooks/use-user-display'
+import { ROLE } from '@/lib/roles'
 import type { AuthUser } from '@/stores/auth-store'
 
 import { MOBILE_DRAWER_ANIMATION, MOBILE_DRAWER_CONFIG } from '../constants'
@@ -81,7 +82,8 @@ interface MobileUserProfileProps {
 function MobileUserProfile({ user, onNavigate }: MobileUserProfileProps) {
   const { t } = useTranslation()
   const [signOutOpen, setSignOutOpen] = useDialogState()
-  const { displayName, initials, roleLabel } = useUserDisplay(user)
+  const { displayName, initials, roleLabel, secondaryText } =
+    useUserDisplay(user)
   const isSecurityVisible = useIsSidebarModuleVisible('/security')
 
   if (!user) return null
@@ -100,17 +102,25 @@ function MobileUserProfile({ user, onNavigate }: MobileUserProfileProps) {
             <p className='text-foreground truncate font-medium'>
               {displayName}
             </p>
-            <div className='flex items-center gap-1.5'>
-              <span className='text-muted-foreground text-xs'>{roleLabel}</span>
-              {user.group && (
-                <>
-                  <span className='text-muted-foreground text-xs'>·</span>
-                  <span className='text-muted-foreground text-xs'>
-                    {String(user.group)}
-                  </span>
-                </>
-              )}
-            </div>
+            {(user.role ?? ROLE.GUEST) >= ROLE.ADMIN ? (
+              <div className='flex items-center gap-1.5'>
+                <span className='text-muted-foreground text-xs'>
+                  {roleLabel}
+                </span>
+                {user.group && (
+                  <>
+                    <span className='text-muted-foreground text-xs'>·</span>
+                    <span className='text-muted-foreground text-xs'>
+                      {String(user.group)}
+                    </span>
+                  </>
+                )}
+              </div>
+            ) : (
+              <p className='text-muted-foreground truncate text-xs'>
+                {secondaryText}
+              </p>
+            )}
           </div>
         </div>
 

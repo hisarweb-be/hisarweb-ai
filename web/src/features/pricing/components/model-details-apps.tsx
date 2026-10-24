@@ -29,6 +29,8 @@ import {
   StaticDataTable,
   staticDataTableClassNames as tableStyles,
 } from '@/components/data-table'
+import { formatDecimal } from '@/lib/format'
+import { getFormatLocale } from '@/lib/format-locale'
 import { cn } from '@/lib/utils'
 
 import {
@@ -38,10 +40,11 @@ import {
 } from '../lib/mock-stats'
 import type { PricingModel } from '../types'
 
-const COMPACT_NUMBER = new Intl.NumberFormat(undefined, {
-  notation: 'compact',
-  maximumFractionDigits: 1,
-})
+const compactNumber = (value: number) =>
+  new Intl.NumberFormat(getFormatLocale(), {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(value)
 
 function RankBadge(props: { rank: number }) {
   const rank = props.rank
@@ -76,7 +79,7 @@ function GrowthChip(props: { value: number }) {
       ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300'
       : 'bg-muted text-muted-foreground'
   const Icon = isUp ? ArrowUpRight : isDown ? ArrowDownRight : null
-  const formatted = `${value > 0 ? '+' : ''}${value.toFixed(1)}%`
+  const formatted = `${value > 0 ? '+' : ''}${formatDecimal(value, 1, 1)}%`
   return (
     <span
       className={cn(
@@ -140,7 +143,7 @@ export function ModelDetailsApps(props: { model: PricingModel }) {
             {t('Monthly tokens')}
           </div>
           <div className='text-foreground mt-1 font-mono text-lg font-semibold tabular-nums'>
-            {COMPACT_NUMBER.format(totalMonthlyTokens)}
+            {compactNumber(totalMonthlyTokens)}
           </div>
           <p className='text-muted-foreground/70 text-[11px]'>
             {t('Aggregated across the apps below')}

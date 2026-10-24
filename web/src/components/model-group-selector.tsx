@@ -60,7 +60,9 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { isOrdinaryCustomer } from '@/lib/roles'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { formatGroupDetail } from './model-group-selector/group-detail'
 import {
@@ -588,7 +590,11 @@ export const ModelGroupSelector: React.FC<ModelGroupSelectorProps> = ({
     () => groups.find((group) => group.value === selectedGroup),
     [groups, selectedGroup]
   )
-  const showGroups = hasGroupChoice(groups)
+  // Ordinary customers never pick a group, so names like "default" stay hidden.
+  const isCustomer = useAuthStore((state) =>
+    isOrdinaryCustomer(state.auth.user?.role)
+  )
+  const showGroups = hasGroupChoice(groups) && !isCustomer
   const filteredModels = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
     if (!query) {

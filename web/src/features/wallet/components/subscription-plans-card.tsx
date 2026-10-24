@@ -56,9 +56,10 @@ import type {
   PlanRecord,
   UserSubscriptionRecord,
 } from '@/features/subscriptions/types'
-import { formatQuota } from '@/lib/format'
+import { formatDecimal, formatQuota } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
 import { requireServerSuccess } from '@/lib/server-error-message'
+import { formatDateTimeObject } from '@/lib/time'
 import { cn } from '@/lib/utils'
 
 import type { PaymentMethod, TopupInfo } from '../types'
@@ -470,14 +471,14 @@ export function SubscriptionPlansCard({
                       </div>
                       <div className='text-muted-foreground mt-1.5'>
                         {endTimeLabel}{' '}
-                        {new Date(
-                          (subscription?.end_time || 0) * 1000
-                        ).toLocaleString()}
+                        {formatDateTimeObject(
+                          new Date((subscription?.end_time || 0) * 1000)
+                        )}
                       </div>
                       {isActive && nextResetTime > 0 && (
                         <div className='text-muted-foreground mt-1'>
                           {t('Next reset')}:{' '}
-                          {new Date(nextResetTime * 1000).toLocaleString()}
+                          {formatDateTimeObject(new Date(nextResetTime * 1000))}
                         </div>
                       )}
                       <div className='text-muted-foreground mt-1'>
@@ -529,7 +530,7 @@ export function SubscriptionPlansCard({
               const plan = p?.plan
               if (!plan) return null
               const totalAmount = Number(plan.total_amount || 0)
-              const price = Number(plan.price_amount || 0).toFixed(2)
+              const price = formatDecimal(Number(plan.price_amount || 0), 2, 2)
               const isPopular = index === 0 && plans.length > 1
               const limit = Number(plan.max_purchase_per_user || 0)
               const count = planPurchaseCountMap.get(plan.id) || 0

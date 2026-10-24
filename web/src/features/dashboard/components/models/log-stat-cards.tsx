@@ -60,9 +60,9 @@ function formatStatNumber(value: number, locale: Intl.LocalesArgument) {
 
 export function LogStatCards(props: LogStatCardsProps) {
   const { i18n } = useTranslation()
-  const statCardsConfig = useModelStatCardsConfig()
   const user = useAuthStore((state) => state.auth.user)
   const isAdmin = !!(user?.role && user.role >= 10)
+  const statCardsConfig = useModelStatCardsConfig(!isAdmin)
   const [stats, setStats] = useState<{
     totalQuota: number
     totalCount: number
@@ -144,7 +144,12 @@ export function LogStatCards(props: LogStatCardsProps) {
 
   return (
     <div className='overflow-hidden rounded-lg border'>
-      <div className='divide-border/60 grid min-w-0 grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-5'>
+      <div
+        className={cn(
+          'divide-border/60 grid min-w-0 grid-cols-2 divide-x',
+          isAdmin && 'sm:grid-cols-3 lg:grid-cols-5'
+        )}
+      >
         {items.map((it, idx) => {
           const Icon = it.icon
           let valueContent

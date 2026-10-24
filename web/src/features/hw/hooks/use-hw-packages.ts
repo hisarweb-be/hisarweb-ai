@@ -18,7 +18,10 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
 
+import { useHwBonusStore } from '@/stores/hw-bonus-store'
+
 import { fetchHwCreditPackages } from '../api'
+import { parseHwBonusRules } from '../lib/hw-bonus'
 
 export const hwPackagesQueryKey = ['hw', 'packages'] as const
 
@@ -29,7 +32,16 @@ export const hwPackagesQueryKey = ['hw', 'packages'] as const
 export function useHwPackages() {
   return useQuery({
     queryKey: hwPackagesQueryKey,
-    queryFn: fetchHwCreditPackages,
+    queryFn: async () => {
+      const packages = await fetchHwCreditPackages()
+      // The packages answer may carry the customer's bonus rules (`bonus_rules`).
+      useHwBonusStore
+        .getState()
+        .setPackageRules(
+          parseHwBonusRules((packages as { bonus_rules?: unknown }).bonus_rules)
+        )
+      return packages
+    },
     meta: { errorToast: false },
   })
 }

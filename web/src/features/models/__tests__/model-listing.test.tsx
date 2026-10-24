@@ -546,7 +546,7 @@ it.each([
     name: 'legacy',
     effective: { ModelRatio: 1.5, CompletionRatio: 5, CacheRatio: 0.1 },
     catalog: { model_ratio: 1.5, completion_ratio: 5 },
-    text: 'Input3Output15',
+    text: 'Input3.00Output15.00',
   },
   {
     name: 'single-expression',
@@ -558,7 +558,7 @@ it.each([
       billing_mode: 'tiered_expr',
       billing_expr: 'tier("base", p * 3 + c * 15 + cr * 0.3)',
     },
-    text: 'Input3Output15',
+    text: 'Input3.00Output15.00',
   },
   {
     name: 'tier-expression',
@@ -572,19 +572,19 @@ it.each([
       billing_expr:
         'len <= 200000 ? tier("standard", p * 3 + c * 15) : tier("long", p * 6 + c * 22.5)',
     },
-    text: 'Input3Output15',
+    text: 'Input3.00Output15.00',
   },
   {
     name: 'free-request',
     effective: { ModelPrice: 0 },
     catalog: { quota_type: 1, model_price: 0 },
-    text: 'Per-request0USD/request',
+    text: 'Per-request0.00USD/request',
   },
   {
     name: 'free-tokens',
     effective: { ModelRatio: 0, CompletionRatio: 2 },
     catalog: { model_ratio: 0, completion_ratio: 2 },
-    text: 'Input0Output0',
+    text: 'Input0.00Output0.00',
   },
   {
     name: 'free-expression',
@@ -596,7 +596,7 @@ it.each([
       billing_mode: 'tiered_expr',
       billing_expr: 'tier("free", p * 0 + c * 0)',
     },
-    text: 'Input0Output0',
+    text: 'Input0.00Output0.00',
   },
 ])(
   'shows $name effective pricing like the catalog without requiring a listed model',
@@ -847,7 +847,7 @@ it.each([
       name: 'View pricing for channel-only',
     })
     expect(button.textContent?.replaceAll(/\s/g, '')).toContain(
-      'Input0.5Output1'
+      'Input0.50Output1.00'
     )
     expect(within(button).getByText(caption)).toBeVisible()
     if (type === 'CUSTOM') {

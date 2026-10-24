@@ -50,6 +50,14 @@ export const TIME_RANGE_PRESETS = [
   { label: '29 Days', days: 29 },
 ] as const
 
+// Plain-language periods for ordinary customers (the 29 days match the
+// "29 Days" preset above, the longest range the analytics accept).
+export const CUSTOMER_TIME_RANGE_PRESETS = [
+  { label: 'Today', days: 1 },
+  { label: 'Last 7 days', days: 7 },
+  { label: 'Last 30 days', days: 29 },
+] as const
+
 export const CONSUMPTION_DISTRIBUTION_CHART_OPTIONS = [
   { value: 'bar', labelKey: 'Bar Chart' },
   { value: 'area', labelKey: 'Area Chart' },

@@ -21,6 +21,7 @@ import { Fragment, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { AttributionNotice } from '@/components/attribution-notice'
+import { TrustBlock } from '@/features/hw/components/trust-block'
 import { useStatus } from '@/hooks/use-status'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { DEFAULT_SYSTEM_NAME } from '@/lib/constants'
@@ -43,7 +44,6 @@ interface FooterProps {
   copyright?: string
   className?: string
 }
-
 
 function FooterLinkItem(props: { link: FooterLink }) {
   const { t } = useTranslation()
@@ -179,6 +179,7 @@ export function Footer(props: FooterProps) {
         )}
       >
         <div className='mx-auto w-full max-w-6xl px-6 py-5'>
+          <TrustBlock centered className='mb-4' />
           <div className='bg-muted/20 border-border/50 flex flex-col items-center justify-between gap-4 rounded-2xl border px-4 py-4 backdrop-blur-sm sm:flex-row sm:px-5'>
             <div
               className='custom-footer text-muted-foreground min-w-0 text-center text-sm sm:text-left'
@@ -237,6 +238,8 @@ export function Footer(props: FooterProps) {
             </div>
           )}
         </div>
+
+        <TrustBlock centered className='border-border/30 mt-10 border-t pt-6' />
 
         {/* Copyright + optional legal links inline on the left, project
             attribution on the right; wraps on narrow screens. */}

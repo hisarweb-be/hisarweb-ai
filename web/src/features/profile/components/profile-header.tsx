@@ -26,7 +26,7 @@ import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
 import { formatCompactNumber, formatQuota } from '@/lib/format'
-import { getRoleLabel } from '@/lib/roles'
+import { getRoleLabel, isOrdinaryCustomer } from '@/lib/roles'
 
 import { getDisplayName } from '../lib'
 import type { UserProfile } from '../types'
@@ -84,6 +84,8 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
   const avatarFallback = getUserAvatarFallback(avatarName)
   const avatarFallbackStyle = getUserAvatarStyle(avatarName)
   const roleLabel = getRoleLabel(profile.role)
+  // Ordinary customers do not need to see their role, ID or group.
+  const showAccountDetails = !isOrdinaryCustomer(profile.role)
   const stats: {
     label: string
     value: string
@@ -132,16 +134,20 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
               <h1 className='truncate text-xl font-semibold tracking-tight sm:text-2xl'>
                 {displayName}
               </h1>
-              <StatusBadge
-                label={roleLabel}
-                variant='neutral'
-                copyable={false}
-              />
-              <StatusBadge
-                label={`${t('User ID')} ${profile.id}`}
-                variant='info'
-                copyText={String(profile.id)}
-              />
+              {showAccountDetails && (
+                <>
+                  <StatusBadge
+                    label={roleLabel}
+                    variant='neutral'
+                    copyable={false}
+                  />
+                  <StatusBadge
+                    label={`${t('User ID')} ${profile.id}`}
+                    variant='info'
+                    copyText={String(profile.id)}
+                  />
+                </>
+              )}
             </div>
 
             <div className='text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs sm:gap-x-4 sm:text-sm'>
@@ -152,7 +158,7 @@ export function ProfileHeader({ profile, loading }: ProfileHeaderProps) {
                   <span className='truncate'>{profile.email}</span>
                 </>
               )}
-              {profile.group && (
+              {showAccountDetails && profile.group && (
                 <>
                   <span>•</span>
                   <span className='truncate'>{profile.group}</span>

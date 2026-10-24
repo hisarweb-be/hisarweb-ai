@@ -20,7 +20,7 @@ import type { TFunction } from 'i18next'
 
 import { loginMethodLabel } from '@/features/security/components/login-session-utils'
 import type { PermissionResourceDef } from '@/lib/admin-permissions'
-import dayjs from '@/lib/dayjs'
+import { formatTimestampToDate } from '@/lib/format'
 import { ROLE } from '@/lib/roles'
 
 import { renderAuditContent } from '../../lib/format'
@@ -550,7 +550,7 @@ export function buildAuditDetails(
     fields.push({
       label: t('Expiration'),
       value: params.expires_at
-        ? dayjs.unix(params.expires_at).format('YYYY-MM-DD HH:mm:ss')
+        ? formatTimestampToDate(params.expires_at)
         : t('Never expires'),
     })
     delete params.expires_at

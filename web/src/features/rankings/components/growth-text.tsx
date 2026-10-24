@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { formatDecimal } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 type GrowthTextProps = {
@@ -54,7 +55,12 @@ export function GrowthText(props: GrowthTextProps) {
       )}
     >
       {isUp ? '↑' : '↓'}
-      {Math.abs(v).toFixed(Math.abs(v) >= 100 ? 0 : 1)}%
+      {formatDecimal(
+        Math.abs(v),
+        Math.abs(v) >= 100 ? 0 : 1,
+        Math.abs(v) >= 100 ? 0 : 1
+      )}
+      %
     </span>
   )
 }
