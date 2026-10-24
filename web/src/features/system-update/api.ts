@@ -16,7 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useAuthStore } from '@/stores/auth-store'
+
 import { selectLatestRelease, type SystemRelease } from './releases'
+
+// The Content-Security-Policy keeps connect-src at 'self', so the server asks
+// GitHub on our behalf and caches the answer for an hour. Plain fetch on
+// purpose: the shared api client would send a failed check to the sign-in page.
+export const SYSTEM_RELEASES_URL = '/api/hw/upstream-releases'
 
 export type UpdateCheckErrorCode =
   | 'network'
@@ -41,15 +48,13 @@ export async function fetchLatestSystemRelease(
   const timeout = setTimeout(cancel, 10_000)
 
   try {
-    const response = await fetch(
-      'https://api.github.com/repos/QuantumNous/new-api/releases?per_page=100',
-      {
-        credentials: 'omit',
-        headers: { Accept: 'application/vnd.github+json' },
-        signal: controller.signal,
-      }
-    )
-    if (response.status === 403 || response.status === 429) {
+    const accessToken = useAuthStore.getState().auth.accessToken
+    const response = await fetch(SYSTEM_RELEASES_URL, {
+      credentials: 'same-origin',
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      signal: controller.signal,
+    })
+    if (response.status === 429) {
       throw new UpdateCheckError('rate-limit')
     }
     if (!response.ok) throw new UpdateCheckError('network')
