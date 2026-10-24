@@ -361,6 +361,7 @@ const tr = {
   docsLinksTitle: 'Daha fazla',
   docsLinkStatus: 'Servis durumu (7/24)',
   docsLinkCompare: 'Fiyat karşılaştırma',
+  docsLinkVibe: 'Yeni başlayanlar için vibe coding rehberi',
 
   aboutDefaultTitle: 'HisarWeb AI hakkında',
   aboutDefaultIntroForeign:
@@ -727,6 +728,7 @@ const en: Record<HwTextKey, string> = {
   docsLinksTitle: 'More',
   docsLinkStatus: 'Service status (24/7)',
   docsLinkCompare: 'Price comparison',
+  docsLinkVibe: 'Vibe coding guide for beginners',
 
   aboutDefaultTitle: 'About HisarWeb AI',
   aboutDefaultIntroForeign:

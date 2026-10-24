@@ -18,6 +18,7 @@ import { Route as FiyatKarsilastirmaRouteImport } from './routes/fiyat-karsilast
 import { Route as KaliteRouteImport } from './routes/kalite'
 import { Route as PrivacyPolicyRouteImport } from './routes/privacy-policy'
 import { Route as UserAgreementRouteImport } from './routes/user-agreement'
+import { Route as VibeKodlamaRouteImport } from './routes/vibe-kodlama'
 import { Route as authForgotPasswordRouteImport } from './routes/(auth)/forgot-password'
 import { Route as authOauthRouteImport } from './routes/(auth)/oauth'
 import { Route as authOtpRouteImport } from './routes/(auth)/otp'
@@ -119,6 +120,11 @@ const PrivacyPolicyRoute = PrivacyPolicyRouteImport.update({
 const UserAgreementRoute = UserAgreementRouteImport.update({
   id: '/user-agreement',
   path: '/user-agreement',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VibeKodlamaRoute = VibeKodlamaRouteImport.update({
+  id: '/vibe-kodlama',
+  path: '/vibe-kodlama',
   getParentRoute: () => rootRouteImport,
 } as any)
 const authForgotPasswordRoute = authForgotPasswordRouteImport.update({
@@ -460,6 +466,7 @@ export interface FileRoutesByFullPath {
   '/kalite': typeof KaliteRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/user-agreement': typeof UserAgreementRoute
+  '/vibe-kodlama': typeof VibeKodlamaRoute
   '/system-settings': typeof AuthenticatedSystemSettingsRouteRouteWithChildren
   '/forgot-password': typeof authForgotPasswordRoute
   '/oauth': typeof authOauthRoute
@@ -528,6 +535,7 @@ export interface FileRoutesByTo {
   '/kalite': typeof KaliteRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/user-agreement': typeof UserAgreementRoute
+  '/vibe-kodlama': typeof VibeKodlamaRoute
   '/forgot-password': typeof authForgotPasswordRoute
   '/oauth': typeof authOauthRoute
   '/otp': typeof authOtpRoute
@@ -598,6 +606,7 @@ export interface FileRoutesById {
   '/kalite': typeof KaliteRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/user-agreement': typeof UserAgreementRoute
+  '/vibe-kodlama': typeof VibeKodlamaRoute
   '/_authenticated/system-settings': typeof AuthenticatedSystemSettingsRouteRouteWithChildren
   '/(auth)/forgot-password': typeof authForgotPasswordRoute
   '/(auth)/oauth': typeof authOauthRoute
@@ -668,6 +677,7 @@ export interface FileRouteTypes {
     | '/kalite'
     | '/privacy-policy'
     | '/user-agreement'
+    | '/vibe-kodlama'
     | '/system-settings'
     | '/forgot-password'
     | '/oauth'
@@ -736,6 +746,7 @@ export interface FileRouteTypes {
     | '/kalite'
     | '/privacy-policy'
     | '/user-agreement'
+    | '/vibe-kodlama'
     | '/forgot-password'
     | '/oauth'
     | '/otp'
@@ -805,6 +816,7 @@ export interface FileRouteTypes {
     | '/kalite'
     | '/privacy-policy'
     | '/user-agreement'
+    | '/vibe-kodlama'
     | '/_authenticated/system-settings'
     | '/(auth)/forgot-password'
     | '/(auth)/oauth'
@@ -876,6 +888,7 @@ export interface RootRouteChildren {
   KaliteRoute: typeof KaliteRoute
   PrivacyPolicyRoute: typeof PrivacyPolicyRoute
   UserAgreementRoute: typeof UserAgreementRoute
+  VibeKodlamaRoute: typeof VibeKodlamaRoute
   errors401Route: typeof errors401Route
   errors403Route: typeof errors403Route
   errors404Route: typeof errors404Route
@@ -952,6 +965,13 @@ declare module '@tanstack/react-router' {
       path: '/user-agreement'
       fullPath: '/user-agreement'
       preLoaderRoute: typeof UserAgreementRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/vibe-kodlama': {
+      id: '/vibe-kodlama'
+      path: '/vibe-kodlama'
+      fullPath: '/vibe-kodlama'
+      preLoaderRoute: typeof VibeKodlamaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/(auth)/forgot-password': {
@@ -1526,6 +1546,7 @@ const rootRouteChildren: RootRouteChildren = {
   KaliteRoute: KaliteRoute,
   PrivacyPolicyRoute: PrivacyPolicyRoute,
   UserAgreementRoute: UserAgreementRoute,
+  VibeKodlamaRoute: VibeKodlamaRoute,
   errors401Route: errors401Route,
   errors403Route: errors403Route,
   errors404Route: errors404Route,

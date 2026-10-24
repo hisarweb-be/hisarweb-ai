@@ -173,3 +173,17 @@ test('highlights only the accent phrase inside the headline', async () => {
   expect(accent).toHaveTextContent('resmî fiyatın yarısına')
   expect(heading.textContent).toContain('Claude, GPT ve Gemini')
 })
+
+test('teases the vibe coding guide with a button to its page', async () => {
+  renderLanding()
+
+  expect(
+    await screen.findByRole('heading', {
+      level: 2,
+      name: 'Yeni başlayanlar için vibe coding düzeni',
+    })
+  ).toBeInTheDocument()
+  expect(
+    screen.getByRole('button', { name: 'Vibe coding rehberini oku' })
+  ).toHaveAttribute('href', '/vibe-kodlama')
+})
