@@ -1,12 +1,12 @@
 {
   "translation": {
+    "360": "360",
+    "1000": "1000",
+    "10000": "10000",
     "Paid": "Paid",
     "No models have been added yet": "No models have been added yet",
     "This page will be published soon.": "This page will be published soon.",
     "The page could not be loaded. Please try again.": "The page could not be loaded. Please try again.",
-    "360": "360",
-    "1000": "1000",
-    "10000": "10000",
     "{{count}} outside this view": "{{count}} outside this view",
     "_copy": "_copy",
     "，": ", ",
@@ -7455,6 +7455,22 @@
     "Your friend pays": "Your friend pays",
     "Your friend signs up through your link and tops up credit.": "Your friend signs up through your link and tops up credit.",
     "You get {{percent}}% as credit": "You get {{percent}}% as credit",
-    "If your friend buys {{paid}}, you get {{reward}} as credit on your balance.": "If your friend buys {{paid}}, you get {{reward}} as credit on your balance."
+    "If your friend buys {{paid}}, you get {{reward}} as credit on your balance.": "If your friend buys {{paid}}, you get {{reward}} as credit on your balance.",
+    "Credit validity": "Credit validity",
+    "Credit validity: {{days}} days left": "Credit validity: {{days}} days left",
+    "Credit validity: expired": "Credit validity: expired",
+    "Your credit is valid until {{date}}. Every top-up renews all of it for 30 days.": "Your credit is valid until {{date}}. Every top-up renews all of it for 30 days.",
+    "Your credit expired on {{date}} and was removed from the balance. A new top-up gives you a new 30 days.": "Your credit expired on {{date}} and was removed from the balance. A new top-up gives you a new 30 days.",
+    "+{{amount}} bonus": "+{{amount}} bonus",
+    "Admin assistant": "Admin assistant",
+    "Report an error or a hard word. The assistant suggests a fix.": "Report an error or a hard word. The assistant suggests a fix.",
+    "What is wrong or unclear?": "What is wrong or unclear?",
+    "Apply this text": "Apply this text",
+    "Send to the bureau": "Send to the bureau",
+    "Text changed.": "Text changed.",
+    "This text was not found on the screen.": "This text was not found on the screen.",
+    "This text is used in too many places to change at once.": "This text is used in too many places to change at once.",
+    "The original text is back after a reload.": "The original text is back after a reload.",
+    "Card created: {{card}}": "Card created: {{card}}"
   }
 }

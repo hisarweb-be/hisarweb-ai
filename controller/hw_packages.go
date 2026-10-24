@@ -9,10 +9,12 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -77,7 +79,16 @@ func HwListUserPackages(c *gin.Context) {
 	} else {
 		logger.LogError(c.Request.Context(), common.LogText("reading the phone step failed"))
 	}
+	validity, validityErr := model.HwUserValidity(userID, time.Now().Unix())
+	if validityErr != nil {
+		// The card that counts the days must not take the package list down
+		// with it; the page shows "no validity" and the server log has the cause.
+		logger.LogError(c.Request.Context(), common.LogText("reading the credit validity failed"))
+		validity = model.HwValiditySummary{Status: model.HwValidityNone}
+	}
 	common.ApiSuccess(c, gin.H{
+		"validity":              validity,
+		"bonus_rules":           service.HwBonusRules(),
 		"packages":              packages,
 		"total_remaining_quota": total,
 		"quota_per_unit":        common.QuotaPerUnit,
@@ -86,4 +97,45 @@ func HwListUserPackages(c *gin.Context) {
 		"fx_source":             fxSource,
 		"phone_shared":          phoneShared,
 	})
+}
+
+// hwOrderAnswer is one settled top-up as the payment history shows it. The
+// amounts are in minor units of Currency. BonusMinor is the extra credit the
+// order earned, in the same currency; zero means no bonus.
+type hwOrderAnswer struct {
+	MerchantRef  string `json:"merchant_ref"`
+	Status       string `json:"status"`
+	Currency     string `json:"currency"`
+	ListMinor    int64  `json:"list_minor"`
+	PayableMinor int64  `json:"payable_minor"`
+	BonusMinor   int64  `json:"bonus_minor"`
+	BonusQuota   int    `json:"bonus_quota"`
+	CreatedAt    int64  `json:"created_at"`
+	PaidAt       int64  `json:"paid_at"`
+}
+
+// HwListUserOrders answers the paid and refunded top-ups of the logged-in user,
+// newest first, with the bonus each one earned.
+func HwListUserOrders(c *gin.Context) {
+	orders, err := model.HwListUserOrders(c.GetInt("id"), 50)
+	if err != nil {
+		logger.LogError(c.Request.Context(), common.LogText("listing top-up orders failed"))
+		common.ApiError(c, common.NewMessage("Failed to read the payment history"))
+		return
+	}
+	answers := make([]hwOrderAnswer, 0, len(orders))
+	for _, order := range orders {
+		answers = append(answers, hwOrderAnswer{
+			MerchantRef:  order.MerchantRef,
+			Status:       order.Status,
+			Currency:     order.Currency,
+			ListMinor:    order.ListValueTryMinor,
+			PayableMinor: order.PayableTryMinor,
+			BonusMinor:   order.BonusMinor,
+			BonusQuota:   order.BonusQuota,
+			CreatedAt:    order.CreatedAt,
+			PaidAt:       order.PaidAt,
+		})
+	}
+	common.ApiSuccess(c, gin.H{"orders": answers})
 }

@@ -131,15 +131,16 @@ func HwAdminRefundOrder(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, gin.H{
-		"merchant_ref":   request.MerchantRef,
-		"found":          result.Found,
-		"refunded":       result.Refunded,
-		"granted_quota":  result.GrantedQuota,
-		"returned_quota": result.ReturnedQuota,
-		"spent_quota":    result.SpentQuota,
-		"note":           result.Note,
-		"currency":       result.Currency,
-		"fee_minor":      result.FeeMinor,
-		"refunded_minor": result.RefundedMinor,
+		"merchant_ref":         request.MerchantRef,
+		"found":                result.Found,
+		"refunded":             result.Refunded,
+		"granted_quota":        result.GrantedQuota,
+		"returned_quota":       result.ReturnedQuota,
+		"spent_quota":          result.SpentQuota,
+		"bonus_returned_quota": result.BonusReturnedQuota,
+		"note":                 result.Note,
+		"currency":             result.Currency,
+		"fee_minor":            result.FeeMinor,
+		"refunded_minor":       result.RefundedMinor,
 	})
 }

@@ -26,6 +26,8 @@ func SetHwRoutes(apiRouter *gin.RouterGroup) {
 		// The balance per package with its expiry date, for the top-up page. A
 		// read of the caller's own ledger needs no critical rate limit.
 		hwUserRoute.GET("/packages", controller.HwListUserPackages)
+		// The settled top-ups with the bonus each one earned.
+		hwUserRoute.GET("/orders", controller.HwListUserOrders)
 	}
 
 	hwAdminRoute := apiRouter.Group("/hw/admin")

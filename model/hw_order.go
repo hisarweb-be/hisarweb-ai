@@ -60,6 +60,16 @@ const (
 	HwMaxTopUpTryOption       = "HwMaxTopUpTry"
 	HwMaxOpenOrdersOption     = "HwMaxOpenOrders"
 	HwCheckoutReturnURLOption = "HwCheckoutReturnURL"
+
+	// The top-up bonus rule per currency: a list value of at least Min whole
+	// units earns Amount whole units of the same currency as extra credit. Either
+	// value at zero switches the bonus off for that currency.
+	HwBonusUsdMinOption    = "HwBonusUsdMin"
+	HwBonusUsdAmountOption = "HwBonusUsdAmount"
+	HwBonusEurMinOption    = "HwBonusEurMin"
+	HwBonusEurAmountOption = "HwBonusEurAmount"
+	HwBonusTryMinOption    = "HwBonusTryMin"
+	HwBonusTryAmountOption = "HwBonusTryAmount"
 )
 
 const (
@@ -90,7 +100,13 @@ type HwOrder struct {
 	ListValueTryMinor int64  `json:"list_value_try_minor" gorm:"not null"`
 	PayableTryMinor   int64  `json:"payable_try_minor" gorm:"not null"`
 	Currency          string `json:"currency" gorm:"type:varchar(3);not null"`
-	DiscountKind      string `json:"discount_kind" gorm:"type:varchar(32);not null"`
+	// BonusQuota and BonusMinor are the extra credit this order earns by the
+	// bonus rule that was in force when it was created, in quota units and in
+	// minor units of Currency. Zero means no bonus. Both are fixed at creation
+	// so the price the customer saw is the credit the customer gets.
+	BonusQuota   int    `json:"bonus_quota" gorm:"not null;default:0"`
+	BonusMinor   int64  `json:"bonus_minor" gorm:"not null;default:0"`
+	DiscountKind string `json:"discount_kind" gorm:"type:varchar(32);not null"`
 	// Language is the language the customer chose at the checkout ("tr" or
 	// "en"). The customer mail job reads the choice of the latest order first,
 	// because that is the language the customer was reading when they last
@@ -210,6 +226,9 @@ type HwOrderSettlement struct {
 	// DiscountApplied is true when the first-purchase discount was still held
 	// by this order when the payment was settled.
 	DiscountApplied bool
+	// BonusQuota is the bonus package this call issued next to the purchase;
+	// zero when the order earns none or the bonus was booked before.
+	BonusQuota int
 	// ForfeitedFreeQuota is the remaining free trial credit this purchase
 	// retired because the account was frozen; paid credit is never part of it.
 	ForfeitedFreeQuota int
@@ -303,6 +322,21 @@ func HwSettleOrderPayment(merchantRef, revolutOrderID, cardFingerprint string, n
 				settlement.AdminNote = "first-purchase discount was no longer held by this order; credited the paid amount at face value"
 			} else {
 				settlement.DiscountApplied = true
+			}
+		}
+		if order.BonusQuota > 0 {
+			// Same transaction and same order reference as the purchase: the
+			// unique (source, order_ref) index makes this once per order. It is
+			// booked first, so it gets the lower package id and is the part of
+			// the balance that is spent first; a refund then takes back the
+			// bonus the customer still holds and only charges the paid credit
+			// that was really used.
+			bonusGranted, _, err := GrantCreditPackageInTx(tx, order.UserId, order.BonusQuota, HwSourceBonus, order.MerchantRef, now)
+			if err != nil {
+				return err
+			}
+			if bonusGranted {
+				settlement.BonusQuota = order.BonusQuota
 			}
 		}
 		granted, forfeited, err := GrantCreditPackageInTx(tx, order.UserId, creditQuota, HwSourcePurchase, order.MerchantRef, now)
@@ -411,6 +445,11 @@ type HwOrderRevocation struct {
 	// RemainingQuota is what the package still held and what was subtracted
 	// from the balance; the difference to GrantedQuota was already spent.
 	RemainingQuota int
+	// BonusReturnedQuota is what the bonus package of the same order still held
+	// and what was subtracted for it; zero when the order earned no bonus or the
+	// customer had spent it. It is not part of GrantedQuota/RemainingQuota: the
+	// bonus was never paid for, so spending it creates no refund debt.
+	BonusReturnedQuota int
 }
 
 // HwRevokeOrderCredit takes back the credit package of one paid order, for the
@@ -448,11 +487,13 @@ func HwRevokeOrderCredit(merchantRef string, now int64) (HwOrderRevocation, erro
 		if err := tx.Where("user_id = ? AND retired_at = 0", pkg.UserId).Find(&active).Error; err != nil {
 			return err
 		}
-		remaining := 0
+		remaining, bonusRemaining, bonusID := 0, 0, 0
 		for _, view := range HwPackageRemaining(pkg.UserId, user.Quota, active) {
-			if view.Id == pkg.Id {
+			switch {
+			case view.Id == pkg.Id:
 				remaining = view.RemainingQuota
-				break
+			case view.Source == HwSourceBonus && hwPackageOrderRef(active, view.Id) == merchantRef:
+				bonusRemaining, bonusID = view.RemainingQuota, view.Id
 			}
 		}
 		result := tx.Model(&HwCreditPackage{}).
@@ -464,9 +505,18 @@ func HwRevokeOrderCredit(merchantRef string, now int64) (HwOrderRevocation, erro
 		if result.RowsAffected == 0 {
 			return nil
 		}
+		if bonusID != 0 {
+			// The bonus of the order goes with it, in the same transaction.
+			if err := tx.Model(&HwCreditPackage{}).
+				Where("id = ? AND retired_at = 0", bonusID).
+				UpdateColumns(map[string]any{"retired_at": now, "retired_remaining": bonusRemaining}).Error; err != nil {
+				return err
+			}
+			revocation.BonusReturnedQuota = bonusRemaining
+		}
 		revocation.Retired = true
 		revocation.RemainingQuota = remaining
-		decrease = min(remaining, max(user.Quota, 0))
+		decrease = min(remaining+bonusRemaining, max(user.Quota, 0))
 		if decrease == 0 {
 			return nil
 		}
@@ -485,6 +535,15 @@ func HwRevokeOrderCredit(merchantRef string, now int64) (HwOrderRevocation, erro
 		}
 	}
 	return revocation, nil
+}
+
+func hwPackageOrderRef(pkgs []HwCreditPackage, id int) string {
+	for _, pkg := range pkgs {
+		if pkg.Id == id {
+			return pkg.OrderRef
+		}
+	}
+	return ""
 }
 
 // HwMarkOrderRefunded moves a paid order to refunded and stores the admin note of
@@ -520,3 +579,17 @@ func HwMarkOrderRefunded(merchantRef, note string, now int64) (bool, error) {
 // The expiry job itself lives in the service layer (service.StartHwOrderExpiryJob):
 // closing an unpaid order must be reconciled with the payment provider first,
 // and the provider client is not visible from the model layer.
+
+// HwListUserOrders returns the settled orders of one user, newest first, for the
+// customer's payment history: paid orders and refunded ones, never the open or
+// abandoned checkouts. The limit is capped so one request stays small.
+func HwListUserOrders(userID, limit int) ([]HwOrder, error) {
+	if userID <= 0 {
+		return nil, ErrHwInvalidOrder
+	}
+	limit = min(max(limit, 1), 100)
+	var orders []HwOrder
+	err := DB.Where("user_id = ? AND status IN ?", userID, []string{HwOrderStatusPaid, HwOrderStatusRefunded}).
+		Order("id DESC").Limit(limit).Find(&orders).Error
+	return orders, err
+}

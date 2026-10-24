@@ -22,6 +22,7 @@ import { requireServerSuccess } from '@/lib/server-error-message'
 import type {
   HwApiEnvelope,
   HwCreditPackages,
+  HwOrderSummary,
   HwPriceComparison,
   HwQualityLatest,
   HwStatusAnswer,
@@ -32,6 +33,15 @@ import type {
 export async function fetchHwCreditPackages(): Promise<HwCreditPackages> {
   const response = await api.get('/api/user/hw/packages')
   return requireServerSuccess(response.data).data as HwCreditPackages
+}
+
+/** Paid and refunded orders, newest first, with the bonus each one earned. */
+export async function fetchHwOrderHistory(): Promise<HwOrderSummary[]> {
+  const response = await api.get('/api/user/hw/orders')
+  const data = requireServerSuccess(response.data).data as {
+    orders?: HwOrderSummary[]
+  }
+  return data?.orders ?? []
 }
 
 export async function createHwTopUpOrder(

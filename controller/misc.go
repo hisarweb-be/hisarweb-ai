@@ -138,6 +138,10 @@ func GetStatus(c *gin.Context) {
 	data["hw_currencies"] = hwCurrencies.Currencies
 	data["hw_rates"] = hwCurrencies.Rates
 	data["hw_topup"] = hwCurrencies.TopUp
+	// The landing and purchase pages announce the bonus and the validity
+	// before the visitor logs in, so both rules are public.
+	data["hw_bonus_rules"] = service.HwBonusRules()
+	data["hw_credit_validity_days"] = model.HwCreditValidityDays
 
 	// 根据启用状态注入可选内容
 	if cs.ApiInfoEnabled {
