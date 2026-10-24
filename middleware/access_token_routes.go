@@ -53,6 +53,8 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/user/hw/packages":        accessTokenSessionRule,
 	"POST /api/hw/admin/orders/refund": accessTokenSessionRule,
 	"POST /api/hw/admin/unfreeze":      accessTokenSessionRule,
+	"POST /api/hw/admin/channel-grant": accessTokenSessionRule,
+	"GET /api/hw/admin/channels":       accessTokenSessionRule,
 	// router/hw_telegram.go: the Telegram deep link is an account-security
 	// action, so a personal access token never reaches it.
 	"POST /api/hw/telegram/link": accessTokenSessionRule,

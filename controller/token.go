@@ -322,6 +322,11 @@ func AddToken(c *gin.Context) {
 			return
 		}
 	}
+	// A partner channel account cannot hold an unlimited or oversized key.
+	if _, err := model.HwClampChannelTokenQuota(c.GetInt("id"), &token.UnlimitedQuota, &token.RemainQuota); err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	// 检查用户令牌数量是否已达上限
 	maxTokens := operation_setting.GetMaxUserTokens()
 	count, err := model.CountUserTokens(c.GetInt("id"))
@@ -427,6 +432,11 @@ func UpdateToken(c *gin.Context) {
 			common.ApiErrorT(c, "Quota value exceeds valid range, maximum is {{max}}", map[string]any{"max": logger.FormatQuota(maxQuotaValue)})
 			return
 		}
+	}
+	// A partner channel account cannot hold an unlimited or oversized key.
+	if _, err := model.HwClampChannelTokenQuota(userId, &token.UnlimitedQuota, &token.RemainQuota); err != nil {
+		common.ApiError(c, err)
+		return
 	}
 	cleanToken, err := model.GetTokenByIds(token.Id, userId)
 	if err != nil {

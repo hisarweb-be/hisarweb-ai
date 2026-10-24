@@ -2833,7 +2833,7 @@
     "footer.columns.related.links.oneApi": "1つのAPI",
     "footer.columns.related.title": "関連プロジェクト",
     "footer.defaultCopyright": "すべての権利を留保します。",
-    "footer.new\u0061pi.projectAttributionSuffix": "すべての権利を留保します。プロジェクトコントリビューターにより設計・開発されています。",
+    "footer.newapi.projectAttributionSuffix": "すべての権利を留保します。プロジェクトコントリビューターにより設計・開発されています。",
     "For advanced custom channels this applies only to /v1/responses routes without protocol conversion.": "高度なカスタムチャネルでは、プロトコル変換を行わない /v1/responses ルートにのみ適用されます。",
     "GitHub ID is empty!": "GitHub ID が空です！",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "2025 年 5 月 10 日以降に追加されたチャネルの場合、デプロイ時にモデル名から「.」を削除する必要はありません",
@@ -7339,6 +7339,13 @@
     "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.": "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.",
     "HisarWeb pays the payment and currency conversion costs. You get the full credit for what you pay, with no surcharge or deduction.": "決済手数料と通貨換算コストはHisarWebが負担します。お支払い額と同額のクレジットがそのまま付与され、追加料金や差し引きはありません。",
     "Costs and refunds": "費用と返金",
-    "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.": "返金の際は、HisarWebが負担した決済処理費用と通貨換算費用が返金額から差し引かれます。"
+    "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.": "返金の際は、HisarWebが負担した決済処理費用と通貨換算費用が返金額から差し引かれます。",
+    "Three steps to earn credit with your personal link.": "専用リンクでクレジットを獲得する3つのステップ。",
+    "Share your link": "リンクを共有する",
+    "Copy your personal link below and send it to a friend.": "下の専用リンクをコピーして、友達に送ってください。",
+    "Your friend pays": "友達が支払う",
+    "Your friend signs up through your link and tops up credit.": "友達があなたのリンクから登録し、クレジットをチャージします。",
+    "You get {{percent}}% as credit": "{{percent}}%がクレジットとして付与されます",
+    "If your friend buys {{paid}}, you get {{reward}} as credit on your balance.": "友達が{{paid}}分を購入すると、残高に{{reward}}分のクレジットが付与されます。"
   }
 }

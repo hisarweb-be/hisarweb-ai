@@ -2833,7 +2833,7 @@
     "footer.columns.related.links.oneApi": "One API",
     "footer.columns.related.title": "相关项目",
     "footer.defaultCopyright": "版权所有。",
-    "footer.new\u0061pi.projectAttributionSuffix": "版权所有，由项目贡献者设计与开发。",
+    "footer.newapi.projectAttributionSuffix": "版权所有，由项目贡献者设计与开发。",
     "For advanced custom channels this applies only to /v1/responses routes without protocol conversion.": "高级自定义渠道仅对 /v1/responses 且不做协议转换的路由生效。",
     "GitHub ID is empty!": "GitHub ID 为空！",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "对于 2025 年 5 月 10 日之后添加的渠道，在部署时无需从模型名称中移除 \".\"",
@@ -7339,6 +7339,13 @@
     "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.": "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.",
     "HisarWeb pays the payment and currency conversion costs. You get the full credit for what you pay, with no surcharge or deduction.": "支付和货币兑换费用由 HisarWeb 承担。您支付多少，就获得等额的完整额度，没有附加费用，也不会被扣除。",
     "Costs and refunds": "费用与退款",
-    "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.": "退款时，HisarWeb 已支付的支付处理和货币兑换费用将从退款金额中扣除。"
+    "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.": "退款时，HisarWeb 已支付的支付处理和货币兑换费用将从退款金额中扣除。",
+    "Three steps to earn credit with your personal link.": "通过您的专属链接赚取额度，只需三步。",
+    "Share your link": "分享您的链接",
+    "Copy your personal link below and send it to a friend.": "复制下方的专属链接并发送给朋友。",
+    "Your friend pays": "朋友付款",
+    "Your friend signs up through your link and tops up credit.": "朋友通过您的链接注册并充值额度。",
+    "You get {{percent}}% as credit": "您获得 {{percent}}% 的额度",
+    "If your friend buys {{paid}}, you get {{reward}} as credit on your balance.": "如果朋友购买 {{paid}}，您的余额将获得 {{reward}} 额度。"
   }
 }

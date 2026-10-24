@@ -21,6 +21,7 @@ import (
 	"cmp"
 	"errors"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -202,6 +203,9 @@ func grantCreditPackageTx(tx *gorm.DB, userID int, quota int, source string, ord
 	validity := int64(hwCreditPackageValiditySeconds)
 	if source == HwSourceFree {
 		validity = hwFreeCreditValiditySeconds
+	}
+	if source == HwSourceAdmin && strings.HasPrefix(orderRef, "channel") {
+		validity = hwChannelValiditySeconds
 	}
 	pkg := HwCreditPackage{
 		UserId:       userID,

@@ -2833,7 +2833,7 @@
     "footer.columns.related.links.oneApi": "One API",
     "footer.columns.related.title": "Các Dự Án Liên Quan",
     "footer.defaultCopyright": "Bản quyền được bảo lưu.",
-    "footer.new\u0061pi.projectAttributionSuffix": "Bản quyền được bảo lưu. Được thiết kế và phát triển bởi các cộng tác viên dự án.",
+    "footer.newapi.projectAttributionSuffix": "Bản quyền được bảo lưu. Được thiết kế và phát triển bởi các cộng tác viên dự án.",
     "For advanced custom channels this applies only to /v1/responses routes without protocol conversion.": "Với kênh tùy chỉnh nâng cao, thiết lập này chỉ áp dụng cho các route /v1/responses không chuyển đổi giao thức.",
     "GitHub ID is empty!": "ID GitHub trống!",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "Đối với các kênh được thêm sau ngày 10 tháng 5 năm 2025, không cần loại bỏ \".\" khỏi tên mô hình trong quá trình triển khai",
@@ -7339,6 +7339,13 @@
     "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.": "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.",
     "HisarWeb pays the payment and currency conversion costs. You get the full credit for what you pay, with no surcharge or deduction.": "HisarWeb chịu chi phí thanh toán và quy đổi tiền tệ. Bạn nhận đủ số tín dụng tương ứng với số tiền đã trả, không phụ phí và không bị khấu trừ.",
     "Costs and refunds": "Chi phí và hoàn tiền",
-    "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.": "Khi hoàn tiền, chi phí xử lý thanh toán và quy đổi tiền tệ mà HisarWeb đã trả sẽ được trừ vào số tiền hoàn lại."
+    "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.": "Khi hoàn tiền, chi phí xử lý thanh toán và quy đổi tiền tệ mà HisarWeb đã trả sẽ được trừ vào số tiền hoàn lại.",
+    "Three steps to earn credit with your personal link.": "Ba bước để nhận tín dụng bằng liên kết cá nhân của bạn.",
+    "Share your link": "Chia sẻ liên kết của bạn",
+    "Copy your personal link below and send it to a friend.": "Sao chép liên kết cá nhân bên dưới và gửi cho bạn bè.",
+    "Your friend pays": "Bạn bè thanh toán",
+    "Your friend signs up through your link and tops up credit.": "Bạn bè đăng ký qua liên kết của bạn và nạp tín dụng.",
+    "You get {{percent}}% as credit": "Bạn nhận {{percent}}% dưới dạng tín dụng",
+    "If your friend buys {{paid}}, you get {{reward}} as credit on your balance.": "Nếu bạn bè mua {{paid}}, bạn nhận {{reward}} tín dụng vào số dư."
   }
 }
