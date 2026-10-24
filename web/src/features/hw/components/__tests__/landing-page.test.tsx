@@ -187,3 +187,15 @@ test('teases the vibe coding guide with a button to its page', async () => {
     screen.getByRole('button', { name: 'Vibe coding rehberini oku' })
   ).toHaveAttribute('href', '/vibe-kodlama')
 })
+
+test('explains below the four steps why the phone is verified', async () => {
+  renderLanding()
+
+  expect(
+    await screen.findByRole('heading', {
+      level: 3,
+      name: 'Neden telefon doğrulaması?',
+    })
+  ).toBeInTheDocument()
+  expect(screen.getByText(/SMS göndermeyiz, sizi aramayız/)).toBeInTheDocument()
+})

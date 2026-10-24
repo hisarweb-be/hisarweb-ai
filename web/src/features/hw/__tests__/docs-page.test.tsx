@@ -187,9 +187,9 @@ describe('vibe coding page', () => {
       'Kural tek cümle',
       'Tek anahtar, bütün modeller',
       'Önbellek ve token tasarrufu',
-      'Araç araç ayarlar',
+      'Araç Ayarları',
       'Yönlendirme promptu',
-      'HisarWeb AI ne zaman işinize yarar?',
+      'HisarWeb AI hangi durumlarda avantaj sağlar?',
       'Önce ücretsiz deneyin',
     ])
   })
@@ -202,12 +202,15 @@ describe('vibe coding page', () => {
     ).toBeInTheDocument()
   })
 
-  it('warns in a visible box not to switch model inside a session', () => {
+  it('warns in a visible box inside the cache block not to switch model', () => {
     renderVibe(trI18n)
 
-    expect(
-      screen.getByText('Önemli: oturumun ortasında model değiştirmeyin')
-    ).toBeInTheDocument()
+    const warning = screen.getByText(
+      'Önemli: oturumun ortasında model değiştirmeyin'
+    )
+    expect(warning.closest('[data-slot="card"]')).toHaveTextContent(
+      'Önbellek ve token tasarrufu'
+    )
     expect(screen.getByText(/önbellekten \(cache\) yararlanamaz/)).toBeVisible()
   })
 
@@ -216,12 +219,14 @@ describe('vibe coding page', () => {
 
     const text = document.body.textContent ?? ''
     expect(text).not.toMatch(/\d\s?(TL|₺)/)
-    expect(text).toContain('Önbellek indirimi için bir söz vermiyoruz')
+    expect(text).not.toContain('Ölçüm tarihi')
+    expect(text).not.toMatch(/%\s?\d|\d\s?%/)
+    expect(text).toContain('sabit bir oran belirtmiyoruz')
     expect(
-      screen.getByRole('link', { name: 'Claude fiyatları (claude.com)' })
+      screen.getByRole('link', { name: 'Claude: claude.com/pricing' })
     ).toHaveAttribute('href', 'https://claude.com/pricing')
     expect(
-      screen.getByRole('link', { name: 'ChatGPT fiyatları (chatgpt.com)' })
+      screen.getByRole('link', { name: 'ChatGPT: chatgpt.com/pricing' })
     ).toHaveAttribute('href', 'https://chatgpt.com/pricing')
   })
 
@@ -255,8 +260,62 @@ describe('vibe coding page', () => {
       screen.getByRole('button', { name: 'Ücretsiz hesap aç' })
     ).toHaveAttribute('href', '/sign-up')
     expect(
+      screen.getByRole('button', { name: 'Ücretsiz hesap aç' })
+    ).toHaveAttribute('target', '_blank')
+    expect(
       screen.getByRole('link', { name: 'Adım adım kurulum rehberleri' })
     ).toHaveAttribute('href', '/docs')
+  })
+
+  it('opens every link on the page in a new tab', () => {
+    renderVibe(trI18n)
+
+    const links = [...document.querySelectorAll('a')]
+    expect(links.length).toBeGreaterThan(10)
+    for (const link of links) {
+      expect(link).toHaveAttribute('target', '_blank')
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+    }
+  })
+
+  it('links each tool name to its own setup guide on /docs', () => {
+    renderVibe(trI18n)
+
+    expect(screen.getByRole('link', { name: 'Cline' })).toHaveAttribute(
+      'href',
+      '/docs#rehber-cline'
+    )
+    expect(screen.getByRole('link', { name: 'Claude Code' })).toHaveAttribute(
+      'href',
+      '/docs#rehber-claude-code'
+    )
+  })
+
+  it('points beginners to the AI setup guide on /docs', () => {
+    renderVibe(trI18n)
+
+    expect(
+      screen.getByRole('link', {
+        name: 'Kurulumu yapay zekaya yaptırma rehberi',
+      })
+    ).toHaveAttribute('href', '/docs#kurulumu-yapay-zekaya-yaptirin')
+  })
+
+  it('draws the two layers as a labelled diagram', () => {
+    renderVibe(trI18n)
+
+    const diagram = screen.getByRole('figure', { name: /iki katmana ayrılır/ })
+    expect(diagram).toHaveTextContent('Aboneliğiniz')
+    expect(diagram).toHaveTextContent('HisarWeb AI anahtarı')
+  })
+
+  it('lists the use cases with multi-agent systems only once', () => {
+    renderVibe(trI18n)
+
+    const text = document.body.textContent ?? ''
+    expect(text.split('Çok ajanlı (multi-agent) sistemler')).toHaveLength(2)
+    expect(screen.getByText('Uyumlu Platformlar')).toBeInTheDocument()
+    expect(screen.getByText('Gerek olmayabilir')).toBeInTheDocument()
   })
 
   it('shows no film player until a film file is set', () => {

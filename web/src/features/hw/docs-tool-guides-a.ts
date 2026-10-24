@@ -52,7 +52,7 @@ function shot(
   }
 }
 
-const CLAUDE_SETTINGS = `{
+export const CLAUDE_SETTINGS = `{
   "env": {
     "ANTHROPIC_BASE_URL": "${ANTHROPIC_BASE_URL}",
     "ANTHROPIC_AUTH_TOKEN": "${KEY_PLACEHOLDER}",
@@ -558,14 +558,17 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
   ],
 }
 
-const CODEX_CONFIG = `model = "${MODEL_CODEX}"
-model_provider = "hisarweb"
-
-[model_providers.hisarweb]
+/** The provider table on its own; the AI setup prompt appends only this part. */
+export const CODEX_PROVIDER_TABLE = `[model_providers.hisarweb]
 name = "HisarWeb AI"
 base_url = "${OPENAI_BASE_URL}"
 wire_api = "responses"
 env_key = "${KEY_ENV_NAME}"`
+
+const CODEX_CONFIG = `model = "${MODEL_CODEX}"
+model_provider = "hisarweb"
+
+${CODEX_PROVIDER_TABLE}`
 
 const CODEX_CONFIG_STEPS: readonly GuideStep[] = [
   {

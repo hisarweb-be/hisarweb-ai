@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { Check, Gift, Wallet } from 'lucide-react'
+import { Check, Gift, ShieldCheck, Wallet } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -295,6 +295,10 @@ export function StartbonusCard() {
           )
         })}
       </ol>
+      <p className='text-muted-foreground mt-3 flex items-start gap-2 text-xs leading-relaxed'>
+        <ShieldCheck className='mt-0.5 size-3.5 shrink-0' aria-hidden='true' />
+        {hw('bonusPhoneWhy')}
+      </p>
       {dialog}
     </section>
   )
