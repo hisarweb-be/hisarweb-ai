@@ -325,6 +325,41 @@ func hwParseTcmbFx(body []byte) (decimal.Decimal, string, error) {
 	return rate, fxDate, nil
 }
 
+// Reasons the EUR cross rate could not be read; only the class is logged.
+var (
+	errHwEurRateMissing = errors.New("EUR forex selling rate not found")
+	errHwEurRateInvalid = errors.New("EUR rate is not a positive number")
+)
+
+// hwParseTcmbEurPerUsd computes the EUR per USD cross rate from the same bulletin:
+// the USD/TRY rate divided by the EUR/TRY forex-selling rate, rounded to six
+// decimals. It never fills in a value from memory.
+func hwParseTcmbEurPerUsd(body []byte, usdTry decimal.Decimal) (decimal.Decimal, error) {
+	var doc hwTcmbDocument
+	if err := xml.Unmarshal(body, &doc); err != nil {
+		return decimal.Decimal{}, errHwEurRateMissing
+	}
+	rateText := ""
+	for _, currency := range doc.Currencies {
+		if currency.Code == "EUR" {
+			rateText = strings.TrimSpace(currency.ForexSelling)
+			break
+		}
+	}
+	if rateText == "" {
+		return decimal.Decimal{}, errHwEurRateMissing
+	}
+	eurTry, err := decimal.NewFromString(rateText)
+	if err != nil || !eurTry.IsPositive() || !usdTry.IsPositive() {
+		return decimal.Decimal{}, errHwEurRateInvalid
+	}
+	eurPerUsd := usdTry.Div(eurTry).Round(6)
+	if !eurPerUsd.IsPositive() {
+		return decimal.Decimal{}, errHwEurRateInvalid
+	}
+	return eurPerUsd, nil
+}
+
 // hwTcmbFxDate picks the bulletin date. The Date attribute is MM/DD/YYYY and
 // Tarih is DD.MM.YYYY; either is accepted so a regional format change does not
 // break the fetch, and the result is normalized to YYYY-MM-DD.
@@ -404,7 +439,16 @@ func HwFetchPriceSnapshot(ctx context.Context, client *http.Client, priceListURL
 	if err != nil {
 		return nil, err
 	}
+	// The EUR cross rate is optional: when it cannot be read, TRY keeps working
+	// and the EUR option stays as it was.
+	eurPerUsd := ""
+	if eur, eurErr := hwParseTcmbEurPerUsd(fxBody, rate); eurErr != nil {
+		common.SysError(common.LogText("EUR rate not read from the bulletin (class %s)", hwEurRateErrorClass(eurErr)))
+	} else {
+		eurPerUsd = eur.String()
+	}
 	return &model.HwPriceSnapshot{
+		EurPerUsd:      eurPerUsd,
 		PriceSourceUrl: priceListURL,
 		FxSourceUrl:    fxURL,
 		FetchedAt:      now.Unix(),
@@ -438,7 +482,25 @@ func HwRefreshPriceSnapshot(ctx context.Context, client *http.Client, now time.T
 	if err := HwApplySnapshotModelRatios(snapshot); err != nil {
 		return err
 	}
-	return hwApplyTryRateOption(rate, snapshot.FxDate)
+	if err := hwApplyTryRateOption(rate, snapshot.FxDate); err != nil {
+		return err
+	}
+	// A failing EUR rate never fails the TRY refresh.
+	if snapshot.EurPerUsd != "" {
+		if eur, eurErr := decimal.NewFromString(snapshot.EurPerUsd); eurErr != nil {
+			common.SysError(common.LogText("EUR rate not applied (class %s)", hwEurRateErrorClass(errHwEurRateInvalid)))
+		} else if eurErr := hwApplyEurRateOption(eur, snapshot.FxDate); eurErr != nil {
+			common.SysError(common.LogText("EUR rate not applied (class %s)", hwPricingErrorClass(eurErr)))
+		}
+	}
+	return nil
+}
+
+func hwEurRateErrorClass(err error) string {
+	if errors.Is(err, errHwEurRateMissing) {
+		return "missing"
+	}
+	return "invalid"
 }
 
 // hwPricingErrorClass maps an error to a short log class. Log lines carry the
@@ -463,6 +525,9 @@ func hwApplyTryRateOption(rate decimal.Decimal, fxDate string) error {
 	if !rate.IsPositive() {
 		return ErrHwInvalidRate
 	}
+	if !hwRateDateNotInFuture(fxDate, time.Now()) {
+		return ErrHwInvalidRate
+	}
 	publishedDate := strings.TrimSpace(hwOptionValue(HwOptionTryPerUsdDate))
 	if publishedDate != "" && publishedDate >= fxDate {
 		return nil
@@ -474,6 +539,41 @@ func hwApplyTryRateOption(rate decimal.Decimal, fxDate string) error {
 		return err
 	}
 	return model.UpdateOption(HwOptionTryPerUsdDate, fxDate)
+}
+
+// hwRateDateNotInFuture refuses a validity date that cannot be read or that
+// lies after today (UTC): such a rate would stay "newer" than every real one.
+func hwRateDateNotInFuture(fxDate string, now time.Time) bool {
+	published, err := time.Parse("2006-01-02", strings.TrimSpace(fxDate))
+	return err == nil && !published.After(now.UTC().Truncate(24*time.Hour))
+}
+
+// hwApplyEurRateOption publishes the EUR per USD cross rate with the same guard
+// and date rule as the TRY rate: valid and strictly newer than the published
+// date, otherwise both options stay untouched. It also keeps the base rate the
+// EUR top-up presets were made with, replacing it only when the new rate
+// deviates more than hwPresetHysteresis from it, so presets do not jump daily.
+func hwApplyEurRateOption(rate decimal.Decimal, fxDate string) error {
+	if !rate.IsPositive() {
+		return ErrHwInvalidRate
+	}
+	if !hwRateDateNotInFuture(fxDate, time.Now()) {
+		return ErrHwInvalidRate
+	}
+	publishedDate := strings.TrimSpace(hwOptionValue(model.HwEurPerUsdDateOption))
+	if publishedDate != "" && publishedDate >= fxDate {
+		return nil
+	}
+	if err := model.UpdateOption(model.HwEurPerUsdOption, rate.String()); err != nil {
+		return err
+	}
+	base, err := decimal.NewFromString(strings.TrimSpace(hwOptionValue(model.HwEurPresetBaseOption)))
+	if err != nil || !base.IsPositive() || rate.Sub(base).Abs().Div(base).GreaterThan(hwPresetHysteresis) {
+		if err := model.UpdateOption(model.HwEurPresetBaseOption, rate.String()); err != nil {
+			return err
+		}
+	}
+	return model.UpdateOption(model.HwEurPerUsdDateOption, fxDate)
 }
 
 // HwTryCurrencySymbol is the symbol of the TL amounts the customer sees.
@@ -625,11 +725,11 @@ func HwComparePrice(snapshot *model.HwPriceSnapshot, input HwComparePriceInput) 
 	if err != nil {
 		return nil, err
 	}
-	firstQuote, err := model.HwComputePurchase(ourTry, true)
+	firstQuote, err := model.HwComputePurchase(ourTry, true, model.HwFirstPurchaseDiscountCapTRY)
 	if err != nil {
 		return nil, err
 	}
-	repeatQuote, err := model.HwComputePurchase(ourTry, false)
+	repeatQuote, err := model.HwComputePurchase(ourTry, false, model.HwFirstPurchaseDiscountCapTRY)
 	if err != nil {
 		return nil, err
 	}
@@ -639,10 +739,10 @@ func HwComparePrice(snapshot *model.HwPriceSnapshot, input HwComparePriceInput) 
 		OutputTokens:      input.OutputTokens,
 		OfficialUsd:       officialUsd,
 		OfficialTry:       officialTry,
-		FirstPurchaseTry:  firstQuote.PayableTRY,
-		RepeatPurchaseTry: repeatQuote.PayableTRY,
-		SavingsFirstTry:   officialTry.Sub(firstQuote.PayableTRY),
-		SavingsRepeatTry:  officialTry.Sub(repeatQuote.PayableTRY),
+		FirstPurchaseTry:  firstQuote.Payable,
+		RepeatPurchaseTry: repeatQuote.Payable,
+		SavingsFirstTry:   officialTry.Sub(firstQuote.Payable),
+		SavingsRepeatTry:  officialTry.Sub(repeatQuote.Payable),
 		TryPerUsd:         rate,
 	}, nil
 }

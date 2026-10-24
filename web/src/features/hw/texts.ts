@@ -28,18 +28,26 @@ For commercial licensing, please contact support@quantumnous.com
  */
 import { useTranslation } from 'react-i18next'
 
+import { useHwCurrency } from './hooks/use-hw-currency'
+import { hwCurrencyTextVars } from './lib/currency-text'
+
 export type HwLanguage = 'tr' | 'en'
 
 const tr = {
+  currencySwitchLabel: 'Para birimi',
+  currencyTitleTRY: 'Türk lirası',
+  currencyTitleEUR: 'Euro',
+  currencyTitleUSD: 'ABD doları',
   navTopUp: 'Kredi yükle',
   navBuy: 'Satın al',
   navCompare: 'Fiyat karşılaştırma',
   navQuality: 'Kalite ölçümleri',
   navStatus: 'Durum',
 
+  landingBadgeForeign: 'Fiyatlar {currencyName} cinsinden',
   landingBadge: 'Türkiye için: TL fiyatlar, KDV dahil',
   landingTitle:
-    'Claude, GPT ve Gemini API’si resmî fiyatın yarısına, TL ile ödeyin',
+    'Claude, GPT ve Gemini API’si resmî fiyatın yarısına, {currencyName} ile ödeyin',
   landingLead:
     'HisarWeb AI, yapay zekâ uygulamanız için tek bir API anahtarı sunar. Her model resmî liste fiyatının %50 altında ve diğer API aracılarından ucuz. Aylık abonelik yok; yalnızca kullandığınız kadar ödersiniz.',
   landingCtaPrimary: 'Ücretsiz hesap aç',
@@ -49,21 +57,23 @@ const tr = {
     'Claude, GPT ve Gemini ailelerinden seçilmiş modeller tek katalogda; her modelin güncel fiyatı karşılaştırma sayfasında yazar.',
 
   benefitTitle: 'Neden HisarWeb AI?',
-  benefitPaymentTitle: 'TL ile ödeyin',
+  benefitPaymentTitle: '{currencyName} ile ödeyin',
+  benefitPaymentBodyForeign:
+    'Kredi kartı ile {currencyLong} üzerinden ödeme yapın.',
   benefitPaymentBody:
     'Kredi kartı veya Revolut ile Türk lirası üzerinden ödeme yapın. Gösterilen tüm fiyatlara KDV dahildir.',
   benefitDiscountTitle: 'Her zaman resmî fiyatın yarısı',
   benefitDiscountBody:
-    'Tüm modellerde token fiyatı resmî liste fiyatının %50 altındadır, her istekte ve anında. İlk alışverişinizde 1000 TL değerine kadar ayrıca %50 hoş geldin indirimi alırsınız. Aylık abonelik ücreti yok.',
+    'Tüm modellerde token fiyatı resmî liste fiyatının %50 altındadır, her istekte ve anında. İlk alışverişinizde {firstCap} değerine kadar ayrıca %50 hoş geldin indirimi alırsınız. Aylık abonelik ücreti yok.',
   benefitExpiryTitle: 'Bakiyeniz 30 gün geçerli',
   benefitExpiryBody:
     'Yüklediğiniz bakiye yükleme tarihinden itibaren 30 gün geçerlidir. Kullanmadığınız süre için ödeme yapmazsınız.',
 
   trialTitle: 'Önce ücretsiz deneyin',
   trialBody:
-    'Hesap açtığınızda 250 TL deneme bakiyesi tanımlanır ve 14 gün geçerlidir. Kredi kartı gerekmez.',
+    'Hesap açtığınızda {bonus} deneme bakiyesi tanımlanır ve 14 gün geçerlidir. Kredi kartı gerekmez.',
   trialCta: 'Deneme hesabı aç',
-  trialFigure: '250 TL',
+  trialFigure: '{bonus}',
 
   stepsTitle: 'Dört adımda başlayın',
   step1Title: 'Kayıt olun',
@@ -86,6 +96,8 @@ const tr = {
   faq1A:
     'Uygulamanızın HisarWeb AI modellerine bağlanmasını sağlayan gizli bir metindir. Anahtarı yalnızca kendi sunucunuzda saklayın.',
   faq2Q: 'Nasıl ödeme yapabilirim?',
+  faq2AForeign:
+    'Kredi kartı ile {currencyLong} olarak ödeyebilirsiniz. Ödeme sayfası sipariş sırasında açılır.',
   faq2A:
     'Kredi kartı veya Revolut ile TL olarak ödeyebilirsiniz. Ödeme sayfası sipariş sırasında açılır.',
   faq3Q: 'Bakiyem ne kadar süre geçerli?',
@@ -100,7 +112,7 @@ const tr = {
 
   finalCtaTitle: 'Bugün başlayın',
   finalCtaBody:
-    '250 TL deneme bakiyesiyle modelleri deneyin; memnun kalırsanız TL ile kredi yükleyin.',
+    '{bonus} deneme bakiyesiyle modelleri deneyin; memnun kalırsanız {currencyName} ile kredi yükleyin.',
   finalCtaButton: 'Ücretsiz hesap aç',
 
   topUpTitle: 'Kredi yükle',
@@ -108,20 +120,21 @@ const tr = {
   topUpLead:
     'Yüklemek istediğiniz bakiye değerini seçin. Hesabınıza tam değer geçer; ödenecek tutar indirimden sonra hesaplanır.',
   topUpPresetLabel: 'Hazır tutarlar',
-  topUpCustomLabel: 'Kendi tutarınız (TL)',
+  topUpCustomLabel: 'Kendi tutarınız ({currencyName})',
   topUpCustomPlaceholder: 'Örn. 1500',
   topUpValueLabel: 'Bakiye değeri',
   topUpPayableLabel: 'Ödenecek tutar',
   topUpPayableNote: 'İndirimli ödenecek tutarı ödeme sayfasında görürsünüz.',
-  topUpDiscountFirst: 'Hoş geldin indirimi (%50, 1000 TL değerine kadar)',
+  topUpDiscountFirst: 'Hoş geldin indirimi (%50, {firstCap} değerine kadar)',
   topUpDiscountRepeat:
     'Sonraki alışverişler: token fiyatları zaten resmî fiyatın yarısı',
   topUpDiscountRule:
-    'Token fiyatları her zaman resmî liste fiyatının %50 altındadır. İlk alışverişinizde ayrıca 1000 TL değerine kadar %50 hoş geldin indirimi uygulanır; üzerindeki kısım ve sonraki alışverişler bu indirimli token fiyatıyla kullanılır. İndirim ödeme sırasında otomatik hesaplanır.',
+    'Token fiyatları her zaman resmî liste fiyatının %50 altındadır. İlk alışverişinizde ayrıca {firstCap} değerine kadar %50 hoş geldin indirimi uygulanır; üzerindeki kısım ve sonraki alışverişler bu indirimli token fiyatıyla kullanılır. İndirim ödeme sırasında otomatik hesaplanır.',
+  topUpKdvNoteForeign: '',
   topUpKdvNote: 'Fiyatlara KDV dahildir.',
   topUpSubmit: 'Ödemeye geç',
   topUpSubmitting: 'Ödeme sayfası açılıyor…',
-  topUpRangeNote: 'Tutar {min} ile {max} TL arasında olmalıdır.',
+  topUpRangeNote: 'Tutar {min} ile {max} arasında olmalıdır.',
   topUpInvalidAmount: 'Geçerli bir tutar girin.',
   topUpErrorRange: 'Tutar izin verilen aralığın dışında.',
   topUpErrorOpenOrders:
@@ -131,8 +144,8 @@ const tr = {
   topUpErrorDefault: 'Sipariş başlatılamadı. Lütfen tekrar deneyin.',
   topUpClosedTitle: 'Online ödeme çok yakında açılıyor',
   topUpClosedBody:
-    'Kartla ödeme henüz açık değil. Bu arada 250 TL başlangıç bonusunu ücretsiz alabilirsiniz: e-postanızı onaylayın, Telegram’ı bağlayın ve numaranızı botla paylaşın.',
-  topUpClosedBonusButton: '250 TL bonusu al',
+    'Kartla ödeme henüz açık değil. Bu arada {bonus} başlangıç bonusunu ücretsiz alabilirsiniz: e-postanızı onaylayın, Telegram’ı bağlayın ve numaranızı botla paylaşın.',
+  topUpClosedBonusButton: '{bonus} bonusu al',
   topUpReturnTitle: 'Ödeme sayfasından döndünüz',
   topUpReturnPending: 'Bakiye, ödeme onaydan sonra görünür.',
   topUpReturnBody:
@@ -151,7 +164,7 @@ const tr = {
   balancePackageLine: '{source}: {amount} · son kullanma {date}',
   balancePackageQuota: '{quota} kredi',
   balanceNoRate:
-    'Bakiyenin TL değeri şu anda hesaplanamıyor: günlük kur henüz yayınlanmadı.',
+    'Bakiyenin {currencyName} değeri şu anda hesaplanamıyor: günlük kur henüz yayınlanmadı.',
   packageSourcePurchase: 'Satın alınan bakiye',
   packageSourceFree: 'Ücretsiz deneme',
   packageSourceAffiliate: 'Davet ödülü',
@@ -168,7 +181,7 @@ const tr = {
   compareResultLead: '{model} · ayda {input} girdi / {output} çıktı token',
   compareOfficial: 'Resmî liste fiyatı',
   compareOfficialUsd: 'Resmî liste fiyatı (USD)',
-  compareOfficialTry: 'Resmî liste fiyatı (TL)',
+  compareOfficialTry: 'Resmî liste fiyatı ({currencyName})',
   compareOursFirst:
     'HisarWeb AI fiyatı (ilk alışveriş, hoş geldin indirimiyle)',
   compareOursRepeat: 'HisarWeb AI fiyatı (her alışverişte)',
@@ -182,6 +195,7 @@ const tr = {
   compareStaleTitle: 'Fiyat verisi güncel olmayabilir',
   compareStale:
     'Uyarı: fiyat verisi güncel olmayabilir. Son başarılı güncellemenin değerleri gösteriliyor.',
+  compareKdvForeign: 'Tüm fiyatlar {currencyName} olarak gösterilir.',
   compareKdv: 'Tüm fiyatlar KDV dahil ve TL olarak gösterilir.',
   compareTokensNote: 'Token sayısı 0 ile {max} arasında olmalıdır.',
   compareErrorDefault: 'Karşılaştırma alınamadı. Lütfen tekrar deneyin.',
@@ -268,10 +282,10 @@ const tr = {
     'Durum ölçümü henüz başlamadı. İlk ölçümden sonra model durumları burada görünecek.',
 
   bonusEyebrow: 'Başlangıç bonusu',
-  bonusTitle: '250 TL başlangıç bonusunuzu alın',
+  bonusTitle: '{bonus} başlangıç bonusunuzu alın',
   bonusLead: 'Bonusu almak için 3 kısa adım var. Şu an {step}. adımdasınız.',
   bonusClosed:
-    'Telefon doğrulaması şu anda açık değil, bu yüzden bonus henüz tanımlanamıyor. Doğrulama açıldığında bonusu buradan alabileceksiniz; beklemek istemezseniz TL ile bakiye yükleyebilirsiniz.',
+    'Telefon doğrulaması şu anda açık değil, bu yüzden bonus henüz tanımlanamıyor. Doğrulama açıldığında bonusu buradan alabileceksiniz; beklemek istemezseniz {currencyName} ile bakiye yükleyebilirsiniz.',
   bonusStepEmail: 'E-posta adresinizi ekleyin ve onaylayın',
   bonusStepTelegram: 'Telegram hesabınızı bağlayın',
   bonusStepPhone: 'Telefon numaranızı Telegram botuyla paylaşın',
@@ -303,15 +317,15 @@ const tr = {
   tgDialogLinked:
     'Telegram bağlandı. Şimdi bottaki Numaramı paylaş düğmesine dokunun.',
   tgDialogPhoneShared: 'Numaranız alındı. Bonus hesabınıza işleniyor…',
-  tgDialogDone: 'Bağlandı, 250 TL bonus hesabınızda',
+  tgDialogDone: 'Bağlandı, {bonus} bonus hesabınızda',
   tgDialogStopped:
     'Bir süredir yanıt gelmedi. Telegram’da işlemi bitirdiyseniz yeni bir bağlantı alın.',
   tgDialogRetry: 'Yeni bağlantı al',
   tgDialogClose: 'Kapat',
   noCreditTitle: 'Bakiyeniz bitti',
   noCreditBody:
-    'Bu isteği göndermek için hesabınızda yeterli bakiye yok. Yeni hesaplar 250 TL başlangıç bonusu alır; bonusu henüz almadıysanız aşağıdan talep edin ya da TL ile bakiye yükleyin.',
-  noCreditBonusButton: '250 TL başlangıç bonusunu al',
+    'Bu isteği göndermek için hesabınızda yeterli bakiye yok. Yeni hesaplar {bonus} başlangıç bonusu alır; bonusu henüz almadıysanız aşağıdan talep edin ya da {currencyName} ile bakiye yükleyin.',
+  noCreditBonusButton: '{bonus} başlangıç bonusunu al',
   noCreditBuyButton: 'Bakiye satın al',
   docsTitle: 'API belgeleri',
   docsLead:
@@ -344,6 +358,8 @@ const tr = {
   docsLinkCompare: 'Fiyat karşılaştırma',
 
   aboutDefaultTitle: 'HisarWeb AI hakkında',
+  aboutDefaultIntroForeign:
+    'HisarWeb AI, yapay zekâ uygulamanız için tek bir API anahtarı sunar. Bakiyeyi {currencyLong} ile yüklersiniz ve yalnızca kullandığınız kadar ödersiniz.',
   aboutDefaultIntro:
     'HisarWeb AI, yapay zekâ uygulamanız için tek bir API anahtarı sunar. Bakiyeyi Türk lirası ile yüklersiniz ve yalnızca kullandığınız kadar ödersiniz; gösterilen tüm fiyatlara KDV dahildir.',
   aboutDefaultPayment:
@@ -382,15 +398,20 @@ const tr = {
 export type HwTextKey = keyof typeof tr
 
 const en: Record<HwTextKey, string> = {
+  currencySwitchLabel: 'Currency',
+  currencyTitleTRY: 'Turkish lira',
+  currencyTitleEUR: 'Euro',
+  currencyTitleUSD: 'US dollar',
   navTopUp: 'Top up',
   navBuy: 'Buy credit',
   navCompare: 'Price comparison',
   navQuality: 'Quality results',
   navStatus: 'Status',
 
+  landingBadgeForeign: 'Prices in {currencyName}',
   landingBadge: 'For Turkey: prices in TRY, VAT included',
   landingTitle:
-    'Claude, GPT and Gemini APIs at half the official price, paid in TRY',
+    'Claude, GPT and Gemini APIs at half the official price, paid in {currencyName}',
   landingLead:
     'HisarWeb AI gives your application one API key. Every model is 50% below the official list price and cheaper than other API routers. No monthly subscription; you only pay for what you use.',
   landingCtaPrimary: 'Create a free account',
@@ -400,21 +421,22 @@ const en: Record<HwTextKey, string> = {
     'Selected models from the Claude, GPT and Gemini families in one catalog; every current price is on the comparison page.',
 
   benefitTitle: 'Why HisarWeb AI?',
-  benefitPaymentTitle: 'Pay in TRY',
+  benefitPaymentTitle: 'Pay in {currencyName}',
+  benefitPaymentBodyForeign: 'Pay in {currencyLong} with a card.',
   benefitPaymentBody:
     'Pay in Turkish lira with a card or Revolut. Every price shown includes VAT.',
   benefitDiscountTitle: 'Always half the official price',
   benefitDiscountBody:
-    'Every model costs 50% less per token than the official list price, on every request and in real time. Your first purchase also gets a 50% welcome discount on up to TRY 1,000 of value. No monthly subscription.',
+    'Every model costs 50% less per token than the official list price, on every request and in real time. Your first purchase also gets a 50% welcome discount on up to {firstCap} of value. No monthly subscription.',
   benefitExpiryTitle: 'Your balance lasts 30 days',
   benefitExpiryBody:
     'A top-up stays valid for 30 days from the day you buy it. You pay nothing for time you do not use.',
 
   trialTitle: 'Try it for free first',
   trialBody:
-    'A new account receives TRY 250 of trial credit, valid for 14 days. No card needed.',
+    'A new account receives {bonus} of trial credit, valid for 14 days. No card needed.',
   trialCta: 'Create a trial account',
-  trialFigure: 'TRY 250',
+  trialFigure: '{bonus}',
 
   stepsTitle: 'Start in four steps',
   step1Title: 'Sign up',
@@ -437,6 +459,8 @@ const en: Record<HwTextKey, string> = {
   faq1A:
     'A secret string that lets your application reach the HisarWeb AI models. Keep it on your own server only.',
   faq2Q: 'How can I pay?',
+  faq2AForeign:
+    'With a card, in {currencyLong}. The payment page opens while you order.',
   faq2A:
     'With a card or Revolut, in Turkish lira. The payment page opens while you order.',
   faq3Q: 'How long is my balance valid?',
@@ -450,7 +474,7 @@ const en: Record<HwTextKey, string> = {
 
   finalCtaTitle: 'Start today',
   finalCtaBody:
-    'Try the models with TRY 250 of trial credit; top up in TRY when you are happy.',
+    'Try the models with {bonus} of trial credit; top up in {currencyName} when you are happy.',
   finalCtaButton: 'Create a free account',
 
   topUpTitle: 'Top up',
@@ -458,21 +482,22 @@ const en: Record<HwTextKey, string> = {
   topUpLead:
     'Choose the balance value you want. Your account receives the full value; the amount you pay follows from the discount.',
   topUpPresetLabel: 'Preset amounts',
-  topUpCustomLabel: 'Your own amount (TRY)',
+  topUpCustomLabel: 'Your own amount ({currencyName})',
   topUpCustomPlaceholder: 'e.g. 1500',
   topUpValueLabel: 'Balance value',
   topUpPayableLabel: 'You pay',
   topUpPayableNote:
     'The amount you pay after the discount is shown on the payment page.',
-  topUpDiscountFirst: 'Welcome discount (50%, up to TRY 1,000 of value)',
+  topUpDiscountFirst: 'Welcome discount (50%, up to {firstCap} of value)',
   topUpDiscountRepeat:
     'Later purchases: token prices are already half the official price',
   topUpDiscountRule:
-    'Token prices are always 50% below the official list price. Your first purchase also gets a 50% welcome discount on up to TRY 1,000 of value; the part above that and later purchases are used at that reduced token price. The discount is applied automatically at payment.',
+    'Token prices are always 50% below the official list price. Your first purchase also gets a 50% welcome discount on up to {firstCap} of value; the part above that and later purchases are used at that reduced token price. The discount is applied automatically at payment.',
+  topUpKdvNoteForeign: '',
   topUpKdvNote: 'Prices include VAT.',
   topUpSubmit: 'Continue to payment',
   topUpSubmitting: 'Opening the payment page…',
-  topUpRangeNote: 'The amount must be between {min} and {max} TRY.',
+  topUpRangeNote: 'The amount must be between {min} and {max}.',
   topUpInvalidAmount: 'Enter a valid amount.',
   topUpErrorRange: 'The amount is outside the allowed range.',
   topUpErrorOpenOrders:
@@ -482,8 +507,8 @@ const en: Record<HwTextKey, string> = {
   topUpErrorDefault: 'The order could not be started. Please try again.',
   topUpClosedTitle: 'Online payment opens very soon',
   topUpClosedBody:
-    'Card payment is not open yet. Meanwhile you can claim the TRY 250 start bonus for free: confirm your e-mail, link Telegram and share your number with the bot.',
-  topUpClosedBonusButton: 'Claim the TRY 250 bonus',
+    'Card payment is not open yet. Meanwhile you can claim the {bonus} start bonus for free: confirm your e-mail, link Telegram and share your number with the bot.',
+  topUpClosedBonusButton: 'Claim the {bonus} bonus',
   topUpReturnTitle: 'You are back from the payment page',
   topUpReturnPending: 'The balance appears after the payment is confirmed.',
   topUpReturnBody:
@@ -502,7 +527,7 @@ const en: Record<HwTextKey, string> = {
   balancePackageLine: '{source}: {amount} · expires {date}',
   balancePackageQuota: '{quota} credits',
   balanceNoRate:
-    'The lira value of your balance cannot be shown right now: the daily rate has not been published yet.',
+    'The {currencyName} value of your balance cannot be shown right now: the daily rate has not been published yet.',
   packageSourcePurchase: 'Purchased balance',
   packageSourceFree: 'Free trial',
   packageSourceAffiliate: 'Referral reward',
@@ -519,7 +544,7 @@ const en: Record<HwTextKey, string> = {
   compareResultLead: '{model} · {input} input / {output} output tokens a month',
   compareOfficial: 'Official list price',
   compareOfficialUsd: 'Official list price (USD)',
-  compareOfficialTry: 'Official list price (TRY)',
+  compareOfficialTry: 'Official list price ({currencyName})',
   compareOursFirst: 'HisarWeb AI price (first purchase)',
   compareOursRepeat: 'HisarWeb AI price (later purchases)',
   compareSavingFirst: 'Saving on the first purchase: {amount}',
@@ -532,6 +557,7 @@ const en: Record<HwTextKey, string> = {
   compareStaleTitle: 'The price data may be out of date',
   compareStale:
     'Warning: the price data may be out of date. The values of the last successful update are shown.',
+  compareKdvForeign: 'All prices are shown in {currencyName}.',
   compareKdv: 'All prices are shown in TRY and include VAT.',
   compareTokensNote: 'The token count must be between 0 and {max}.',
   compareErrorDefault: 'The comparison could not be loaded. Please try again.',
@@ -618,11 +644,11 @@ const en: Record<HwTextKey, string> = {
     'The status measurement has not started yet. The model states appear here after the first measurement.',
 
   bonusEyebrow: 'Start bonus',
-  bonusTitle: 'Claim your TRY 250 start bonus',
+  bonusTitle: 'Claim your {bonus} start bonus',
   bonusLead:
     'There are 3 short steps to receive the bonus. You are on step {step}.',
   bonusClosed:
-    'Phone verification is not open right now, so the bonus cannot be granted yet. You will be able to claim it here once verification opens; if you do not want to wait, top up in TRY.',
+    'Phone verification is not open right now, so the bonus cannot be granted yet. You will be able to claim it here once verification opens; if you do not want to wait, top up in {currencyName}.',
   bonusStepEmail: 'Add and confirm your e-mail address',
   bonusStepTelegram: 'Link your Telegram account',
   bonusStepPhone: 'Share your phone number with the Telegram bot',
@@ -653,15 +679,15 @@ const en: Record<HwTextKey, string> = {
   tgDialogLinked:
     'Telegram is linked. Now tap the Share my number button in the bot.',
   tgDialogPhoneShared: 'Your number arrived. The bonus is being added…',
-  tgDialogDone: 'Linked, the TRY 250 bonus is in your account',
+  tgDialogDone: 'Linked, the {bonus} bonus is in your account',
   tgDialogStopped:
     'No answer for a while. If you finished in Telegram, get a new link.',
   tgDialogRetry: 'Get a new link',
   tgDialogClose: 'Close',
   noCreditTitle: 'You are out of credit',
   noCreditBody:
-    'Your account does not have enough credit for this request. New accounts get a TRY 250 start bonus; claim it below if you have not yet, or top up in TRY.',
-  noCreditBonusButton: 'Claim the TRY 250 start bonus',
+    'Your account does not have enough credit for this request. New accounts get a {bonus} start bonus; claim it below if you have not yet, or top up in {currencyName}.',
+  noCreditBonusButton: 'Claim the {bonus} start bonus',
   noCreditBuyButton: 'Buy credit',
   docsTitle: 'API documentation',
   docsLead:
@@ -693,6 +719,8 @@ const en: Record<HwTextKey, string> = {
   docsLinkCompare: 'Price comparison',
 
   aboutDefaultTitle: 'About HisarWeb AI',
+  aboutDefaultIntroForeign:
+    'HisarWeb AI gives your AI application one API key. You top up the balance in {currencyLong} and pay only for what you use.',
   aboutDefaultIntro:
     'HisarWeb AI gives your AI application one API key. You top up the balance in Turkish lira and pay only for what you use; every price shown includes VAT.',
   aboutDefaultPayment:
@@ -748,12 +776,33 @@ export function fillHwText(text: string, vars?: HwTextVars): string {
   )
 }
 
+/**
+ * Fills a text of `dictionary` for the active currency: the `{bonus}`,
+ * `{firstCap}`, `{currencyName}` and `{currencyLong}` placeholders, and the
+ * `<key>Foreign` variant of a text (no Turkish KDV wording) when the currency
+ * is not TRY. Shared by every HisarWeb text hook; reads the currency store, not
+ * react-query, so it also works where no query client exists.
+ */
+export function useHwCurrencyText<Key extends string>(
+  dictionary: Record<Key, string>,
+  language: HwLanguage
+): (key: Key, vars?: HwTextVars) => string {
+  const { currency, rates } = useHwCurrency()
+  const currencyVars = hwCurrencyTextVars(currency, rates, language)
+  return (key, vars) => {
+    const foreign = `${key}Foreign` as Key
+    const text =
+      currency !== 'TRY' && foreign in dictionary
+        ? dictionary[foreign]
+        : dictionary[key]
+    return fillHwText(text, { ...currencyVars, ...vars })
+  }
+}
+
 /** Returns the text of the active interface language, Turkish by default. */
 export function useHwText(): (key: HwTextKey, vars?: HwTextVars) => string {
-  const { i18n } = useTranslation()
-  const dictionary =
-    hwTexts[pickHwLanguage(i18n.resolvedLanguage ?? i18n.language)]
-  return (key, vars) => fillHwText(dictionary[key], vars)
+  const language = useHwLanguage()
+  return useHwCurrencyText(hwTexts[language], language)
 }
 
 /**

@@ -29,17 +29,6 @@ import type {
   HwTopUpRequest,
 } from './types'
 
-/**
- * Bounds of the list value. They mirror the server options `HwMinTopUpTry` and
- * `HwMaxTopUpTry` (defaults 100 and 20000); the server still validates, this
- * only keeps the form from sending a value it must refuse.
- */
-export const HW_TOPUP_MIN_TRY = 100
-export const HW_TOPUP_MAX_TRY = 20000
-
-/** Preset list values in whole lira, all inside the bounds above. */
-export const HW_TOPUP_PRESET_TRY = [250, 500, 1000, 2000, 5000]
-
 export async function fetchHwCreditPackages(): Promise<HwCreditPackages> {
   const response = await api.get('/api/user/hw/packages')
   return requireServerSuccess(response.data).data as HwCreditPackages

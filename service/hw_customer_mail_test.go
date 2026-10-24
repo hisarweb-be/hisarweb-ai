@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -287,7 +288,7 @@ func TestHwCustomerMailLanguageChoice(t *testing.T) {
 		ListQuota:         quota,
 		ListValueTryMinor: 10000,
 		PayableTryMinor:   8500,
-		Currency:          model.HwOrderCurrency,
+		Currency:          model.HwCurrencyTRY,
 		DiscountKind:      model.HwDiscountReturning,
 		Language:          "en",
 		Status:            model.HwOrderStatusPaid,
@@ -305,7 +306,7 @@ func TestHwCustomerMailLanguageChoice(t *testing.T) {
 		ListQuota:         quota,
 		ListValueTryMinor: 10000,
 		PayableTryMinor:   8500,
-		Currency:          model.HwOrderCurrency,
+		Currency:          model.HwCurrencyTRY,
 		DiscountKind:      model.HwDiscountReturning,
 		Language:          "tr",
 		Status:            model.HwOrderStatusPaid,
@@ -417,4 +418,72 @@ func TestHwAccountMails(t *testing.T) {
 		subject, _ := HwEmailVerificationMail("tr", "1", 15)
 		assert.Equal(t, "HisarWeb AI e-posta doğrulama", subject)
 	})
+}
+
+func TestHwMailFormatMoneyPerCurrency(t *testing.T) {
+	amount := decimal.RequireFromString("1234.5")
+	for _, tc := range []struct{ lang, currency, want string }{
+		{"tr", "TRY", "1.234,50 TL"},
+		{"en", "TRY", "1,234.50 TL"},
+		{"tr", "EUR", "1.234,50 €"},
+		{"en", "EUR", "€1,234.50"},
+		{"tr", "USD", "1.234,50 $"},
+		{"en", "USD", "$1,234.50"},
+	} {
+		assert.Equal(t, tc.want, hwMailFormatMoney(tc.lang, amount, tc.currency), tc.lang+" "+tc.currency)
+	}
+}
+
+// The mails write amounts in the currency of the last paid order and fall back
+// to the lira without an order or without a usable rate.
+func TestHwMailCurrencyFollowsTheLastPaidOrder(t *testing.T) {
+	hwMailTestSetup(t)
+	hwCurrencyTestOptions(t, map[string]string{
+		model.HwEurPerUsdOption:     "0.8",
+		model.HwEurPerUsdDateOption: time.Now().UTC().Format("2006-01-02"),
+	})
+	tryRate := decimal.NewFromInt(40)
+	buyer := hwMailTestUser(t, 0)
+	currency, rate := hwMailCurrency(buyer.Id, time.Now(), tryRate)
+	assert.Equal(t, model.HwCurrencyTRY, currency)
+	assert.True(t, rate.Equal(tryRate))
+
+	require.NoError(t, model.DB.Create(&model.HwOrder{
+		UserId: buyer.Id, MerchantRef: "mail-currency-eur", ListQuota: 1, ListValueTryMinor: 2000,
+		PayableTryMinor: 1000, Currency: model.HwCurrencyEUR, DiscountKind: model.HwDiscountReturning,
+		Language: "en", Status: model.HwOrderStatusPaid, CreatedAt: time.Now().Unix(),
+	}).Error)
+	currency, rate = hwMailCurrency(buyer.Id, time.Now(), tryRate)
+	assert.Equal(t, model.HwCurrencyEUR, currency)
+	assert.Equal(t, "0.8", rate.String())
+
+	// An EUR rate older than seven days: the lira again.
+	currency, rate = hwMailCurrency(buyer.Id, time.Now().Add(9*24*time.Hour), tryRate)
+	assert.Equal(t, model.HwCurrencyTRY, currency)
+	assert.True(t, rate.Equal(tryRate))
+}
+
+// The payment mail says who carries the costs and that the credit is complete;
+// the refund mail names the deducted costs and what goes back.
+func TestHwMailPaymentAndRefundSentences(t *testing.T) {
+	for _, lang := range []string{"tr", "en"} {
+		subject, content := hwMailPaymentContent(lang, "Ayşe <b>", "10,00 €", "$25.00", "https://example.test/satin-al")
+		assert.NotEmpty(t, subject)
+		assert.Contains(t, content, "HisarWeb")
+		assert.Contains(t, content, "10,00 €")
+		assert.Contains(t, content, "&lt;b&gt;", "the name is escaped")
+		assert.NotContains(t, content, "—")
+
+		_, content = hwMailRefundContent(lang, "Ayşe", "10,00 €", "0,59 €", "9,41 €", false)
+		assert.Contains(t, content, "0,59 €")
+		assert.Contains(t, content, "9,41 €")
+		_, content = hwMailRefundContent(lang, "Ayşe", "10,00 €", "10,05 €", "", true)
+		assert.Contains(t, content, "10,05 €")
+		assert.NotContains(t, content, "9,41")
+	}
+	_, english := hwMailPaymentContent("en", "Sam", "$10.00", "$20.00", "https://example.test")
+	assert.Contains(t, english, "carries the payment processing and currency conversion costs")
+	assert.Contains(t, english, "full credit")
+	_, turkish := hwMailRefundContent("tr", "Sam", "10,00 €", "0,59 €", "9,41 €", false)
+	assert.Contains(t, turkish, "iadeden düşülür")
 }

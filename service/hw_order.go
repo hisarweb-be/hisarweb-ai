@@ -20,13 +20,14 @@ import (
 
 // Defaults of the top-up settings, used while the operator has not overridden
 // them. HwTryPerUsdOption has no default: the daily rate job (part D) delivers
-// it, and without it the price of an order cannot be computed.
+// it, and without it the price of an order cannot be computed. The same holds
+// for HwEurPerUsdOption, which only EUR orders need.
 const (
 	hwDefaultMinTopUpTry   = 100
 	hwDefaultMaxTopUpTry   = 20000
 	hwDefaultMaxOpenOrders = 3
 
-	// hwMaxOrderMoneyMinor bounds an amount in kuruş well below the 64-bit range,
+	// hwMaxOrderMoneyMinor bounds an amount in minor units well below the 64-bit range,
 	// so a misconfigured rate can never overflow the payable amount.
 	hwMaxOrderMoneyMinor = 1_000_000_000_000
 )
@@ -40,11 +41,23 @@ var (
 )
 
 // HwTopUpRequest is the client request to start a purchase. Only the list value
-// in whole lira is taken from it; every amount that is charged or credited is
-// computed from our own pricing.
+// in whole units of the currency is taken from it; every amount that is charged
+// or credited is computed from our own pricing. PackageTry is the old name of
+// Amount (always lira) and is used when Amount is absent.
 type HwTopUpRequest struct {
+	Amount     int    `json:"amount"`
 	PackageTry int    `json:"package_try"`
+	Currency   string `json:"currency"`
 	Language   string `json:"language"`
+}
+
+// HwRequestAmount is the list value the request asks for, in whole units of its
+// currency.
+func HwRequestAmount(request HwTopUpRequest) int {
+	if request.Amount != 0 {
+		return request.Amount
+	}
+	return request.PackageTry
 }
 
 // HwTopUpOrder is what the client receives: our own order reference and the
@@ -52,16 +65,6 @@ type HwTopUpRequest struct {
 type HwTopUpOrder struct {
 	MerchantRef string `json:"merchant_ref"`
 	CheckoutURL string `json:"checkout_url"`
-}
-
-// HwTopUpRange returns the list-value bounds in whole lira.
-func HwTopUpRange() (minTry int, maxTry int) {
-	minTry = hwIntOption(model.HwMinTopUpTryOption, hwDefaultMinTopUpTry)
-	maxTry = hwIntOption(model.HwMaxTopUpTryOption, hwDefaultMaxTopUpTry)
-	if maxTry < minTry {
-		maxTry = minTry
-	}
-	return minTry, maxTry
 }
 
 func hwOption(key string) string {
@@ -82,11 +85,17 @@ func hwIntOption(key string, fallback int) int {
 	return parsed
 }
 
-// hwTryPerUsd reads the TRY price of one US dollar that part D publishes.
-func hwTryPerUsd() (decimal.Decimal, error) {
+// hwTryPerUsd reads the TRY price of one US dollar that part D publishes. A
+// rate that carries a date must not be in the future nor older than
+// hwRateMaxAgeDays; an older or future-dated rate counts as missing. A rate
+// without a date (set by hand) has no age to check.
+func hwTryPerUsd(now time.Time) (decimal.Decimal, error) {
 	value := hwOption(model.HwTryPerUsdOption)
 	rate, err := decimal.NewFromString(value)
 	if err != nil || !rate.IsPositive() {
+		return decimal.Decimal{}, ErrHwTopUpRateMissing
+	}
+	if !hwRateDateUsable(hwOption(HwOptionTryPerUsdDate), now, false) {
 		return decimal.Decimal{}, ErrHwTopUpRateMissing
 	}
 	return rate, nil
@@ -100,11 +109,27 @@ func HwCreateTopUpOrder(ctx context.Context, userID int, request HwTopUpRequest,
 	if userID <= 0 {
 		return HwTopUpOrder{}, model.ErrHwInvalidOrder
 	}
-	minTry, maxTry := HwTopUpRange()
-	if request.PackageTry < minTry || request.PackageTry > maxTry {
+	currency := HwRequestCurrency(request)
+	if !model.HwOrderCurrencyAllowed(currency) {
+		return HwTopUpOrder{}, ErrHwCurrencyUnsupported
+	}
+	rate, err := hwCurrencyRate(currency, now)
+	if err != nil {
+		return HwTopUpOrder{}, err
+	}
+	minAmount, maxAmount, err := HwTopUpRange(currency, now)
+	if err != nil {
+		return HwTopUpOrder{}, err
+	}
+	amount := HwRequestAmount(request)
+	if amount < minAmount || amount > maxAmount {
 		return HwTopUpOrder{}, ErrHwTopUpAmountOutOfRange
 	}
-	rate, err := hwTryPerUsd()
+	// Revolut only takes lira. Refuse before anything is claimed or stored.
+	if currency != model.HwCurrencyTRY && !HwStripePaymentAvailable() {
+		return HwTopUpOrder{}, ErrHwPaymentProviderUnavailable
+	}
+	discountCap, err := hwDiscountCap(currency, rate, now)
 	if err != nil {
 		return HwTopUpOrder{}, err
 	}
@@ -126,7 +151,7 @@ func HwCreateTopUpOrder(ctx context.Context, userID int, request HwTopUpRequest,
 		return HwTopUpOrder{}, model.ErrHwInvalidOrder
 	}
 
-	listValue := decimal.NewFromInt(int64(request.PackageTry))
+	listValue := decimal.NewFromInt(int64(amount))
 	merchantRef := "hw-" + uuid.NewString()
 	// Two questions decide the discount. HwIsFirstPaidPurchase says whether this
 	// customer ever paid; the claim says whether the discount is still available
@@ -148,7 +173,7 @@ func HwCreateTopUpOrder(ctx context.Context, userID int, request HwTopUpRequest,
 			common.SysError(common.LogText("could not release the first-purchase claim of order %s (class %s)", merchantRef, hwPaymentErrorClass(err)))
 		}
 	}
-	quote, err := model.HwComputePurchase(listValue, firstPurchase)
+	quote, err := model.HwComputePurchase(listValue, firstPurchase, discountCap)
 	if err != nil {
 		releaseClaim()
 		return HwTopUpOrder{}, err
@@ -158,7 +183,7 @@ func HwCreateTopUpOrder(ctx context.Context, userID int, request HwTopUpRequest,
 		releaseClaim()
 		return HwTopUpOrder{}, ErrHwTopUpAmountOutOfRange
 	}
-	payableMinor := quote.PayableTRY.Mul(decimal.NewFromInt(100)).Round(0)
+	payableMinor := quote.Payable.Mul(decimal.NewFromInt(100)).Round(0)
 	if !payableMinor.IsPositive() || payableMinor.GreaterThan(decimal.NewFromInt(hwMaxOrderMoneyMinor)) {
 		releaseClaim()
 		return HwTopUpOrder{}, ErrHwTopUpAmountOutOfRange
@@ -172,9 +197,9 @@ func HwCreateTopUpOrder(ctx context.Context, userID int, request HwTopUpRequest,
 		UserId:            userID,
 		MerchantRef:       merchantRef,
 		ListQuota:         listQuota,
-		ListValueTryMinor: int64(request.PackageTry) * 100,
+		ListValueTryMinor: int64(amount) * 100,
 		PayableTryMinor:   payableMinor.IntPart(),
-		Currency:          model.HwOrderCurrency,
+		Currency:          currency,
 		DiscountKind:      discountKind,
 		Language:          hwLanguageTag(request.Language),
 		Status:            model.HwOrderStatusCreated,
@@ -214,13 +239,18 @@ func hwCreateProviderCheckout(ctx context.Context, order *model.HwOrder, email, 
 		}
 		return config.CreateCheckout(ctx, order, email, language, hwCheckoutReturnURL())
 	}
+	// Revolut is only configured for lira: an order in another currency never
+	// reaches it.
+	if order.Currency != model.HwCurrencyTRY {
+		return hwRevolutOrderResponse{}, ErrHwPaymentProviderUnavailable
+	}
 	config, err := HwRevolutConfigFromEnv()
 	if err != nil {
 		return hwRevolutOrderResponse{}, err
 	}
 	return config.CreateOrder(ctx, hwRevolutOrderRequest{
 		Amount:            order.PayableTryMinor,
-		Currency:          model.HwOrderCurrency,
+		Currency:          order.Currency,
 		Description:       hwTopUpDescription(language),
 		MerchantOrderData: &hwRevolutMerchantOrderData{Reference: order.MerchantRef},
 		Customer:          &hwRevolutCustomer{Email: strings.TrimSpace(email)},
@@ -651,12 +681,22 @@ type HwAdminRefundResult struct {
 	SpentQuota int
 	// Note is the admin note stored on the order.
 	Note string
+	// Currency, FeeMinor and RefundedMinor describe the card part of a Stripe
+	// order in minor units of the order currency: the costs HisarWeb paid for the
+	// payment that were deducted, and what went back to the card. Orders of other
+	// providers are refunded outside this system and report zero.
+	Currency      string
+	FeeMinor      int64
+	RefundedMinor int64
 }
 
 // HwAdminRefundOrder takes back the credit of one paid order: the purchase
 // package is retired with its remaining value, the balance is lowered by that
 // remainder (never below zero), the affiliate reward of the purchase is revoked,
 // and the order moves to refunded with an admin note naming what stayed owed.
+// For a card order the costs HisarWeb paid to Stripe (processing and currency
+// conversion) are deducted from the money that goes back; the fee is read first,
+// and when it cannot be read nothing changes and the refund can be repeated.
 // Calling it again for the same order changes nothing.
 func HwAdminRefundOrder(merchantRef string, now time.Time) (HwAdminRefundResult, error) {
 	merchantRef = strings.TrimSpace(merchantRef)
@@ -676,6 +716,20 @@ func HwAdminRefundOrder(merchantRef string, now time.Time) (HwAdminRefundResult,
 	if !alreadyRefunded && order.Status != model.HwOrderStatusPaid {
 		return result, ErrHwOrderNotRefundable
 	}
+	// The card part is planned before anything changes, so an unreadable fee
+	// leaves the order and the balance untouched and never turns into a full refund.
+	plan, hasPlan, err := hwPlanProviderRefund(order)
+	if err != nil {
+		return result, err
+	}
+	result.Currency = order.Currency
+	if hasPlan {
+		result.FeeMinor = plan.FeeMinor
+		result.RefundedMinor = plan.RefundMinor
+		if plan.AlreadyRefundedMinor > 0 {
+			result.RefundedMinor = plan.AlreadyRefundedMinor
+		}
+	}
 	revocation, err := model.HwRevokeOrderCredit(merchantRef, now.Unix())
 	if err != nil {
 		return result, err
@@ -687,7 +741,7 @@ func HwAdminRefundOrder(merchantRef string, now time.Time) (HwAdminRefundResult,
 		result.Note = order.AdminNote
 		// A card refund that failed on the first call is retried here; Stripe's
 		// idempotency key makes a repeat of one that went through harmless.
-		return result, hwRefundAtProvider(order, now)
+		return result, hwRefundAtProvider(order, plan, hasPlan)
 	}
 	if err := model.HwRevokeAffiliateReward(merchantRef, now.Unix()); err != nil {
 		common.SysError(common.LogText("could not revoke the affiliate reward of order %s (class %s)", merchantRef, hwPaymentErrorClass(err)))
@@ -695,37 +749,77 @@ func HwAdminRefundOrder(merchantRef string, now time.Time) (HwAdminRefundResult,
 	}
 	result.Note = fmt.Sprintf("refund: granted %d quota, returned %d quota, %d quota already spent stays owed",
 		result.GrantedQuota, result.ReturnedQuota, result.SpentQuota)
+	if hasPlan {
+		result.Note += fmt.Sprintf("; card: paid %d, provider costs deducted %d, refunded %d (%s, minor units)",
+			plan.PaidMinor, plan.FeeMinor, result.RefundedMinor, plan.Currency)
+		if plan.RefundMinor <= 0 && plan.AlreadyRefundedMinor <= 0 {
+			result.Note += "; no card refund: the costs are as high as the payment"
+		}
+	}
 	changed, err := model.HwMarkOrderRefunded(merchantRef, result.Note, now.Unix())
 	if err != nil {
 		return result, err
 	}
 	result.Refunded = changed
 	common.SysLog(common.LogText("admin refund took back order %s: %d of %d quota returned", merchantRef, result.ReturnedQuota, result.GrantedQuota))
-	return result, hwRefundAtProvider(order, now)
+	return result, hwRefundAtProvider(order, plan, hasPlan)
 }
 
 // ErrHwProviderRefundFailed: the credit was taken back but the money could not
 // be returned to the card yet; repeating the refund retries only that part.
 var ErrHwProviderRefundFailed = errors.New("credit was taken back but the card refund failed")
 
-// hwRefundAtProvider returns the money of a Stripe order to the card. Orders of
-// other providers are refunded outside this system, as before. The credit is
-// taken back first, so a failure here never leaves the customer with both.
-func hwRefundAtProvider(order *model.HwOrder, now time.Time) error {
-	if order.RevolutOrderId == nil || !strings.HasPrefix(strings.TrimSpace(*order.RevolutOrderId), hwStripeSessionPrefix) {
+// hwStripeOrderSession is the Checkout Session id of a Stripe order, or false
+// for orders of other providers.
+func hwStripeOrderSession(order *model.HwOrder) (string, bool) {
+	if order.RevolutOrderId == nil {
+		return "", false
+	}
+	sessionID := strings.TrimSpace(*order.RevolutOrderId)
+	return sessionID, strings.HasPrefix(sessionID, hwStripeSessionPrefix)
+}
+
+// hwPlanProviderRefund works out the card refund of a Stripe order. Orders of
+// other providers are refunded outside this system, as before. Any failure
+// reads as ErrHwRefundFeeUnavailable: nothing was changed yet and the refund can
+// be repeated.
+func hwPlanProviderRefund(order *model.HwOrder) (HwStripeRefundPlan, bool, error) {
+	sessionID, ok := hwStripeOrderSession(order)
+	if !ok {
+		return HwStripeRefundPlan{}, false, nil
+	}
+	config, err := HwStripeConfigFromEnv()
+	var plan HwStripeRefundPlan
+	if err == nil {
+		ctx, cancel := context.WithTimeout(context.Background(), hwRevolutRequestTimeout)
+		defer cancel()
+		plan, err = config.PlanRefund(ctx, sessionID, order)
+	}
+	if err != nil {
+		common.SysError(common.LogText("could not read the provider cost of order %s, refund not started (class %s)", order.MerchantRef, hwPaymentErrorClass(err)))
+		return HwStripeRefundPlan{}, false, ErrHwRefundFeeUnavailable
+	}
+	return plan, true, nil
+}
+
+// hwRefundAtProvider returns the planned money of a Stripe order to the card.
+// The credit is taken back first, so a failure here never leaves the customer
+// with both.
+func hwRefundAtProvider(order *model.HwOrder, plan HwStripeRefundPlan, hasPlan bool) error {
+	if !hasPlan {
 		return nil
 	}
 	config, err := HwStripeConfigFromEnv()
 	if err == nil {
 		ctx, cancel := context.WithTimeout(context.Background(), hwRevolutRequestTimeout)
 		defer cancel()
-		err = config.Refund(ctx, strings.TrimSpace(*order.RevolutOrderId), order.MerchantRef)
+		err = config.Refund(ctx, order.MerchantRef, plan)
 	}
 	if err != nil {
 		common.SysError(common.LogText("card refund of order %s failed (class %s)", order.MerchantRef, hwPaymentErrorClass(err)))
 		return ErrHwProviderRefundFailed
 	}
-	common.SysLog(common.LogText("card refund of order %s sent to the provider", order.MerchantRef))
+	common.SysLog(common.LogText("card refund of order %s handled with the provider", order.MerchantRef))
 	return nil
 }
 

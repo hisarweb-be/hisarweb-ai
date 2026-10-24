@@ -56,6 +56,9 @@ func InitOptionMap() {
 	common.OptionMap["DrawingEnabled"] = strconv.FormatBool(common.DrawingEnabled)
 	common.OptionMap["TaskEnabled"] = strconv.FormatBool(common.TaskEnabled)
 	common.OptionMap[HwTryPerUsdOption] = ""
+	common.OptionMap[HwEurPerUsdOption] = ""
+	common.OptionMap[HwEurPerUsdDateOption] = ""
+	common.OptionMap[HwEurPresetBaseOption] = ""
 	common.OptionMap[HwMinTopUpTryOption] = "100"
 	common.OptionMap[HwMaxTopUpTryOption] = "20000"
 	common.OptionMap[HwMaxOpenOrdersOption] = "3"

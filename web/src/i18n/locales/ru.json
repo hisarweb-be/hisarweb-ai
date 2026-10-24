@@ -3205,6 +3205,8 @@
     "Includes request rules": "Включает правила запросов",
     "Invalid provider ID": "Недопустимый ID поставщика",
     "Invalid request": "Недопустимый запрос",
+    "Top-up value must be between {{min}} {{currency}} and {{max}} {{currency}}": "Сумма пополнения должна быть от {{min}} {{currency}} до {{max}} {{currency}}",
+    "The payment provider's cost for this order is not available yet; nothing was changed, repeat the refund later": "Комиссия платёжного провайдера по этому заказу пока недоступна; ничего не изменено, повторите возврат позже",
     "Invalid request body.": "Недопустимое тело запроса.",
     "Invalid request parameter format": "Неверный формат параметров запроса",
     "Invalid request parameters: {{error}}": "Недопустимые параметры запроса: {{error}}",
@@ -7334,6 +7336,9 @@
     "HisarWeb AI is based on New API (AGPL-3.0) by QuantumNous.": "HisarWeb AI основан на New API (AGPL-3.0) от QuantumNous.",
     "Bot token": "Bot token",
     "Telegram bot token from BotFather": "Telegram bot token from BotFather",
-    "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.": "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit."
+    "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.": "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.",
+    "HisarWeb pays the payment and currency conversion costs. You get the full credit for what you pay, with no surcharge or deduction.": "HisarWeb оплачивает расходы на платёж и конвертацию валюты. Вы получаете полный кредит на сумму оплаты, без наценок и удержаний.",
+    "Costs and refunds": "Расходы и возвраты",
+    "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.": "При возврате расходы на обработку платежа и конвертацию валюты, которые оплатил HisarWeb, вычитаются из возвращаемой суммы."
   }
 }

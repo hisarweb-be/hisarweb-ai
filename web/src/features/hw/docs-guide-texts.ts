@@ -25,14 +25,14 @@ For commercial licensing, please contact support@quantumnous.com
  */
 import { useTranslation } from 'react-i18next'
 
-import { fillHwText, pickHwLanguage, type HwTextVars } from './texts'
+import { pickHwLanguage, useHwCurrencyText, type HwTextVars } from './texts'
 
 const tr = {
   whatTitle: 'HisarWeb AI nedir?',
   whatBody:
-    'HisarWeb AI, Claude ve GPT gibi yapay zekâ modellerini tek bir yerden, TL ile ve kredi kartı olmadan kullanmanızı sağlar. Bir hesap açarsınız, bir anahtar oluşturursunuz ve modeli kendi araçlarınızda, örneğin Claude Code’da, kullanırsınız. Kod bilmeniz gerekmez.',
+    'HisarWeb AI, Claude ve GPT gibi yapay zekâ modellerini tek bir yerden, {currencyName} ile ve kredi kartı olmadan kullanmanızı sağlar. Bir hesap açarsınız, bir anahtar oluşturursunuz ve modeli kendi araçlarınızda, örneğin Claude Code’da, kullanırsınız. Kod bilmeniz gerekmez.',
   whatFree:
-    'Yeni hesaplar 250 TL başlangıç bonusu alır; bonus 14 gün geçerlidir. Aşağıdaki adımlarla ilk yanıtınızı birkaç dakikada görürsünüz.',
+    'Yeni hesaplar {bonus} başlangıç bonusu alır; bonus 14 gün geçerlidir. Aşağıdaki adımlarla ilk yanıtınızı birkaç dakikada görürsünüz.',
 
   videoTitle: 'Video rehber',
   videoBody:
@@ -47,9 +47,9 @@ const tr = {
     'Sağ üstteki “Deneme hesabı aç” düğmesine basın. Bir kullanıcı adı ve en az 8 karakterlik bir parola seçin, sözleşmeyi onaylayın ve “Hesap oluştur” düğmesine basın.',
   step1Alt: 'Hesap oluşturma formu: kullanıcı adı, parola ve onay kutusu',
 
-  step2Title: '250 TL başlangıç bonusunu alın',
+  step2Title: '{bonus} başlangıç bonusunu alın',
   step2Body:
-    'Giriş yaptığınızda Genel Bakış sayfasının en üstünde “250 TL başlangıç bonusunuzu alın” kartı görünür ve hangi adımın kaldığını yazar: e-posta adresinizi ekleyin ve onaylayın, Telegram hesabınızı bağlayın, telefon numaranızı HisarWeb botuyla paylaşın. Son adım bitince bakiyeniz 250 TL olarak görünür. Doğrulama henüz açık değilse kart bunu açıkça yazar; o zaman bakiyeyi “Satın al” sayfasından yükleyebilirsiniz.',
+    'Giriş yaptığınızda Genel Bakış sayfasının en üstünde “{bonus} başlangıç bonusunuzu alın” kartı görünür ve hangi adımın kaldığını yazar: e-posta adresinizi ekleyin ve onaylayın, Telegram hesabınızı bağlayın, telefon numaranızı HisarWeb botuyla paylaşın. Son adım bitince bakiyeniz {bonus} olarak görünür. Doğrulama henüz açık değilse kart bunu açıkça yazar; o zaman bakiyeyi “Satın al” sayfasından yükleyebilirsiniz.',
   step2Alt: 'Genel Bakış sayfasında başlangıç bonusu kartı ve üç adım',
 
   step3Title: 'API anahtarı oluşturun',
@@ -62,7 +62,7 @@ const tr = {
 
   step4Title: 'Bakiye yükleyin (isteğe bağlı)',
   step4Body:
-    'Başlangıç bonusu bittiğinde soldaki menüden “Satın al” sayfasını açın. Ödeme TL ile yapılır. Token fiyatları her zaman resmî fiyatın yarısıdır; ilk alışverişte 1000 TL değerine kadar ayrıca %50 hoş geldin indirimi vardır. Yüklediğiniz bakiye 30 gün geçerlidir; aylık abonelik ücreti yoktur.',
+    'Başlangıç bonusu bittiğinde soldaki menüden “Satın al” sayfasını açın. Ödeme {currencyName} ile yapılır. Token fiyatları her zaman resmî fiyatın yarısıdır; ilk alışverişte {firstCap} değerine kadar ayrıca %50 hoş geldin indirimi vardır. Yüklediğiniz bakiye 30 gün geçerlidir; aylık abonelik ücreti yoktur.',
   step4Link: 'Satın al sayfasına git',
 
   step5Title: 'Playground’da deneyin',
@@ -81,9 +81,9 @@ const tr = {
 const en: typeof tr = {
   whatTitle: 'What is HisarWeb AI?',
   whatBody:
-    'HisarWeb AI lets you use AI models such as Claude and GPT from one place, paying in Turkish lira and without a credit card. You open an account, create a key and use the model in your own tools, for example Claude Code. You do not need to know how to code.',
+    'HisarWeb AI lets you use AI models such as Claude and GPT from one place, paying in {currencyLong} and without a credit card. You open an account, create a key and use the model in your own tools, for example Claude Code. You do not need to know how to code.',
   whatFree:
-    'New accounts receive a 250 TL start bonus, valid for 14 days. The steps below take you to your first answer in a few minutes.',
+    'New accounts receive a {bonus} start bonus, valid for 14 days. The steps below take you to your first answer in a few minutes.',
 
   videoTitle: 'Video guide',
   videoBody:
@@ -98,9 +98,9 @@ const en: typeof tr = {
     'Press “Open a trial account” at the top right. Choose a username and a password of at least 8 characters, accept the agreement and press “Create account”.',
   step1Alt: 'Sign-up form with username, password and the agreement checkbox',
 
-  step2Title: 'Claim your 250 TL start bonus',
+  step2Title: 'Claim your {bonus} start bonus',
   step2Body:
-    'After you sign in, the top of the Overview page shows a “Claim your 250 TL start bonus” card that names the step still open: add and confirm your email address, connect your Telegram account, share your phone number with the HisarWeb bot. When the last step is done your balance shows 250 TL. If verification is not open yet, the card says so plainly; then you can add balance on the “Buy” page.',
+    'After you sign in, the top of the Overview page shows a “Claim your {bonus} start bonus” card that names the step still open: add and confirm your email address, connect your Telegram account, share your phone number with the HisarWeb bot. When the last step is done your balance shows {bonus}. If verification is not open yet, the card says so plainly; then you can add balance on the “Buy” page.',
   step2Alt: 'Overview page with the start bonus card and its three steps',
 
   step3Title: 'Create an API key',
@@ -113,7 +113,7 @@ const en: typeof tr = {
 
   step4Title: 'Add credit (optional)',
   step4Body:
-    'When the start bonus is used up, open “Buy” in the left menu. You pay in Turkish lira. Token prices are always half the official price, and your first purchase gets an extra 50% welcome discount on up to 1000 TL. Credit stays valid for 30 days; there is no monthly fee.',
+    'When the start bonus is used up, open “Buy” in the left menu. You pay in {currencyLong}. Token prices are always half the official price, and your first purchase gets an extra 50% welcome discount on up to {firstCap}. Credit stays valid for 30 days; there is no monthly fee.',
   step4Link: 'Go to the buy page',
 
   step5Title: 'Try it in the Playground',
@@ -133,16 +133,12 @@ export type DocsGuideTextKey = keyof typeof tr
 
 const dictionaries = { tr, en }
 
-function useDictionary() {
-  const { i18n } = useTranslation()
-  return dictionaries[pickHwLanguage(i18n.resolvedLanguage ?? i18n.language)]
-}
-
 /** Returns one guide text of the active interface language. */
 export function useDocsGuideText(): (
   key: DocsGuideTextKey,
   vars?: HwTextVars
 ) => string {
-  const dictionary = useDictionary()
-  return (key, vars) => fillHwText(dictionary[key], vars)
+  const { i18n } = useTranslation()
+  const language = pickHwLanguage(i18n.resolvedLanguage ?? i18n.language)
+  return useHwCurrencyText(dictionaries[language], language)
 }

@@ -4,7 +4,8 @@
 // every mail: the sender is HisarWeb AI, the greeting is "Merhaba <naam>," or
 // "Hello <name>,", no supplier of a model may be named, and the tone stays
 // plain (no emoji, no dash in the middle of a sentence). The amounts arrive
-// already converted to lira: the templates do no pricing themselves.
+// already converted to the currency of the customer: the templates do no
+// pricing themselves.
 package service
 
 import (
@@ -42,10 +43,11 @@ var hwMailMonths = map[string][12]string{
 	},
 }
 
-// hwMailFormatTry renders a lira amount the way the language writes numbers:
-// two decimals, a thousands separator and a decimal mark of its own, then the
-// currency.
-func hwMailFormatTry(lang string, amount decimal.Decimal) string {
+// hwMailFormatMoney renders an amount the way the language writes numbers: two
+// decimals, a thousands separator and a decimal mark of its own, and the
+// currency: "TL" after a lira amount, the symbol after a EUR or USD amount in
+// Turkish and before it in English.
+func hwMailFormatMoney(lang string, amount decimal.Decimal, currency string) string {
 	thousands, decimalMark := ".", ","
 	if lang == hwLanguageEnglish {
 		thousands, decimalMark = ",", "."
@@ -67,8 +69,20 @@ func hwMailFormatTry(lang string, amount decimal.Decimal) string {
 	}
 	grouped.WriteString(decimalMark)
 	grouped.WriteString(fraction[:2])
-	grouped.WriteString(" TL")
-	return grouped.String()
+	symbol := ""
+	switch currency {
+	case "EUR":
+		symbol = "€"
+	case "USD":
+		symbol = "$"
+	default:
+		grouped.WriteString(" TL")
+		return grouped.String()
+	}
+	if lang == hwLanguageEnglish {
+		return symbol + grouped.String()
+	}
+	return grouped.String() + " " + symbol
 }
 
 // hwMailFormatDate writes a date as the language writes it: "5 Kasım 2026" or
@@ -137,5 +151,66 @@ func hwMailLowBalanceContent(lang string, name string, balance string, threshold
 			"<a href=\"%s\">%s</a> adresinden yeni bir paket alabilirsiniz.</p>"+
 			"<p>%s</p>",
 		name, balance, threshold, link, link, hwMailSiteName)
+	return subject, content
+}
+
+// hwMailPaymentContent is the payment confirmation: what was paid, the credit
+// that was added and the sentence that HisarWeb carries the processing and
+// currency conversion costs, so the full credit is added. Values arrive rendered.
+func hwMailPaymentContent(lang string, name string, paid string, credit string, link string) (subject string, content string) {
+	name = html.EscapeString(name)
+	link = html.EscapeString(link)
+	if lang == hwLanguageEnglish {
+		subject = hwMailSiteName + ": payment received"
+		content = fmt.Sprintf(
+			"<p>Hello %s,</p>"+
+				"<p>We received your payment of %s. %s of credit has been added to your account.</p>"+
+				"<p>HisarWeb carries the payment processing and currency conversion costs, so you get the full credit for what you paid.</p>"+
+				"<p>You can see your balance at <a href=\"%s\">%s</a></p>"+
+				"<p>%s</p>",
+			name, paid, credit, link, link, hwMailSiteName)
+		return subject, content
+	}
+	subject = hwMailSiteName + ": ödemeniz alındı"
+	content = fmt.Sprintf(
+		"<p>Merhaba %s,</p>"+
+			"<p>%s tutarındaki ödemenizi aldık. Hesabınıza %s kredi eklendi.</p>"+
+			"<p>Ödeme işleme ve para birimi çevirme masraflarını HisarWeb karşılar; ödediğiniz tutarın kredisinin tamamını alırsınız.</p>"+
+			"<p>Bakiyenizi <a href=\"%s\">%s</a> adresinde görebilirsiniz.</p>"+
+			"<p>%s</p>",
+		name, paid, credit, link, link, hwMailSiteName)
+	return subject, content
+}
+
+// hwMailRefundContent is the refund mail: what was paid, the costs HisarWeb
+// itself paid for the payment that are deducted, and what goes back to the card.
+// A refund of nothing says that no card refund follows.
+func hwMailRefundContent(lang string, name string, paid string, fee string, refunded string, nothingBack bool) (subject string, content string) {
+	name = html.EscapeString(name)
+	if lang == hwLanguageEnglish {
+		subject = hwMailSiteName + ": your refund"
+		outcome := fmt.Sprintf("%s goes back to your card.", refunded)
+		if nothingBack {
+			outcome = "No money goes back to your card because these costs are as high as the payment."
+		}
+		content = fmt.Sprintf(
+			"<p>Hello %s,</p>"+
+				"<p>Your payment of %s has been refunded and the credit of that purchase has been taken back.</p>"+
+				"<p>The payment processing and currency conversion costs that HisarWeb itself paid for this payment, %s, are deducted from the refund. %s</p>"+
+				"<p>%s</p>",
+			name, paid, fee, outcome, hwMailSiteName)
+		return subject, content
+	}
+	subject = hwMailSiteName + ": iadeniz"
+	outcome := fmt.Sprintf("Kartınıza %s iade edilir.", refunded)
+	if nothingBack {
+		outcome = "Bu masraflar ödemenin tutarına eşit olduğu için kartınıza iade yapılmaz."
+	}
+	content = fmt.Sprintf(
+		"<p>Merhaba %s,</p>"+
+			"<p>%s tutarındaki ödemeniz iade edildi ve bu alışverişin kredisi geri alındı.</p>"+
+			"<p>HisarWeb'in bu ödeme için kendisinin ödediği ödeme işleme ve para birimi çevirme masrafları olan %s, iadeden düşülür. %s</p>"+
+			"<p>%s</p>",
+		name, paid, fee, outcome, hwMailSiteName)
 	return subject, content
 }

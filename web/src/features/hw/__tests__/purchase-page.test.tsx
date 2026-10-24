@@ -37,7 +37,8 @@ import i18next from 'i18next'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PurchasePage } from '../components/purchase-page'
-import { hwTexts } from '../texts'
+import { hwCurrencyTextVars } from '../lib/currency-text'
+import { fillHwText, hwTexts } from '../texts'
 import type { HwCreditPackages } from '../types'
 
 const { get, post, assign, getStatus } = vi.hoisted(() => ({
@@ -61,7 +62,11 @@ vi.mock('@/features/hw/lib/checkout', async (importOriginal) => {
   return { ...actual, openCheckout: assign }
 })
 
-const tr = hwTexts.tr
+// The page fills the currency placeholders ({bonus}, {currencyName}); so do the expectations.
+const trVars = hwCurrencyTextVars('TRY', {}, 'tr')
+const tr = Object.fromEntries(
+  Object.entries(hwTexts.tr).map(([key, text]) => [key, fillHwText(text, trVars)])
+) as typeof hwTexts.tr
 
 const packagesAnswer: HwCreditPackages = {
   packages: [
@@ -143,6 +148,10 @@ describe('top-up page', () => {
     expect(screen.getByText(tr.topUpPageTitle)).toBeInTheDocument()
     expect(screen.getByText(tr.topUpTitle)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: tr.topUpSubmit })).toBeEnabled()
+    // Costs are HisarWeb's: the page says so, and shows no surcharge anywhere.
+    expect(
+      screen.getAllByText(/full credit for what you pay/).length
+    ).toBeGreaterThan(0)
 
     await screen.findByText(tr.topUpPackagesTitle)
     const line = await screen.findByText(
@@ -172,7 +181,8 @@ describe('top-up page', () => {
 
     await waitFor(() =>
       expect(post).toHaveBeenCalledWith('/api/user/hw/orders', {
-        package_try: 500,
+        amount: 500,
+        currency: 'TRY',
         language: 'tr',
       })
     )

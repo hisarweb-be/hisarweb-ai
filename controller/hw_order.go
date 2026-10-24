@@ -20,8 +20,9 @@ import (
 const hwRevolutWebhookMaxBodyBytes = 1 << 20
 
 // HwCreateTopUpOrder starts a top-up purchase for the logged-in user. The
-// request only names the list value in whole lira; the amount that is charged
-// and the credit that follows are computed server-side.
+// request only names the list value in whole units of one currency (TRY, EUR or
+// USD); the amount that is charged and the credit that follows are computed
+// server-side.
 func HwCreateTopUpOrder(c *gin.Context) {
 	var request service.HwTopUpRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -31,7 +32,7 @@ func HwCreateTopUpOrder(c *gin.Context) {
 	userID := c.GetInt("id")
 	order, err := service.HwCreateTopUpOrder(c.Request.Context(), userID, request, time.Now())
 	if err != nil {
-		hwTopUpOrderError(c, err)
+		hwTopUpOrderError(c, err, service.HwRequestCurrency(request))
 		return
 	}
 	common.ApiSuccess(c, gin.H{
@@ -40,13 +41,20 @@ func HwCreateTopUpOrder(c *gin.Context) {
 	})
 }
 
-func hwTopUpOrderError(c *gin.Context, err error) {
+func hwTopUpOrderError(c *gin.Context, err error, currency string) {
 	switch {
+	case errors.Is(err, service.ErrHwCurrencyUnsupported):
+		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid request"))
 	case errors.Is(err, service.ErrHwTopUpAmountOutOfRange):
-		minTry, maxTry := service.HwTopUpRange()
-		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Top-up value must be between {{min}} TL and {{max}} TL", map[string]any{
-			"min": minTry,
-			"max": maxTry,
+		minAmount, maxAmount, rangeErr := service.HwTopUpRange(currency, time.Now())
+		if rangeErr != nil {
+			common.ApiErrorStatus(c, http.StatusServiceUnavailable, common.NewMessage("Top-up is not available right now"))
+			return
+		}
+		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Top-up value must be between {{min}} {{currency}} and {{max}} {{currency}}", map[string]any{
+			"min":      minAmount,
+			"max":      maxAmount,
+			"currency": currency,
 		}))
 	case errors.Is(err, service.ErrHwTooManyOpenOrders):
 		common.ApiErrorStatus(c, http.StatusConflict, common.NewMessage("You already have an order waiting for payment; finish or wait for it to expire before starting another"))
@@ -110,6 +118,10 @@ func HwAdminRefundOrder(c *gin.Context) {
 			common.ApiErrorStatus(c, http.StatusNotFound, common.NewMessage("Order not found"))
 		case errors.Is(err, service.ErrHwOrderNotRefundable), errors.Is(err, model.ErrHwInvalidOrder):
 			common.ApiErrorStatus(c, http.StatusConflict, common.NewMessage("Order is not in a refundable state"))
+		case errors.Is(err, service.ErrHwRefundFeeUnavailable):
+			// Nothing was changed: the cost of the payment is not booked yet (or
+			// cannot be read), so the refund can simply be repeated later.
+			common.ApiErrorStatus(c, http.StatusServiceUnavailable, common.NewMessage("The payment provider's cost for this order is not available yet; nothing was changed, repeat the refund later"))
 		case errors.Is(err, service.ErrHwProviderRefundFailed):
 			common.ApiErrorStatus(c, http.StatusBadGateway, common.NewMessage("The credit was taken back but the card refund failed; repeat the refund to retry it"))
 		default:
@@ -126,5 +138,8 @@ func HwAdminRefundOrder(c *gin.Context) {
 		"returned_quota": result.ReturnedQuota,
 		"spent_quota":    result.SpentQuota,
 		"note":           result.Note,
+		"currency":       result.Currency,
+		"fee_minor":      result.FeeMinor,
+		"refunded_minor": result.RefundedMinor,
 	})
 }

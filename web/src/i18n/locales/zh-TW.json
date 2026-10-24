@@ -3205,6 +3205,8 @@
     "Includes request rules": "包含請求規則",
     "Invalid provider ID": "無效的供應商 ID",
     "Invalid request": "無效的請求",
+    "Top-up value must be between {{min}} {{currency}} and {{max}} {{currency}}": "儲值金額必須介於 {{min}} {{currency}} 與 {{max}} {{currency}} 之間",
+    "The payment provider's cost for this order is not available yet; nothing was changed, repeat the refund later": "支付服務商對此訂單的費用尚不可用；未做任何變更，請稍後重試退款",
     "Invalid request body.": "無效的請求內容。",
     "Invalid request parameter format": "請求參數格式錯誤",
     "Invalid request parameters: {{error}}": "無效的請求參數: {{error}}",
@@ -7334,6 +7336,9 @@
     "HisarWeb AI is based on New API (AGPL-3.0) by QuantumNous.": "HisarWeb AI 基於 QuantumNous 的 New API（AGPL-3.0）。",
     "Bot token": "Bot token",
     "Telegram bot token from BotFather": "Telegram bot token from BotFather",
-    "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.": "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit."
+    "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.": "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.",
+    "HisarWeb pays the payment and currency conversion costs. You get the full credit for what you pay, with no surcharge or deduction.": "支付與貨幣兌換費用由 HisarWeb 負擔。您支付多少，就獲得等額的完整額度，沒有額外費用，也不會被扣除。",
+    "Costs and refunds": "費用與退款",
+    "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.": "退款時，HisarWeb 已支付的支付處理與貨幣兌換費用將從退款金額中扣除。"
   }
 }

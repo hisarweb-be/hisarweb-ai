@@ -48,6 +48,8 @@ import {
   type ModelPrice,
   type TokenPrice,
 } from '../data/model-prices'
+import { useHwCurrency } from '../hooks/use-hw-currency'
+import { HW_CURRENCY_SYMBOLS, type HwCurrency } from '../lib/currency'
 import { usePriceTableText } from '../price-table-texts'
 
 type PriceTableProps = {
@@ -57,12 +59,15 @@ type PriceTableProps = {
 
 type Translate = ReturnType<typeof usePriceTableText>
 
+/** The second price line under the USD price: the chosen currency and its rate. */
+type SecondaryPrice = { currency: HwCurrency; rate: number } | null
+
 // The model name stays in view while a phone scrolls sideways to the savings.
 const STICKY_MODEL = 'bg-background sticky left-0 z-10 border-r'
 
 function formatMoney(
   value: number,
-  currency: 'TRY' | 'USD',
+  currency: HwCurrency,
   locale: string | undefined
 ): string {
   return new Intl.NumberFormat(locale, {
@@ -81,10 +86,10 @@ function formatPercent(fraction: number, locale: string | undefined): string {
   }).format(fraction)
 }
 
-/** One amount in dollars and in lira; a missing price stays a dash. */
+/** One amount in dollars and in the chosen currency; a missing price stays a dash. */
 function AmountCell(props: {
   usd: number | undefined
-  tryPerUsd: number
+  secondary: SecondaryPrice
   locale: string | undefined
   missing: string
 }) {
@@ -96,16 +101,22 @@ function AmountCell(props: {
   return (
     <TableCell>
       <div>{formatMoney(props.usd, 'USD', props.locale)}</div>
-      <div className='text-muted-foreground' data-table-text='secondary'>
-        {formatMoney(props.usd * props.tryPerUsd, 'TRY', props.locale)}
-      </div>
+      {props.secondary && (
+        <div className='text-muted-foreground' data-table-text='secondary'>
+          {formatMoney(
+            props.usd * props.secondary.rate,
+            props.secondary.currency,
+            props.locale
+          )}
+        </div>
+      )}
     </TableCell>
   )
 }
 
 function PriceCells(props: {
   price: TokenPrice | null
-  tryPerUsd: number
+  secondary: SecondaryPrice
   locale: string | undefined
   missing: string
 }) {
@@ -114,13 +125,13 @@ function PriceCells(props: {
       <AmountCell
         locale={props.locale}
         missing={props.missing}
-        tryPerUsd={props.tryPerUsd}
+        secondary={props.secondary}
         usd={props.price?.input}
       />
       <AmountCell
         locale={props.locale}
         missing={props.missing}
-        tryPerUsd={props.tryPerUsd}
+        secondary={props.secondary}
         usd={props.price?.output}
       />
     </>
@@ -175,13 +186,13 @@ function SavingCell(props: {
 
 function PriceRow(props: {
   row: ModelPrice
-  tryPerUsd: number
+  secondary: SecondaryPrice
   locale: string | undefined
   t: Translate
 }) {
   const row = props.row
   const common = {
-    tryPerUsd: props.tryPerUsd,
+    secondary: props.secondary,
     locale: props.locale,
     missing: props.t('missing'),
   }
@@ -230,7 +241,7 @@ function CardAmount(props: {
   label: string
   hisarweb: number | undefined
   official: number | undefined
-  tryPerUsd: number
+  secondary: SecondaryPrice
   locale: string | undefined
   t: Translate
 }) {
@@ -254,9 +265,15 @@ function CardAmount(props: {
                 </s>
               </>
             )}
-            <div className='text-muted-foreground text-xs'>
-              {formatMoney(hisarweb * props.tryPerUsd, 'TRY', props.locale)}
-            </div>
+            {props.secondary && (
+              <div className='text-muted-foreground text-xs'>
+                {formatMoney(
+                  hisarweb * props.secondary.rate,
+                  props.secondary.currency,
+                  props.locale
+                )}
+              </div>
+            )}
           </>
         )}
       </dd>
@@ -271,13 +288,13 @@ function CardAmount(props: {
  */
 function PriceCard(props: {
   row: ModelPrice
-  tryPerUsd: number
+  secondary: SecondaryPrice
   locale: string | undefined
   t: Translate
 }) {
   const row = props.row
   const t = props.t
-  const common = { tryPerUsd: props.tryPerUsd, locale: props.locale, t }
+  const common = { secondary: props.secondary, locale: props.locale, t }
   const vsOfficial = savingFraction(row.official, row.hisarweb)
   const openrouter = row.openrouter
   return (
@@ -428,6 +445,14 @@ export function PriceTable(props: PriceTableProps) {
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const models = props.models ?? MODEL_PRICES
   const tryPerUsd = props.tryPerUsd ?? MODEL_PRICES_TRY_PER_USD
+  const { currency, rates } = useHwCurrency()
+  // TRY keeps the table's dated, KDV-free rate; EUR uses the live server rate;
+  // USD has no second line because the main price is already in dollars.
+  let secondary: SecondaryPrice = null
+  if (currency === 'TRY') secondary = { currency, rate: tryPerUsd }
+  else if (currency === 'EUR' && rates.EUR) {
+    secondary = { currency, rate: rates.EUR }
+  }
   const isMobile = useIsMobile()
 
   return (
@@ -451,7 +476,7 @@ export function PriceTable(props: PriceTableProps) {
                 locale={locale}
                 row={row}
                 t={t}
-                tryPerUsd={tryPerUsd}
+                secondary={secondary}
               />
             ))}
           </ul>
@@ -471,7 +496,7 @@ export function PriceTable(props: PriceTableProps) {
                     locale={locale}
                     row={row}
                     t={t}
-                    tryPerUsd={tryPerUsd}
+                    secondary={secondary}
                   />
                 ))}
               </TableBody>
@@ -482,12 +507,15 @@ export function PriceTable(props: PriceTableProps) {
         <section className='space-y-2'>
           <h3 className='text-sm font-semibold'>{t('notesTitle')}</h3>
           <ul className='text-muted-foreground list-disc space-y-1 pl-5 text-sm'>
-            <li>
-              {t('noteFx', {
-                rate: tryPerUsd.toLocaleString(locale),
-                date: MODEL_PRICES_FX_DATE,
-              })}
-            </li>
+            {secondary && (
+              <li>
+                {t('noteFx', {
+                  rate: secondary.rate.toLocaleString(locale),
+                  date: MODEL_PRICES_FX_DATE,
+                  symbol: HW_CURRENCY_SYMBOLS[secondary.currency],
+                })}
+              </li>
+            )}
             <li>{t('noteSaving')}</li>
             <li>{t('noteContext')}</li>
             <li>{t('noteOthers')}</li>

@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -124,4 +125,45 @@ func TestHwStatusTellsWhetherCardPaymentIsOpen(t *testing.T) {
 	t.Setenv(service.HwRevolutWebhookSecretEnv, "wsk_test_secret")
 	data, _ = hwStatusIdentityServe(t)
 	assert.Equal(t, true, data["hw_payment_available"])
+}
+
+// TestHwStatusListsTheCurrenciesThatCanBeSold: the shop shows the currencies
+// that can be charged right now, with their rates per dollar and the top-up
+// bounds. Without Stripe only the lira is offered, and a euro rate older than a
+// week takes the euro away without touching the others.
+func TestHwStatusListsTheCurrenciesThatCanBeSold(t *testing.T) {
+	hwStatusIdentityFixture(t)
+	t.Setenv(service.HwRevolutAPIBaseEnv, "")
+	t.Setenv(service.HwRevolutSecretKeyEnv, "")
+	t.Setenv(service.HwRevolutWebhookSecretEnv, "")
+	t.Setenv(service.HwStripeSecretKeyEnv, "")
+	t.Setenv(service.HwStripeWebhookSecretEnv, "")
+	common.OptionMapRWMutex.Lock()
+	common.OptionMap[model.HwTryPerUsdOption] = "40"
+	common.OptionMap[model.HwEurPerUsdOption] = "0.8"
+	common.OptionMap[model.HwEurPerUsdDateOption] = time.Now().UTC().Format("2006-01-02")
+	common.OptionMap[model.HwEurPresetBaseOption] = "0.8"
+	common.OptionMapRWMutex.Unlock()
+
+	data, _ := hwStatusIdentityServe(t)
+	assert.Equal(t, []any{"TRY"}, data["hw_currencies"], "without Stripe only the lira is sold")
+
+	t.Setenv(service.HwStripeSecretKeyEnv, "sk_test_key")
+	t.Setenv(service.HwStripeWebhookSecretEnv, "whsec_test_secret")
+	data, _ = hwStatusIdentityServe(t)
+	assert.Equal(t, []any{"TRY", "EUR", "USD"}, data["hw_currencies"])
+	assert.Equal(t, map[string]any{"TRY": "40", "EUR": "0.8", "USD": "1"}, data["hw_rates"])
+	topUp, ok := data["hw_topup"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, map[string]any{"min": 100.0, "max": 20000.0, "presets": []any{250.0, 500.0, 1000.0, 2000.0, 5000.0}}, topUp["TRY"])
+	assert.Equal(t, map[string]any{"min": 2.0, "max": 400.0, "presets": []any{8.0, 20.0, 40.0, 80.0, 200.0}}, topUp["EUR"])
+	assert.Equal(t, map[string]any{"min": 3.0, "max": 500.0, "presets": []any{10.0, 25.0, 50.0, 100.0, 250.0}}, topUp["USD"])
+
+	common.OptionMapRWMutex.Lock()
+	common.OptionMap[model.HwEurPerUsdDateOption] = time.Now().UTC().AddDate(0, 0, -9).Format("2006-01-02")
+	common.OptionMapRWMutex.Unlock()
+	data, _ = hwStatusIdentityServe(t)
+	assert.Equal(t, []any{"TRY", "USD"}, data["hw_currencies"])
+	assert.NotContains(t, data["hw_rates"], "EUR")
+	assert.NotContains(t, data["hw_topup"], "EUR")
 }

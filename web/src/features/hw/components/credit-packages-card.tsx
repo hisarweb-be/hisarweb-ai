@@ -17,13 +17,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { RefreshCw, Wallet } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TitledCard } from '@/components/ui/titled-card'
 import { formatNumber } from '@/lib/format'
 
-import { formatHwDate, formatHwTry, hwPackageSourceTextKey } from '../lib/format'
+import { useHwCurrency } from '../hooks/use-hw-currency'
+import { formatHwAmount, formatHwDate, hwPackageSourceTextKey } from '../lib/format'
 import { useHwText } from '../texts'
 import type { HwCreditPackages } from '../types'
 
@@ -36,25 +38,29 @@ interface CreditPackagesCardProps {
 }
 
 /**
- * Shows the balance per package with its expiry date. The lira value follows
- * from the rate of the last price snapshot; without one the page says so
- * instead of inventing an amount.
+ * Shows the balance per package with its expiry date. The value in the chosen
+ * currency follows from the rate of the last price snapshot (TRY) or the
+ * server's `hw_rates` (EUR, USD); without a rate the page says so instead of
+ * inventing an amount.
  */
 export function CreditPackagesCard(props: CreditPackagesCardProps) {
+  const { t } = useTranslation()
   const hw = useHwText()
-  const rate = Number(props.data?.try_per_usd ?? '')
+  const { currency, rates } = useHwCurrency()
+  const rate =
+    currency === 'TRY' ? Number(props.data?.try_per_usd ?? '') : rates[currency]
   const quotaPerUnit = props.data?.quota_per_unit ?? 0
   const rateIsUsable =
-    Number.isFinite(rate) && rate > 0 && quotaPerUnit > 0
+    rate !== undefined && Number.isFinite(rate) && rate > 0 && quotaPerUnit > 0
 
-  function liraOf(quota: number): string | null {
+  function valueOf(quota: number): string | null {
     if (!rateIsUsable) return null
-    return formatHwTry((quota / quotaPerUnit) * rate, props.locale)
+    return formatHwAmount((quota / quotaPerUnit) * rate, currency, props.locale)
   }
 
   function amountOf(quota: number): string {
     return (
-      liraOf(quota) ??
+      valueOf(quota) ??
       hw('balancePackageQuota', { quota: formatNumber(quota, props.locale) })
     )
   }
@@ -73,6 +79,10 @@ export function CreditPackagesCard(props: CreditPackagesCardProps) {
         </Button>
       }
     >
+      <p className='text-muted-foreground mb-3 text-xs'>
+        {t('HisarWeb pays the payment and currency conversion costs. You get the full credit for what you pay, with no surcharge or deduction.')}
+      </p>
+
       {props.isLoading && (
         <div className='flex flex-col gap-2' aria-busy='true'>
           <Skeleton className='h-4 w-2/3' />

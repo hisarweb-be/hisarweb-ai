@@ -26,6 +26,8 @@ import {
 } from '@/components/ui/card'
 import { formatNumber } from '@/lib/format'
 
+import { useHwCurrency } from '../hooks/use-hw-currency'
+import { HW_KDV_FACTOR, convertHwUsd } from '../lib/currency'
 import { formatHwStamp, formatHwMoney, parseHwAmount } from '../lib/format'
 import { useHwText } from '../texts'
 import type { HwPriceComparison } from '../types'
@@ -64,8 +66,41 @@ function SourceValue(props: { value: string }) {
 export function ComparisonResult(props: ComparisonResultProps) {
   const t = useHwText()
   const comparison = props.comparison
-  const money = (value: string, currency: 'TRY' | 'USD') =>
-    formatHwMoney(parseHwAmount(value), currency, props.locale)
+  const { currency, rates } = useHwCurrency()
+  const tryPerUsd = parseHwAmount(comparison.try_per_usd)
+  const usd = (value: string) =>
+    formatHwMoney(parseHwAmount(value), 'USD', props.locale)
+  // The server prices payable amounts in TRY, KDV included. Another currency
+  // is the same USD amount times its rate, without the KDV factor.
+  const payable = (tryValue: string) => {
+    const amount = parseHwAmount(tryValue)
+    const rate = rates[currency]
+    let value = amount
+    if (currency !== 'TRY') {
+      value =
+        amount === null || tryPerUsd === null || rate === undefined
+          ? null
+          : (amount / (tryPerUsd * HW_KDV_FACTOR)) * rate
+    }
+    return formatHwMoney(value, currency, props.locale)
+  }
+  const official =
+    currency === 'TRY'
+      ? formatHwMoney(
+          parseHwAmount(comparison.official_cost_try),
+          'TRY',
+          props.locale
+        )
+      : formatHwMoney(
+          convertHwUsd(
+            parseHwAmount(comparison.official_cost_usd) ?? Number.NaN,
+            currency,
+            rates
+          ),
+          currency,
+          props.locale
+        )
+  const fxRate = currency === 'TRY' ? tryPerUsd : (rates[currency] ?? null)
 
   return (
     <Card>
@@ -90,31 +125,30 @@ export function ComparisonResult(props: ComparisonResultProps) {
         <dl className='space-y-2'>
           <ComparisonRow
             label={t('compareOfficialUsd')}
-            value={money(comparison.official_cost_usd, 'USD')}
+            value={usd(comparison.official_cost_usd)}
           />
-          <ComparisonRow
-            label={t('compareOfficialTry')}
-            value={money(comparison.official_cost_try, 'TRY')}
-          />
+          {currency !== 'USD' && (
+            <ComparisonRow label={t('compareOfficialTry')} value={official} />
+          )}
           <ComparisonRow
             label={t('compareOursFirst')}
-            value={money(comparison.first_purchase_try, 'TRY')}
+            value={payable(comparison.first_purchase_try)}
           />
           <ComparisonRow
             label={t('compareOursRepeat')}
-            value={money(comparison.repeat_purchase_try, 'TRY')}
+            value={payable(comparison.repeat_purchase_try)}
           />
         </dl>
 
         <div className='space-y-1 font-medium'>
           <p>
             {t('compareSavingFirst', {
-              amount: money(comparison.savings_first_try, 'TRY'),
+              amount: payable(comparison.savings_first_try),
             })}
           </p>
           <p>
             {t('compareSavingRepeat', {
-              amount: money(comparison.savings_repeat_try, 'TRY'),
+              amount: payable(comparison.savings_repeat_try),
             })}
           </p>
         </div>
@@ -128,14 +162,12 @@ export function ComparisonResult(props: ComparisonResultProps) {
             label={t('comparePriceDate')}
             value={formatHwStamp(comparison.price_fetched_at)}
           />
-          <ComparisonRow
-            label={t('compareFxRate')}
-            value={formatHwMoney(
-              parseHwAmount(comparison.try_per_usd),
-              'TRY',
-              props.locale
-            )}
-          />
+          {currency !== 'USD' && (
+            <ComparisonRow
+              label={t('compareFxRate')}
+              value={formatHwMoney(fxRate, currency, props.locale)}
+            />
+          )}
           <ComparisonRow
             label={t('compareFxSource')}
             value={<SourceValue value={comparison.fx_source} />}
@@ -146,7 +178,7 @@ export function ComparisonResult(props: ComparisonResultProps) {
           />
         </dl>
 
-        {comparison.prices_include_kdv && (
+        {(comparison.prices_include_kdv || currency !== 'TRY') && (
           <p className='text-muted-foreground text-sm'>{t('compareKdv')}</p>
         )}
       </CardContent>

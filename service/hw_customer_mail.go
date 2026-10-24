@@ -69,7 +69,7 @@ func HwRunCustomerMails(now time.Time) (HwMailRound, error) {
 	if err != nil {
 		return round, err
 	}
-	rate, err := hwTryPerUsd()
+	rate, err := hwTryPerUsd(now)
 	if err != nil {
 		return round, err
 	}
@@ -119,6 +119,8 @@ func hwRunCustomerMailsForUser(userID int, now int64, rate decimal.Decimal) (int
 	}
 	link := hwMailTopUpLink()
 
+	currency, displayRate := hwMailCurrency(userID, time.Unix(now, 0), rate)
+
 	sent, failed := 0, 0
 	// The expiry mail is planned per package, so a customer who holds two
 	// packages gets one mail per package, each five days before it expires.
@@ -142,8 +144,8 @@ func hwRunCustomerMailsForUser(userID int, now int64, rate decimal.Decimal) (int
 		}
 		subject, content := hwMailExpiryContent(lang, name,
 			hwMailFormatDate(lang, view.ExpiresAt),
-			hwMailFormatTry(lang, hwMailQuotaToTry(view.RemainingQuota, rate)),
-			hwMailFormatTry(lang, hwMailQuotaToTry(user.Quota, rate)),
+			hwMailFormatMoney(lang, hwMailQuotaToMoney(view.RemainingQuota, displayRate), currency),
+			hwMailFormatMoney(lang, hwMailQuotaToMoney(user.Quota, displayRate), currency),
 			link)
 		if err := hwCustomerMailSend(subject, receiver, content); err != nil {
 			failed++
@@ -180,8 +182,8 @@ func hwRunCustomerMailsForUser(userID int, now int64, rate decimal.Decimal) (int
 		return sent, failed
 	}
 	subject, content := hwMailLowBalanceContent(lang, name,
-		hwMailFormatTry(lang, hwMailQuotaToTry(user.Quota, rate)),
-		hwMailFormatTry(lang, hwMailQuotaToTry(thresholdQuota, rate)),
+		hwMailFormatMoney(lang, hwMailQuotaToMoney(user.Quota, displayRate), currency),
+		hwMailFormatMoney(lang, hwMailQuotaToMoney(thresholdQuota, displayRate), currency),
 		link)
 	if err := hwCustomerMailSend(subject, receiver, content); err != nil {
 		failed++
@@ -247,9 +249,24 @@ func hwLowBalanceThresholdQuota(userID int, rate decimal.Decimal) (int, error) {
 	return threshold, nil
 }
 
-// hwMailQuotaToTry renders quota units as the lira value the customer paid for
-// them, at the daily rate part D publishes.
-func hwMailQuotaToTry(quota int, rate decimal.Decimal) decimal.Decimal {
+// hwMailCurrency picks the currency the amounts of a customer's mails are
+// written in: the currency of the last paid order, and the lira (with the given
+// lira rate) when there is none or its rate is not available.
+func hwMailCurrency(userID int, now time.Time, tryRate decimal.Decimal) (string, decimal.Decimal) {
+	currency, err := model.HwLastPaidOrderCurrency(userID)
+	if err != nil || currency == "" || currency == model.HwCurrencyTRY {
+		return model.HwCurrencyTRY, tryRate
+	}
+	rate, err := hwCurrencyRate(currency, now)
+	if err != nil {
+		return model.HwCurrencyTRY, tryRate
+	}
+	return currency, rate
+}
+
+// hwMailQuotaToMoney renders quota units as the value in the customer's currency
+// that they paid for them, at the daily rate of that currency.
+func hwMailQuotaToMoney(quota int, rate decimal.Decimal) decimal.Decimal {
 	if common.QuotaPerUnit <= 0 {
 		return decimal.Zero
 	}

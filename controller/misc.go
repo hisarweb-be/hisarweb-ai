@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -40,6 +41,8 @@ func TestStatus(c *gin.Context) {
 
 func GetStatus(c *gin.Context) {
 
+	// Read before the option map lock below: it reads options itself.
+	hwCurrencies := service.HwCurrencies(time.Now())
 	cs := console_setting.GetConsoleSetting()
 	passkeySetting := system_setting.PasskeySettingsSnapshot()
 	common.OptionMapRWMutex.RLock()
@@ -132,6 +135,9 @@ func GetStatus(c *gin.Context) {
 	// HisarWeb AI: the top-up page shows a calm "opening soon" state instead
 	// of an order that fails while card payment is not configured.
 	data["hw_payment_available"] = service.HwPaymentAvailable()
+	data["hw_currencies"] = hwCurrencies.Currencies
+	data["hw_rates"] = hwCurrencies.Rates
+	data["hw_topup"] = hwCurrencies.TopUp
 
 	// 根据启用状态注入可选内容
 	if cs.ApiInfoEnabled {

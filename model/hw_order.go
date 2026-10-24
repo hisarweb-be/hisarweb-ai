@@ -10,9 +10,24 @@ import (
 	"gorm.io/gorm"
 )
 
-// HwOrderCurrency is the only currency this top-up flow sells in. Every amount
-// on an order is recorded in the smallest unit of it (kuruş for TRY).
-const HwOrderCurrency = "TRY"
+// Currencies this top-up flow sells in. Every amount on an order is recorded in
+// the smallest unit of the order's own currency (kuruş for TRY, cent for EUR and
+// USD). Credit itself stays in USD quota.
+const (
+	HwCurrencyTRY = "TRY"
+	HwCurrencyEUR = "EUR"
+	HwCurrencyUSD = "USD"
+)
+
+// HwOrderCurrencyAllowed reports whether an order may be recorded in currency.
+func HwOrderCurrencyAllowed(currency string) bool {
+	switch currency {
+	case HwCurrencyTRY, HwCurrencyEUR, HwCurrencyUSD:
+		return true
+	default:
+		return false
+	}
+}
 
 // Order statuses. Only paid writes credit; everything else closes the order.
 // refunded is a post-payment status set by the admin refund route: the credit
@@ -38,6 +53,9 @@ const (
 // pricing job (part D); until it is set, order creation is refused.
 const (
 	HwTryPerUsdOption         = "HwTryPerUsd"
+	HwEurPerUsdOption         = "HwEurPerUsd"
+	HwEurPerUsdDateOption     = "HwEurPerUsdDate"
+	HwEurPresetBaseOption     = "HwEurPresetBase"
 	HwMinTopUpTryOption       = "HwMinTopUpTry"
 	HwMaxTopUpTryOption       = "HwMaxTopUpTry"
 	HwMaxOpenOrdersOption     = "HwMaxOpenOrders"
@@ -62,15 +80,17 @@ var ErrHwInvalidOrder = errors.New("invalid top-up order")
 // on a non-nullable text column would let only one order exist without an id on
 // MySQL.
 type HwOrder struct {
-	Id                int     `json:"id" gorm:"primaryKey"`
-	UserId            int     `json:"user_id" gorm:"not null;index"`
-	MerchantRef       string  `json:"merchant_ref" gorm:"type:varchar(64);not null;uniqueIndex"`
-	RevolutOrderId    *string `json:"revolut_order_id" gorm:"type:varchar(128);uniqueIndex"`
-	ListQuota         int     `json:"list_quota" gorm:"not null"`
-	ListValueTryMinor int64   `json:"list_value_try_minor" gorm:"not null"`
-	PayableTryMinor   int64   `json:"payable_try_minor" gorm:"not null"`
-	Currency          string  `json:"currency" gorm:"type:varchar(3);not null"`
-	DiscountKind      string  `json:"discount_kind" gorm:"type:varchar(32);not null"`
+	Id             int     `json:"id" gorm:"primaryKey"`
+	UserId         int     `json:"user_id" gorm:"not null;index"`
+	MerchantRef    string  `json:"merchant_ref" gorm:"type:varchar(64);not null;uniqueIndex"`
+	RevolutOrderId *string `json:"revolut_order_id" gorm:"type:varchar(128);uniqueIndex"`
+	ListQuota      int     `json:"list_quota" gorm:"not null"`
+	// ListValueTryMinor and PayableTryMinor are minor units of Currency (the
+	// column names predate the other currencies and stay for compatibility).
+	ListValueTryMinor int64  `json:"list_value_try_minor" gorm:"not null"`
+	PayableTryMinor   int64  `json:"payable_try_minor" gorm:"not null"`
+	Currency          string `json:"currency" gorm:"type:varchar(3);not null"`
+	DiscountKind      string `json:"discount_kind" gorm:"type:varchar(32);not null"`
 	// Language is the language the customer chose at the checkout ("tr" or
 	// "en"). The customer mail job reads the choice of the latest order first,
 	// because that is the language the customer was reading when they last
@@ -115,7 +135,7 @@ func hwOrderLanguageValid(language string) bool {
 func HwCreateOrder(order *HwOrder) error {
 	if order == nil || order.UserId <= 0 || strings.TrimSpace(order.MerchantRef) == "" ||
 		order.ListQuota <= 0 || order.ListValueTryMinor <= 0 || order.PayableTryMinor <= 0 ||
-		order.Currency != HwOrderCurrency || order.CreatedAt <= 0 || !hwOrderIsOpen(order.Status) ||
+		!HwOrderCurrencyAllowed(order.Currency) || order.CreatedAt <= 0 || !hwOrderIsOpen(order.Status) ||
 		!hwOrderLanguageValid(order.Language) {
 		return ErrHwInvalidOrder
 	}
@@ -248,7 +268,7 @@ func HwSettleOrderPayment(merchantRef, revolutOrderID, cardFingerprint string, n
 		}
 		settlement.UserId = order.UserId
 		settlement.ListQuota = order.ListQuota
-		if order.Status == HwOrderStatusPaid || order.Status == HwOrderStatusRefunded || order.Currency != HwOrderCurrency {
+		if order.Status == HwOrderStatusPaid || order.Status == HwOrderStatusRefunded || !HwOrderCurrencyAllowed(order.Currency) {
 			return nil
 		}
 		creditQuota := order.ListQuota

@@ -46,12 +46,12 @@ func TestHwComputePurchase(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			quote, err := HwComputePurchase(decimal.RequireFromString(tc.list), tc.firstPurchase)
+			quote, err := HwComputePurchase(decimal.RequireFromString(tc.list), tc.firstPurchase, HwFirstPurchaseDiscountCapTRY)
 			require.NoError(t, err)
-			assert.Equal(t, tc.payable, quote.PayableTRY.StringFixed(2))
-			assert.Equal(t, tc.firstValue, quote.FirstPurchaseValueTRY.StringFixed(2))
-			assert.Equal(t, tc.remainderValue, quote.RemainderValueTRY.StringFixed(2))
-			assert.Equal(t, tc.discount, quote.DiscountTRY.StringFixed(2))
+			assert.Equal(t, tc.payable, quote.Payable.StringFixed(2))
+			assert.Equal(t, tc.firstValue, quote.FirstPurchaseValue.StringFixed(2))
+			assert.Equal(t, tc.remainderValue, quote.RemainderValue.StringFixed(2))
+			assert.Equal(t, tc.discount, quote.Discount.StringFixed(2))
 		})
 	}
 }
@@ -313,8 +313,8 @@ func TestHwRecordFirstPurchaseCard(t *testing.T) {
 }
 
 func TestHwComputePurchaseRejectsNonPositiveValue(t *testing.T) {
-	_, err := HwComputePurchase(decimal.Zero, true)
+	_, err := HwComputePurchase(decimal.Zero, true, HwFirstPurchaseDiscountCapTRY)
 	require.ErrorIs(t, err, ErrHwInvalidPurchaseValue)
-	_, err = HwComputePurchase(decimal.RequireFromString("-1"), false)
+	_, err = HwComputePurchase(decimal.RequireFromString("-1"), false, HwFirstPurchaseDiscountCapTRY)
 	require.ErrorIs(t, err, ErrHwInvalidPurchaseValue)
 }

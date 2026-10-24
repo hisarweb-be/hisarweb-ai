@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { HwCurrency } from './lib/currency'
 import type { HwLanguage } from './texts'
 /** Shapes of the HisarWeb AI top-up routes (`router/hw-revolut.go`). */
 
@@ -50,11 +51,12 @@ export interface HwCreditPackages {
 }
 
 /**
- * Body of `POST /api/user/hw/orders`. `package_try` is the list value in whole
- * lira; the server computes the charged amount and the credit.
+ * Body of `POST /api/user/hw/orders`. `amount` is the list value in whole units
+ * of `currency`; the server computes the charged amount and the credit.
  */
 export interface HwTopUpRequest {
-  package_try: number
+  amount: number
+  currency: HwCurrency
   language: HwLanguage
 }
 
