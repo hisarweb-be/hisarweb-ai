@@ -338,38 +338,25 @@ describe('vibe coding page', () => {
     expect(film).not.toHaveAttribute('autoplay')
   })
 
-  it('offers Turkish and English subtitles, Turkish on by default on the Turkish page', () => {
+  it('has no subtitle track, the words are already in the picture', () => {
     const { container } = renderVibe(trI18n)
 
-    const tracks = container.querySelectorAll('track')
-    expect(tracks).toHaveLength(2)
-    const turkish = container.querySelector('track[srclang="tr"]')
-    const english = container.querySelector('track[srclang="en"]')
-    expect(turkish).toHaveAttribute('kind', 'subtitles')
-    expect(turkish).toHaveAttribute('label', 'Türkçe')
-    expect(turkish).toHaveAttribute(
-      'src',
-      '/film/hisarweb-ai-vibe-kodlama.tr.vtt'
-    )
-    expect(turkish).toHaveAttribute('default')
-    expect(english).toHaveAttribute('kind', 'subtitles')
-    expect(english).toHaveAttribute('label', 'English')
-    expect(english).toHaveAttribute(
-      'src',
-      '/film/hisarweb-ai-vibe-kodlama.en.vtt'
-    )
-    expect(english).not.toHaveAttribute('default')
+    expect(container.querySelector('track')).toBeNull()
   })
 
-  it('switches the English subtitles on by default on the English page', () => {
+  it('plays the English film with its own poster on the English page', () => {
     const { container } = renderVibe(enI18n)
 
-    expect(container.querySelector('track[srclang="en"]')).toHaveAttribute(
-      'default'
+    const film = screen.getByLabelText('HisarWeb AI film for new vibecoders')
+    expect(film).toHaveAttribute(
+      'src',
+      '/film/hisarweb-ai-vibe-kodlama-en-v1.mp4'
     )
-    expect(container.querySelector('track[srclang="tr"]')).not.toHaveAttribute(
-      'default'
+    expect(film).toHaveAttribute(
+      'poster',
+      '/film/hisarweb-ai-vibe-kodlama-en.jpg'
     )
+    expect(container.querySelector('track')).toBeNull()
   })
 
   it('labels the film in English when the page is English', () => {
