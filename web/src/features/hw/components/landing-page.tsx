@@ -54,7 +54,7 @@ import { Button } from '@/components/ui/button'
 import '@/styles/hw-landing.css'
 
 import { useLandingMotion } from '../hooks/use-landing-motion'
-import { useHwText } from '../texts'
+import { useHwLanguage, useHwText } from '../texts'
 import { useVibeText } from '../vibe-texts'
 
 type Translate = ReturnType<typeof useHwText>
@@ -185,8 +185,28 @@ function Ticker(props: { items: string[] }) {
   )
 }
 
+type FilmFiles = { src: string; poster: string }
+
+/**
+ * One film per page language, each with its own voice and on-screen text, so
+ * there is no subtitle track on top of the words already in the picture. The
+ * poster is the frame shown before play. The English file name carries a
+ * version because browsers cache the mp4 for a week.
+ */
+const LANDING_FILMS: Record<'tr' | 'en', FilmFiles> = {
+  tr: {
+    src: '/film/hisarweb-ai-lansman.mp4',
+    poster: '/film/hisarweb-ai-lansman.jpg',
+  },
+  en: {
+    src: '/film/hisarweb-ai-lansman-en-v1.mp4',
+    poster: '/film/hisarweb-ai-lansman-en.jpg',
+  },
+}
+
 function Film(props: { text: Translate }) {
   const text = props.text
+  const film = LANDING_FILMS[useHwLanguage()]
   return (
     <section aria-labelledby='hw-film-title' className='hwl-section'>
       <div className='mx-auto max-w-5xl'>
@@ -202,11 +222,12 @@ function Film(props: { text: Translate }) {
         </p>
         <div className='hwl-film' data-reveal style={stagger(2)}>
           <video
+            key={film.src}
             controls
             playsInline
             preload='none'
-            poster='/film/hisarweb-ai-lansman.jpg'
-            src='/film/hisarweb-ai-lansman.mp4'
+            poster={film.poster}
+            src={film.src}
             aria-label={text('filmLabel')}
           />
         </div>
