@@ -955,6 +955,36 @@ For commercial licensing, please contact support@quantumnous.com
   font-size: 0.95rem;
   line-height: 1.65;
 }
+
+/* calm note under the steps: why the phone check exists */
+.hwl-why {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.1rem;
+  max-width: 48rem;
+  margin: 3rem auto 0;
+  padding: 1.4rem 1.6rem;
+  border-radius: 1.4rem;
+  border: 1px solid var(--hwl-line);
+  background: var(--card);
+}
+.hwl-why .hwl-icon {
+  flex-shrink: 0;
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 0.8rem;
+}
+.hwl-why h3 {
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.hwl-why p {
+  margin-top: 0.4rem;
+  color: var(--hwl-soft);
+  font-size: 0.92rem;
+  line-height: 1.65;
+}
 .hwl-step-key {
   margin-top: 1.1rem;
   padding: 0.7rem 0.9rem;

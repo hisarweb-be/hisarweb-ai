@@ -204,6 +204,9 @@ describe('start bonus card', () => {
     expect(
       phoneStep.queryByRole('button', { name: 'Telegram botunu aç' })
     ).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/kötüye kullanılmasını önlemek için istiyoruz/)
+    ).toBeVisible()
 
     // The headline action keeps pointing at the e-mail step, even though the
     // Telegram part of the bonus cannot be done yet.

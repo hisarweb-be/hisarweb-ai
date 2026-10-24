@@ -26,6 +26,7 @@ import {
   KeyRound,
   MailCheck,
   Send,
+  ShieldCheck,
   UserPlus,
 } from 'lucide-react'
 /*
@@ -203,7 +204,7 @@ function Film(props: { text: Translate }) {
           <video
             controls
             playsInline
-            preload='metadata'
+            preload='none'
             poster='/film/hisarweb-ai-lansman.jpg'
             src='/film/hisarweb-ai-lansman.mp4'
             aria-label={text('filmLabel')}
@@ -453,6 +454,15 @@ function Steps(props: { text: Translate }) {
             </li>
           ))}
         </ol>
+        <div className='hwl-why' data-reveal>
+          <span className='hwl-icon' aria-hidden='true'>
+            <ShieldCheck className='size-5' />
+          </span>
+          <div>
+            <h3>{text('stepsPhoneWhyTitle')}</h3>
+            <p>{text('stepsPhoneWhyBody')}</p>
+          </div>
+        </div>
       </div>
     </section>
   )

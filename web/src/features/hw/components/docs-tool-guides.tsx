@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Ban, CircleCheck, Lock } from 'lucide-react'
 /** Step 6 of `/docs`: pick a program and connect it to HisarWeb AI. */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -59,6 +59,16 @@ import {
 } from './docs-tool-guide-steps'
 
 const PICKER_ID = 'hw-tool-picker'
+
+/** `/docs#rehber-<tool id>` opens the page with that program's tab chosen. */
+export const TOOL_GUIDE_HASH_PREFIX = 'rehber-'
+
+function toolFromHash(): GuideToolId | undefined {
+  const hash = decodeURIComponent(window.location.hash.slice(1))
+  if (!hash.startsWith(TOOL_GUIDE_HASH_PREFIX)) return undefined
+  const id = hash.slice(TOOL_GUIDE_HASH_PREFIX.length)
+  return isToolId(id) ? id : undefined
+}
 
 const JUMP_BUTTON_CLASS = 'h-auto min-h-7 py-1 text-start whitespace-normal'
 
@@ -358,7 +368,13 @@ function ToolPanel(props: {
 export function ToolGuides() {
   const lang = useHwLanguage()
   const ui = GUIDE_UI[lang]
-  const [tool, setTool] = useState<GuideToolId>('claude-code')
+  const [tool, setTool] = useState<GuideToolId>(
+    () => toolFromHash() ?? 'claude-code'
+  )
+
+  useEffect(() => {
+    if (toolFromHash()) scrollToPicker()
+  }, [])
 
   function select(id: GuideToolId) {
     setTool(id)

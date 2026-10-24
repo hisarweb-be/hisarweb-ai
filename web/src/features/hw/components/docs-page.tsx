@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -37,6 +38,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useDocsGuideText } from '../docs-guide-texts'
 import { MODEL_HAIKU, OPENAI_BASE_URL } from '../docs-tool-guides'
 import { useHwText, type HwTextKey } from '../texts'
+import { AiSetupGuide, KEY_STEP_ANCHOR } from './docs-ai-setup'
 import { ToolGuides } from './docs-tool-guides'
 
 /** Static video of the same steps and its still frame. */
@@ -93,11 +95,12 @@ function GuideImage(props: { src: string; alt: string }) {
 function GuideStep(props: {
   number: number
   title: string
+  id?: string
   children: React.ReactNode
 }) {
   const guide = useDocsGuideText()
   return (
-    <li className='space-y-3'>
+    <li id={props.id} className='scroll-mt-24 space-y-3'>
       <div className='space-y-1'>
         <p className='text-primary text-xs font-medium tracking-wide uppercase'>
           {guide('step', { number: props.number })}
@@ -167,7 +170,11 @@ function BeginnerGuide() {
               alt={guide('step2Alt')}
             />
           </GuideStep>
-          <GuideStep number={3} title={guide('step3Title')}>
+          <GuideStep
+            number={3}
+            id={KEY_STEP_ANCHOR}
+            title={guide('step3Title')}
+          >
             <Paragraph>{guide('step3Body')}</Paragraph>
             <GuideImage
               src='/rehber/adim-2-anahtar-olustur.png'
@@ -198,6 +205,8 @@ function BeginnerGuide() {
           </GuideStep>
         </ol>
       </section>
+
+      <AiSetupGuide />
 
       <Card>
         <CardHeader>
@@ -241,6 +250,19 @@ function DocSection(props: {
 export function DocsPage() {
   const text = useHwText()
   const guide = useDocsGuideText()
+
+  // A link such as /docs#kurulumu-yapay-zekaya-yaptirin arrives before the
+  // page has rendered, so the browser cannot jump there on its own.
+  useEffect(() => {
+    const id = decodeURIComponent(window.location.hash.slice(1))
+    if (!id) return
+    // The id comes from the address bar, so it must not be read as a selector.
+    // eslint-disable-next-line unicorn/prefer-query-selector
+    const target = document.getElementById(id)
+    if (typeof target?.scrollIntoView === 'function') {
+      target.scrollIntoView({ block: 'start' })
+    }
+  }, [])
 
   return (
     <PublicLayout showMainContainer={false}>

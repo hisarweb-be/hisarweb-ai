@@ -49,7 +49,7 @@ const tr = {
 
   step2Title: '{bonus} başlangıç bonusunu alın',
   step2Body:
-    'Giriş yaptığınızda Genel Bakış sayfasının en üstünde “{bonus} başlangıç bonusunuzu alın” kartı görünür ve hangi adımın kaldığını yazar: e-posta adresinizi ekleyin ve onaylayın, Telegram hesabınızı bağlayın, telefon numaranızı HisarWeb botuyla paylaşın. Son adım bitince bakiyeniz {bonus} olarak görünür. Doğrulama henüz açık değilse kart bunu açıkça yazar; o zaman bakiyeyi “Satın al” sayfasından yükleyebilirsiniz.',
+    'Giriş yaptığınızda Genel Bakış sayfasının en üstünde “{bonus} başlangıç bonusunuzu alın” kartı görünür ve hangi adımın kaldığını yazar: e-posta adresinizi ekleyin ve onaylayın, Telegram hesabınızı bağlayın, telefon numaranızı HisarWeb botuyla paylaşın. Son adım bitince bakiyeniz {bonus} olarak görünür. Doğrulama henüz açık değilse kart bunu açıkça yazar; o zaman bakiyeyi “Satın al” sayfasından yükleyebilirsiniz. Telefon numaranızı yalnızca ücretsiz bonusun kötüye kullanılmasını önlemek için istiyoruz: numaranın kendisini saklamayız, sadece geri çevrilemeyen bir özetini tutarız ve SMS göndermeyiz.',
   step2Alt: 'Genel Bakış sayfasında başlangıç bonusu kartı ve üç adım',
 
   step3Title: 'API anahtarı oluşturun',
@@ -100,7 +100,7 @@ const en: typeof tr = {
 
   step2Title: 'Claim your {bonus} start bonus',
   step2Body:
-    'After you sign in, the top of the Overview page shows a “Claim your {bonus} start bonus” card that names the step still open: add and confirm your email address, connect your Telegram account, share your phone number with the HisarWeb bot. When the last step is done your balance shows {bonus}. If verification is not open yet, the card says so plainly; then you can add balance on the “Buy” page.',
+    'After you sign in, the top of the Overview page shows a “Claim your {bonus} start bonus” card that names the step still open: add and confirm your email address, connect your Telegram account, share your phone number with the HisarWeb bot. When the last step is done your balance shows {bonus}. If verification is not open yet, the card says so plainly; then you can add balance on the “Buy” page. We ask for your phone number only to prevent abuse of the free bonus: we do not store the number itself, only a one-way digest of it, and we never send SMS.',
   step2Alt: 'Overview page with the start bonus card and its three steps',
 
   step3Title: 'Create an API key',

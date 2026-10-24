@@ -56,9 +56,9 @@ const tr = {
   landingCatalogNote:
     'Claude, GPT ve Gemini ailelerinden seçilmiş modeller tek katalogda; her modelin güncel fiyatı karşılaştırma sayfasında yazar.',
 
-  filmTitle: 'HisarWeb AI’yı 35 saniyede izleyin',
+  filmTitle: 'HisarWeb AI’yı 54 saniyede izleyin',
   filmBody:
-    'Claude, GPT ve Gemini resmî fiyatın yarısına: Türk lirasıyla ödeme, abonelik yok. Film Türkçe seslendirmeli ve Türkçe altyazılıdır; görseller yapay zekâ ile üretilmiştir.',
+    'Claude, GPT ve Gemini resmî API liste fiyatının yarısına, Türk lirasıyla ve KDV dahil: beş saatlik veya haftalık limit yok, yalnızca kullandığınız kadar ödersiniz. Film Türkçe seslendirmeli ve Türkçe altyazılıdır; görseller yapay zekâ ile üretilmiştir.',
   filmLabel: 'HisarWeb AI tanıtım filmi',
 
   benefitTitle: 'Neden HisarWeb AI?',
@@ -87,6 +87,9 @@ const tr = {
   step2Body: 'Gelen kutunuza gelen bağlantıya dokunun.',
   step3Title: 'Telefonunuzu doğrulayın',
   step3Body: 'Telegram üzerinden tek seferlik doğrulama.',
+  stepsPhoneWhyTitle: 'Neden telefon doğrulaması?',
+  stepsPhoneWhyBody:
+    'Numaranızı yalnızca aynı kişinin çok sayıda hesap açıp ücretsiz başlangıç bakiyesini ve ilk alışveriş indirimini tekrar tekrar almasını önlemek için istiyoruz. Böylece her kullanıcı bu bakiyeden adil şekilde yararlanabilir. Numaranın kendisini saklamayız; yalnızca geri çevrilemeyen bir özetini tutar ve bunu sadece hesapları birbiriyle karşılaştırmak için kullanırız. SMS göndermeyiz, sizi aramayız, numaranızı reklam için kullanmayız ve kimseyle paylaşmayız.',
   step4Title: 'API anahtarı oluşturun',
   step4Body: 'Panodan anahtarınızı oluşturup uygulamanıza ekleyin.',
 
@@ -294,6 +297,8 @@ const tr = {
   bonusStepEmail: 'E-posta adresinizi ekleyin ve onaylayın',
   bonusStepTelegram: 'Telegram hesabınızı bağlayın',
   bonusStepPhone: 'Telefon numaranızı Telegram botuyla paylaşın',
+  bonusPhoneWhy:
+    'Telefon numaranızı yalnızca ücretsiz bonusun kötüye kullanılmasını önlemek için istiyoruz: numaranın kendisini saklamayız, sadece geri çevrilemeyen bir özetini tutarız ve SMS göndermeyiz.',
   bonusButtonEmail: 'E-postayı ekle',
   bonusButtonTelegram: 'Telegram’ı bağla',
   bonusButtonPhone: 'Telegram botunu aç',
@@ -426,9 +431,9 @@ const en: Record<HwTextKey, string> = {
   landingCatalogNote:
     'Selected models from the Claude, GPT and Gemini families in one catalog; every current price is on the comparison page.',
 
-  filmTitle: 'Watch HisarWeb AI in 35 seconds',
+  filmTitle: 'Watch HisarWeb AI in 54 seconds',
   filmBody:
-    'Claude, GPT and Gemini at half the official price: pay in Turkish lira, no subscription. The film has a Turkish voice-over with Turkish subtitles; the images are AI-generated.',
+    'Claude, GPT and Gemini at half the official API list price, in Turkish lira and VAT (KDV) included: no five-hour or weekly limits, you pay only for what you use. The film has a Turkish voice-over with Turkish subtitles; the images are AI-generated.',
   filmLabel: 'HisarWeb AI launch film',
 
   benefitTitle: 'Why HisarWeb AI?',
@@ -456,6 +461,9 @@ const en: Record<HwTextKey, string> = {
   step2Body: 'Open the link we send to your inbox.',
   step3Title: 'Verify your phone',
   step3Body: 'A one-time check through Telegram.',
+  stepsPhoneWhyTitle: 'Why phone verification?',
+  stepsPhoneWhyBody:
+    'We ask for your number only to stop one person from opening many accounts and claiming the free start balance and the first-purchase discount again and again. That way every user gets a fair share of it. We do not store the number itself; we keep only a one-way digest of it and use that only to compare accounts with each other. We do not send SMS, we do not call you, we do not use your number for advertising and we do not share it with anyone.',
   step4Title: 'Create an API key',
   step4Body: 'Create the key in the dashboard and add it to your app.',
 
@@ -663,6 +671,8 @@ const en: Record<HwTextKey, string> = {
   bonusStepEmail: 'Add and confirm your e-mail address',
   bonusStepTelegram: 'Link your Telegram account',
   bonusStepPhone: 'Share your phone number with the Telegram bot',
+  bonusPhoneWhy:
+    'We ask for your phone number only to prevent abuse of the free bonus: we do not store the number itself, only a one-way digest of it, and we never send SMS.',
   bonusButtonEmail: 'Add e-mail',
   bonusButtonTelegram: 'Link Telegram',
   bonusButtonPhone: 'Open the Telegram bot',

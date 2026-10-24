@@ -124,9 +124,22 @@ test('offers the launch film with controls, a poster and no autoplay', async () 
 
   const film = await screen.findByLabelText('HisarWeb AI tanıtım filmi')
   expect(film).toHaveAttribute('controls')
-  expect(film).toHaveAttribute('preload', 'metadata')
+  expect(film).toHaveAttribute('preload', 'none')
   expect(film).toHaveAttribute('poster', '/film/hisarweb-ai-lansman.jpg')
   expect(film).not.toHaveAttribute('autoplay')
+})
+
+// The film states the price honestly: half of the official API list price,
+// VAT (KDV) included, and its length matches the file (54 s).
+test('introduces the film with its real length and the KDV dahil price claim', async () => {
+  renderLanding()
+
+  expect(
+    await screen.findByRole('heading', { name: /54 saniyede izleyin/ })
+  ).toBeInTheDocument()
+  expect(
+    screen.getByText(/resmî API liste fiyatının yarısına.*KDV dahil/)
+  ).toBeInTheDocument()
 })
 
 test('announces the free trial and the 30-day balance validity', async () => {
@@ -186,4 +199,16 @@ test('teases the vibe coding guide with a button to its page', async () => {
   expect(
     screen.getByRole('button', { name: 'Vibe coding rehberini oku' })
   ).toHaveAttribute('href', '/vibe-kodlama')
+})
+
+test('explains below the four steps why the phone is verified', async () => {
+  renderLanding()
+
+  expect(
+    await screen.findByRole('heading', {
+      level: 3,
+      name: 'Neden telefon doğrulaması?',
+    })
+  ).toBeInTheDocument()
+  expect(screen.getByText(/SMS göndermeyiz, sizi aramayız/)).toBeInTheDocument()
 })
