@@ -35,4 +35,6 @@ func SetHwRouter(apiRouter *gin.RouterGroup) {
 	hwRouter.POST("/admin/agent/texts", middleware.AdminAuth(), controller.HwAdminAgentApplyText)
 	hwRouter.POST("/admin/agent/texts/revert", middleware.AdminAuth(), controller.HwAdminAgentRevertText)
 	hwRouter.POST("/admin/agent/escalate", middleware.AdminAuth(), controller.HwAdminAgentEscalate)
+	hwRouter.GET("/admin/agent/escalations", middleware.AdminAuth(), controller.HwAdminAgentPendingEscalations)
+	hwRouter.POST("/admin/agent/escalations/card", middleware.AdminAuth(), controller.HwAdminAgentLinkEscalationCard)
 }
