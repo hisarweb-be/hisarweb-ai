@@ -129,6 +129,19 @@ test('offers the launch film with controls, a poster and no autoplay', async () 
   expect(film).not.toHaveAttribute('autoplay')
 })
 
+// The film states the price honestly: half of the official API list price,
+// VAT (KDV) included, and its length matches the file (54 s).
+test('introduces the film with its real length and the KDV dahil price claim', async () => {
+  renderLanding()
+
+  expect(
+    await screen.findByRole('heading', { name: /54 saniyede izleyin/ })
+  ).toBeInTheDocument()
+  expect(
+    screen.getByText(/resmî API liste fiyatının yarısına.*KDV dahil/)
+  ).toBeInTheDocument()
+})
+
 test('announces the free trial and the 30-day balance validity', async () => {
   renderLanding()
 
