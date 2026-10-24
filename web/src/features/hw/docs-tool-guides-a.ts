@@ -27,7 +27,7 @@ import {
   MODEL_DEFAULT,
   MODEL_GPT_SMALL,
   MODEL_GEMINI,
-  MODEL_HAIKU_FREE,
+  MODEL_HAIKU,
   MODEL_OPUS,
   OPENAI_BASE_URL,
   type GuideShot,
@@ -59,7 +59,7 @@ const CLAUDE_SETTINGS = `{
     "ANTHROPIC_MODEL": "${MODEL_DEFAULT}",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "${MODEL_DEFAULT}",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "${MODEL_OPUS}",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "${MODEL_HAIKU_FREE}"
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "${MODEL_HAIKU}"
   }
 }`
 
@@ -72,7 +72,7 @@ const CLAUDE_VSCODE_SETTINGS = `{
     { "name": "ANTHROPIC_MODEL", "value": "${MODEL_DEFAULT}" },
     { "name": "ANTHROPIC_DEFAULT_SONNET_MODEL", "value": "${MODEL_DEFAULT}" },
     { "name": "ANTHROPIC_DEFAULT_OPUS_MODEL", "value": "${MODEL_OPUS}" },
-    { "name": "ANTHROPIC_DEFAULT_HAIKU_MODEL", "value": "${MODEL_HAIKU_FREE}" }
+    { "name": "ANTHROPIC_DEFAULT_HAIKU_MODEL", "value": "${MODEL_HAIKU}" }
   ]
 }`
 
@@ -120,7 +120,8 @@ const CLAUDE_INSTALL_STEPS: readonly GuideStep[] = [
         'win-versie',
         170,
         'Windows PowerShell’de claude --version komutu ve altında sürüm numarası.',
-        'claude --version in Windows PowerShell with the version number below it.', 666
+        'claude --version in Windows PowerShell with the version number below it.',
+        666
       ),
     ],
     see: {
@@ -202,12 +203,13 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
               'win-instellingen',
               230,
               'Not Defteri’nde bitmiş settings.json; anahtar yıldızlarla gizlenmiştir.',
-              'The finished settings.json in Notepad; the key is hidden with stars.', 490
+              'The finished settings.json in Notepad; the key is hidden with stars.',
+              490
             ),
           ],
           note: {
-            tr: 'Adres https://api.hisarweb.be olmalı, sonuna /v1 eklemeyin; Claude Code gerisini kendisi ekler. Ücretsiz deneme anahtarı yalnızca haiku sınıfı modelleri çalıştırır: o durumda model satırlarının hepsine claude-haiku-4-5 yazın. Dosyada zaten başka ayarlar varsa yalnızca "env" bölümünü ekleyin.',
-            en: 'The address must be https://api.hisarweb.be without /v1 at the end; Claude Code adds the rest. A free trial key only runs haiku-class models: in that case write claude-haiku-4-5 on every model line. If the file already has other settings, add only the "env" part.',
+            tr: 'Adres https://api.hisarweb.be olmalı, sonuna /v1 eklemeyin; Claude Code gerisini kendisi ekler. Ücretsiz deneme anahtarı yalnızca haiku sınıfı modelleri çalıştırır: o durumda model satırlarının hepsine claude-haiku-5-5 yazın. Dosyada zaten başka ayarlar varsa yalnızca "env" bölümünü ekleyin.',
+            en: 'The address must be https://api.hisarweb.be without /v1 at the end; Claude Code adds the rest. A free trial key only runs haiku-class models: in that case write claude-haiku-5-5 on every model line. If the file already has other settings, add only the "env" part.',
           },
         },
         {
@@ -225,7 +227,8 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
               'win-tema',
               767,
               'Claude Code’un ilk açılışta gösterdiği tema seçimi.',
-              'The theme choice Claude Code shows on first start.', 744
+              'The theme choice Claude Code shows on first start.',
+              744
             ),
           ],
         },
@@ -243,7 +246,8 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
               'win-vertrouwen',
               690,
               'Klasöre güvenme sorusu; varsayılan “No, exit” seçili.',
-              'The folder trust question; “No, exit” is selected by default.', 744
+              'The folder trust question; “No, exit” is selected by default.',
+              744
             ),
           ],
         },
@@ -261,19 +265,22 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
               'win-start',
               340,
               'Claude Code karşılama ekranı ve boş soru kutusu.',
-              'The Claude Code welcome screen with an empty question box.', 744
+              'The Claude Code welcome screen with an empty question box.',
+              744
             ),
             shot(
               'win-vraag',
               340,
               'Soru kutusuna yazılmış bir soru.',
-              'A question typed into the box.', 744
+              'A question typed into the box.',
+              744
             ),
             shot(
               'win-antwoord',
               750,
               'Gelen yanıt; giriş ekranı çıkmadı.',
-              'The answer that came back; no sign-in screen appeared.', 744
+              'The answer that came back; no sign-in screen appeared.',
+              744
             ),
           ],
         },
@@ -292,7 +299,8 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
               'win-status',
               951,
               '/status ekranı; Anthropic base URL satırında api.hisarweb.be görünür.',
-              'The /status screen; the Anthropic base URL line shows api.hisarweb.be.', 698
+              'The /status screen; the Anthropic base URL line shows api.hisarweb.be.',
+              698
             ),
           ],
         },
@@ -320,7 +328,8 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
               'vsc-uitbreiding',
               650,
               'VS Code Eklentiler paneli; Anthropic’in Claude Code eklentisi yüklü.',
-              'The VS Code Extensions view; the Claude Code extension from Anthropic is installed.', 340
+              'The VS Code Extensions view; the Claude Code extension from Anthropic is installed.',
+              340
             ),
           ],
         },
@@ -359,13 +368,15 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
               'vsc-paneel',
               380,
               'Claude Code paneli açık; giriş istemi yok, “New session” hazır.',
-              'The Claude Code panel open with no sign-in prompt and “New session” ready.', 400
+              'The Claude Code panel open with no sign-in prompt and “New session” ready.',
+              400
             ),
             shot(
               'vsc-antwoord',
               160,
               'Panelde yazılan soru ve gelen yanıt.',
-              'The question typed in the panel and the answer that came back.', 390
+              'The question typed in the panel and the answer that came back.',
+              390
             ),
           ],
         },
@@ -450,7 +461,7 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
             en: 'Add these two names to the model list; the first one becomes the default.',
           },
           blocks: [
-            block('settings', 'text', `${MODEL_DEFAULT}\n${MODEL_HAIKU_FREE}`),
+            block('settings', 'text', `${MODEL_DEFAULT}\n${MODEL_HAIKU}`),
           ],
         },
         {
@@ -947,8 +958,8 @@ notepad "$env:USERPROFILE\.config\opencode\opencode.json"`
           },
           blocks: [block('config', 'json', OPENCODE_V1_CONFIG)],
           note: {
-            tr: 'Ücretsiz deneme anahtarı yalnızca claude-haiku-5-5 ve claude-haiku-4-5 modellerini kullanabilir. Anahtarı dosyada tutmak istemezseniz "apiKey" değeri olarak "{env:HISARWEB_API_KEY}" yazıp anahtarı bir ortam değişkenine koyabilirsiniz.',
-            en: 'A free trial key can only use claude-haiku-5-5 and claude-haiku-4-5. If you do not want to keep the key in the file, write "{env:HISARWEB_API_KEY}" as the "apiKey" value and put the key in an environment variable.',
+            tr: 'Ücretsiz deneme anahtarı yalnızca claude-haiku-5-5 modelini kullanabilir. Anahtarı dosyada tutmak istemezseniz "apiKey" değeri olarak "{env:HISARWEB_API_KEY}" yazıp anahtarı bir ortam değişkenine koyabilirsiniz.',
+            en: 'A free trial key can only use claude-haiku-5-5. If you do not want to keep the key in the file, write "{env:HISARWEB_API_KEY}" as the "apiKey" value and put the key in an environment variable.',
           },
         },
         {
@@ -1077,8 +1088,8 @@ notepad "$env:USERPROFILE\.config\opencode\opencode.json"`
         en: 'The chosen model name is not on the gateway, or a free key can only use the haiku models.',
       },
       fix: {
-        tr: 'claude-haiku-5-5 ya da claude-haiku-4-5 modelini seçin.',
-        en: 'Choose claude-haiku-5-5 or claude-haiku-4-5.',
+        tr: 'claude-haiku-5-5 modelini seçin.',
+        en: 'Choose claude-haiku-5-5.',
       },
     },
   ],

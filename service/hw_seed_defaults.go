@@ -147,7 +147,10 @@ func hwSeedSoldModelRatios(map[string]string) error {
 }
 
 // hwSeedMissingSoldModelRatios adds only the ratio entries that are missing, so
-// an operator price stays in place.
+// an operator price stays in place. The one exception is an older name billed as
+// its successor (PriceKey differs from the name): its ratios are always reset to
+// the catalog price, so an older model can never stay more expensive than the
+// newer one, not even when the daily price fetch fails.
 func hwSeedMissingSoldModelRatios(prices map[string]model.HwModelPrice) error {
 	modelRatios := ratio_setting.GetModelRatioCopy()
 	completionRatios := ratio_setting.GetCompletionRatioCopy()
@@ -157,11 +160,12 @@ func hwSeedMissingSoldModelRatios(prices map[string]model.HwModelPrice) error {
 		if !ok || price.InputMicroUsd <= 0 || price.OutputMicroUsd <= 0 {
 			continue
 		}
-		if _, ok := modelRatios[sold.Name]; !ok {
+		billedAsSuccessor := sold.PriceKey != sold.Name
+		if current, ok := modelRatios[sold.Name]; !ok || (billedAsSuccessor && current != hwModelRatioFromInputPrice(price.InputMicroUsd)) {
 			modelRatios[sold.Name] = hwModelRatioFromInputPrice(price.InputMicroUsd)
 			modelChanged = true
 		}
-		if _, ok := completionRatios[sold.Name]; !ok {
+		if current, ok := completionRatios[sold.Name]; !ok || (billedAsSuccessor && current != hwCompletionRatioFromPrice(price)) {
 			completionRatios[sold.Name] = hwCompletionRatioFromPrice(price)
 			completionChanged = true
 		}

@@ -34,7 +34,7 @@ import {
   block,
   FREE_TRIAL_MODELS,
   KEY_PLACEHOLDER,
-  MODEL_HAIKU_FREE,
+  MODEL_HAIKU,
   OPENAI_BASE_URL,
   type GuideProtocol,
   type GuideStep,
@@ -91,7 +91,7 @@ export const PROTOCOL_ROWS: readonly {
 /** Steps that test the key before any program is set up. */
 const MODELS_URL = `${OPENAI_BASE_URL}/models`
 const CHAT_URL = `${OPENAI_BASE_URL}/chat/completions`
-const CHAT_BODY = `{"model":"${MODEL_HAIKU_FREE}","messages":[{"role":"user","content":"Merhaba!"}]}`
+const CHAT_BODY = `{"model":"${MODEL_HAIKU}","messages":[{"role":"user","content":"Merhaba!"}]}`
 
 export const KEY_TEST_STEPS: readonly GuideStep[] = [
   ...OPEN_TERMINAL_STEPS,
