@@ -117,6 +117,18 @@ test('links the comparator and quality teasers to their public pages', async () 
   ).toHaveAttribute('href', '/kalite')
 })
 
+// The film must never start by itself (it has sound) and must not pull the
+// whole file on page load: controls stay visible and only metadata is fetched.
+test('offers the launch film with controls, a poster and no autoplay', async () => {
+  renderLanding()
+
+  const film = await screen.findByLabelText('HisarWeb AI tanıtım filmi')
+  expect(film).toHaveAttribute('controls')
+  expect(film).toHaveAttribute('preload', 'metadata')
+  expect(film).toHaveAttribute('poster', '/film/hisarweb-ai-lansman.jpg')
+  expect(film).not.toHaveAttribute('autoplay')
+})
+
 test('announces the free trial and the 30-day balance validity', async () => {
   renderLanding()
 
