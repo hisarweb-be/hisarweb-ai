@@ -124,7 +124,7 @@ test('offers the launch film with controls, a poster and no autoplay', async () 
 
   const film = await screen.findByLabelText('HisarWeb AI tanıtım filmi')
   expect(film).toHaveAttribute('controls')
-  expect(film).toHaveAttribute('preload', 'metadata')
+  expect(film).toHaveAttribute('preload', 'none')
   expect(film).toHaveAttribute('poster', '/film/hisarweb-ai-lansman.jpg')
   expect(film).not.toHaveAttribute('autoplay')
 })
