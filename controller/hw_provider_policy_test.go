@@ -58,7 +58,7 @@ func TestHwFreeAndUnknownGroupsNeverReachEmergencySupplier(t *testing.T) {
 		group string
 		model string
 	}{
-		{name: "free", group: "free", model: "claude-haiku-4-5"},
+		{name: "free", group: "free", model: "claude-haiku-5-5"},
 		{name: "unknown", group: "internal-ops", model: hwTestModel},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -94,10 +94,10 @@ func TestHwFreeAccountWithPaidTokenNeverReachesEmergencySupplier(t *testing.T) {
 	lumia := env.fake("lumia")
 	openrouter := env.fake("openrouter")
 	lumia.setMode(hwFakeTimeout)
-	env.addChannel("lumia-primary", "paid", "lumia", "claude-haiku-4-5", 0, lumia)
-	env.addChannel("emergency", "paid", "openrouter", "claude-haiku-4-5", 1, openrouter)
+	env.addChannel("lumia-primary", "paid", "lumia", "claude-haiku-5-5", 0, lumia)
+	env.addChannel("emergency", "paid", "openrouter", "claude-haiku-5-5", 1, openrouter)
 
-	recorder := env.post("/v1/chat/completions", hwChatRequest("claude-haiku-4-5", false))
+	recorder := env.post("/v1/chat/completions", hwChatRequest("claude-haiku-5-5", false))
 
 	require.Equal(t, http.StatusServiceUnavailable, recorder.Code, recorder.Body.String())
 	assert.Contains(t, recorder.Body.String(), "service_busy")
@@ -118,9 +118,9 @@ func TestHwFreeAccountWithPaidTokenNeverReachesEmergencySupplier(t *testing.T) {
 func TestHwUntaggedEmergencyChannelNeverServesFreeGroup(t *testing.T) {
 	env := hwNewEnv(t, "free", 1_000_000)
 	openrouter := env.fake("openrouter")
-	env.addUntaggedChannel("tagless-emergency", "free", constant.ChannelTypeOpenRouter, "claude-haiku-4-5", 0, openrouter)
+	env.addUntaggedChannel("tagless-emergency", "free", constant.ChannelTypeOpenRouter, "claude-haiku-5-5", 0, openrouter)
 
-	recorder := env.post("/v1/chat/completions", hwChatRequest("claude-haiku-4-5", false))
+	recorder := env.post("/v1/chat/completions", hwChatRequest("claude-haiku-5-5", false))
 
 	require.Equal(t, http.StatusServiceUnavailable, recorder.Code, recorder.Body.String())
 	assert.Contains(t, recorder.Body.String(), "service_busy")
@@ -210,6 +210,22 @@ func TestHwNeverSelectsAnotherModelFamily(t *testing.T) {
 	require.Equal(t, 503, recorder.Code, recorder.Body.String())
 	assert.Contains(t, recorder.Body.String(), "service_busy")
 	assert.Equal(t, 0, foreign.callCount(), "a GPT channel must never answer a Claude request")
+}
+
+// TestHwRetiredModelNamesItsSuccessor pins the answer for a retired model name:
+// no channel serves it any more, and the customer is told which model replaced
+// it instead of the generic busy message.
+func TestHwRetiredModelNamesItsSuccessor(t *testing.T) {
+	env := hwNewEnv(t, "paid", 1_000_000)
+	lumia := env.fake("lumia")
+	env.addChannel("lumia-haiku", "paid", "lumia", "claude-haiku-5-5", 0, lumia)
+
+	recorder := env.post("/v1/chat/completions", hwChatRequest("claude-haiku-4-5", false))
+
+	require.Equal(t, 404, recorder.Code, recorder.Body.String())
+	assert.Contains(t, recorder.Body.String(), "model_retired")
+	assert.Contains(t, recorder.Body.String(), "claude-haiku-5-5")
+	assert.Equal(t, 0, lumia.callCount())
 }
 
 func TestHwHealthyLumiaChannelWins(t *testing.T) {

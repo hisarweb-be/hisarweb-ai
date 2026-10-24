@@ -138,10 +138,10 @@ func TestHwFreeGroupStillCallsHaikuWithAnotherTokenGroup(t *testing.T) {
 	env := hwNewEnv(t, "free", 1_000_000)
 	hwGrantTokenGroup(t, "free", "default")
 	require.NoError(t, env.db.Model(&model.Token{}).Where("id = ?", env.token.Id).Update("group", "default").Error)
-	supplier := hwAbuseChannel(t, env, "default-haiku", "default", "claude-haiku-4-5")
+	supplier := hwAbuseChannel(t, env, "default-haiku", "default", "claude-haiku-5-5")
 	env.hwAbuseRouter()
 
-	recorder := env.hwAbusePost(t, "/v1/chat/completions", hwChatRequest("claude-haiku-4-5", false), nil)
+	recorder := env.hwAbusePost(t, "/v1/chat/completions", hwChatRequest("claude-haiku-5-5", false), nil)
 	assert.Equal(t, http.StatusOK, recorder.Code)
 	assert.Equal(t, 1, supplier.callCount())
 }
@@ -166,11 +166,11 @@ func TestHwFreeGroupBudgetFollowsTheAccountOnMessages(t *testing.T) {
 	}
 	require.NoError(t, env.db.Create(budgetToken).Error)
 	env.token = budgetToken
-	hwAbuseChannel(t, env, "default-haiku", "default", "claude-haiku-4-5")
+	hwAbuseChannel(t, env, "default-haiku", "default", "claude-haiku-5-5")
 	env.hwAbuseRouter()
 
-	first := env.hwAbusePost(t, "/v1/messages", hwClaudeRequest("claude-haiku-4-5", false), nil)
-	second := env.hwAbusePost(t, "/v1/messages", hwClaudeRequest("claude-haiku-4-5", false), nil)
+	first := env.hwAbusePost(t, "/v1/messages", hwClaudeRequest("claude-haiku-5-5", false), nil)
+	second := env.hwAbusePost(t, "/v1/messages", hwClaudeRequest("claude-haiku-5-5", false), nil)
 	assert.Equal(t, http.StatusOK, first.Code)
 	assert.Equal(t, http.StatusTooManyRequests, second.Code, "a token group does not lift the free budget")
 }

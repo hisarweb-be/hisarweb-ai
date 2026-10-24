@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/relaykit/types"
 
 	"github.com/gin-gonic/gin"
@@ -18,6 +19,7 @@ const (
 	HwErrorCodeStreamInterrupted  types.ErrorCode = "stream_interrupted"
 	HwErrorCodeAccountFrozen      types.ErrorCode = "account_frozen"
 	HwErrorCodeWindowLimitReached types.ErrorCode = "window_limit_reached"
+	HwErrorCodeModelRetired       types.ErrorCode = "model_retired"
 )
 
 // HwIsOwnErrorCode reports whether code belongs to an error this fork generated
@@ -29,7 +31,7 @@ const (
 func HwIsOwnErrorCode(code string) bool {
 	switch code {
 	case string(HwErrorCodeServiceBusy), string(HwErrorCodeStreamInterrupted), string(HwErrorCodeAccountFrozen),
-		string(HwErrorCodeWindowLimitReached),
+		string(HwErrorCodeWindowLimitReached), string(HwErrorCodeModelRetired),
 		string(types.ErrorCodeInsufficientUserQuota), string(types.ErrorCodePreConsumeTokenQuotaFailed),
 		string(types.ErrorCodeInvalidRequest), string(types.ErrorCodeAccessDenied),
 		string(types.ErrorCodeSensitiveWordsDetected):
@@ -109,6 +111,15 @@ func HwGenericErrorMessage(c *gin.Context, status int) string {
 		return "İstek şu anda işlenemedi."
 	}
 	return "The request could not be processed right now."
+}
+
+// HwModelRetiredMessage tells the customer that a retired model is gone and
+// which newer model replaces it.
+func HwModelRetiredMessage(c *gin.Context, retired string, successor string) string {
+	if HwPrefersTurkish(c) {
+		return retired + " artık kullanılamıyor, " + successor + " kullanın."
+	}
+	return i18n.T(c, i18n.MsgDistributorModelRetired, map[string]any{"Model": retired, "Successor": successor})
 }
 
 // HwAccountFrozenMessage is the customer-facing text of a frozen account. The

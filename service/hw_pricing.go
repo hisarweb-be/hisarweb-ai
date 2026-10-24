@@ -58,9 +58,7 @@ var (
 
 // HwSoldModel links the model name we sell to its key in the open price list
 // and to the list price we bill from. The name is the customer-facing own name;
-// the price list key never appears in a customer-facing answer. A PriceKey that
-// differs from the name marks an older name that is served and billed as its
-// newer successor; its ratio is reset to the successor price at every start.
+// the price list key never appears in a customer-facing answer.
 //
 // The prices are the official USD list prices per million tokens, in integer
 // micro-dollars ($1.75 = 1750000) — the same unit the daily snapshot stores, so
@@ -76,21 +74,34 @@ type HwSoldModel struct {
 
 // hwSoldModels is the catalog of models we sell under our own names. The
 // comparator and the quality meter both read it, so a model appears on the site
-// only when it is here.
+// only when it is here. An older model stays only while it is cheaper than the
+// newest model of its family; once a newer model costs the same or less, the
+// older one moves to hwRetiredModels.
 var hwSoldModels = []HwSoldModel{
 	{Name: "claude-opus-5-5", PriceKey: "claude-opus-5-5", InputMicroUsd: 4_000_000, OutputMicroUsd: 20_000_000},
 	{Name: "claude-sonnet-5-5", PriceKey: "claude-sonnet-5-5", InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000},
 	{Name: "claude-haiku-5-5", PriceKey: "claude-haiku-5-5", InputMicroUsd: 100_000, OutputMicroUsd: 500_000},
-	{Name: "claude-sonnet-5", PriceKey: "claude-sonnet-5", InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000},
-	// claude-haiku-4-5 stays a valid name for existing setups, but the channel
-	// serves it with Haiku 5.5 and it is billed at the Haiku 5.5 price: nobody
-	// pays more for an older model (see TestHwSoldModelsNeverCostMoreThanTheNewestOfTheirFamily).
-	{Name: "claude-haiku-4-5", PriceKey: "claude-haiku-5-5", InputMicroUsd: 100_000, OutputMicroUsd: 500_000},
 	{Name: "claude-fable-5-1", PriceKey: "claude-fable-5-1", InputMicroUsd: 10_000_000, OutputMicroUsd: 50_000_000},
 	{Name: "gpt-6-astra", PriceKey: "gpt-6-astra", InputMicroUsd: 10_000_000, OutputMicroUsd: 50_000_000},
 	{Name: "gpt-6.1-sol", PriceKey: "gpt-6.1-sol", InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000},
 	{Name: "gpt-6-luna", PriceKey: "gpt-6-luna", InputMicroUsd: 100_000, OutputMicroUsd: 500_000},
 	{Name: "gemini-3.8-flash", PriceKey: "gemini-3.8-flash", InputMicroUsd: 750_000, OutputMicroUsd: 3_750_000},
+}
+
+// hwRetiredModels maps a model we no longer sell to the newer model of its
+// family that replaces it. We never lower the price of an old model: when a
+// newer model is as cheap or cheaper, the old one leaves the catalog and the
+// customer is sent to the newer one. Startup removes these names from the
+// channels and the billing ratios (hwSeedRetiredModels).
+var hwRetiredModels = map[string]string{
+	"claude-haiku-4-5": "claude-haiku-5-5",
+	"claude-sonnet-5":  "claude-sonnet-5-5",
+}
+
+// HwRetiredModelSuccessor returns the model that replaces a retired model name.
+func HwRetiredModelSuccessor(name string) (string, bool) {
+	successor, ok := hwRetiredModels[name]
+	return successor, ok
 }
 
 // HwListPriceDiscountPercent is how far below the official list price every

@@ -21,7 +21,7 @@ import type { GroupOption, ModelOption } from '../../types'
 /** Best value first: the cheap default, then the everyday coding model. */
 const PREFERRED_MODELS = ['claude-haiku-5-5', 'claude-sonnet-5-5']
 
-/** Older names that the server serves (and bills) as their newer model. */
+/** Retired names (hwRetiredModels in service/hw_pricing.go) and the model that replaced them. */
 const MODEL_SUCCESSORS: Readonly<Record<string, string>> = {
   'claude-haiku-4-5': 'claude-haiku-5-5',
   'claude-sonnet-5': 'claude-sonnet-5-5',

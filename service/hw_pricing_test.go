@@ -119,8 +119,7 @@ func TestHwPriceSnapshotFetchStoresSourceTimeAndRateDate(t *testing.T) {
 	prices, err := snapshot.HwSnapshotModelPrices()
 	require.NoError(t, err)
 	assert.Equal(t, model.HwModelPrice{InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000}, prices["claude-sonnet-5-5"])
-	// Haiku 4.5 is billed as its successor Haiku 5.5, never at its own older, higher price.
-	assert.Equal(t, model.HwModelPrice{InputMicroUsd: 100_000, OutputMicroUsd: 500_000}, prices["claude-haiku-4-5"])
+	assert.NotContains(t, prices, "claude-haiku-4-5", "a retired model is not sold, whatever the list says")
 	assert.Equal(t, model.HwModelPrice{InputMicroUsd: 100_000, OutputMicroUsd: 500_000}, prices["claude-haiku-5-5"])
 	assert.NotContains(t, prices, "some-other-model", "only sold models belong in the snapshot")
 }

@@ -599,7 +599,7 @@ func hwSetTestPrices(t *testing.T) {
 	t.Helper()
 	modelRatios := ratio_setting.GetModelRatioCopy()
 	completionRatios := ratio_setting.GetCompletionRatioCopy()
-	for _, name := range []string{"claude-sonnet-5-5", "claude-haiku-4-5", "gpt-4o-mini"} {
+	for _, name := range []string{"claude-sonnet-5-5", "claude-haiku-5-5", "gpt-4o-mini"} {
 		modelRatios[name] = 3
 		completionRatios[name] = 5
 	}

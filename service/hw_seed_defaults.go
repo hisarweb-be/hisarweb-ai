@@ -16,6 +16,8 @@ package service
 
 import (
 	"errors"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -82,6 +84,7 @@ func HwSeedDefaultOptions() error {
 		hwSeedGroupRatios,
 		hwSeedUserUsableGroups,
 		hwSeedSoldModelRatios,
+		hwSeedRetiredModels,
 		hwSeedThinkingAdapter,
 		hwSeedDisplayCurrency,
 		hwSeedSiteIdentity,
@@ -147,10 +150,7 @@ func hwSeedSoldModelRatios(map[string]string) error {
 }
 
 // hwSeedMissingSoldModelRatios adds only the ratio entries that are missing, so
-// an operator price stays in place. The one exception is an older name billed as
-// its successor (PriceKey differs from the name): its ratios are always reset to
-// the catalog price, so an older model can never stay more expensive than the
-// newer one, not even when the daily price fetch fails.
+// an operator price stays in place.
 func hwSeedMissingSoldModelRatios(prices map[string]model.HwModelPrice) error {
 	modelRatios := ratio_setting.GetModelRatioCopy()
 	completionRatios := ratio_setting.GetCompletionRatioCopy()
@@ -160,12 +160,11 @@ func hwSeedMissingSoldModelRatios(prices map[string]model.HwModelPrice) error {
 		if !ok || price.InputMicroUsd <= 0 || price.OutputMicroUsd <= 0 {
 			continue
 		}
-		billedAsSuccessor := sold.PriceKey != sold.Name
-		if current, ok := modelRatios[sold.Name]; !ok || (billedAsSuccessor && current != hwModelRatioFromInputPrice(price.InputMicroUsd)) {
+		if _, ok := modelRatios[sold.Name]; !ok {
 			modelRatios[sold.Name] = hwModelRatioFromInputPrice(price.InputMicroUsd)
 			modelChanged = true
 		}
-		if current, ok := completionRatios[sold.Name]; !ok || (billedAsSuccessor && current != hwCompletionRatioFromPrice(price)) {
+		if _, ok := completionRatios[sold.Name]; !ok {
 			completionRatios[sold.Name] = hwCompletionRatioFromPrice(price)
 			completionChanged = true
 		}
@@ -177,6 +176,56 @@ func hwSeedMissingSoldModelRatios(prices map[string]model.HwModelPrice) error {
 	}
 	if completionChanged {
 		if err := hwWriteRatioOption(hwCompletionRatioOption, completionRatios); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// hwSeedRetiredModels takes the retired models out of every channel model list,
+// the abilities and the billing ratios, so the catalog, the pricing page and the
+// model list no longer offer them and a request for one finds no channel. It is
+// idempotent: once the names are gone, a run changes nothing.
+func hwSeedRetiredModels(map[string]string) error {
+	var channels []model.Channel
+	if err := model.DB.Select("id", "models").Find(&channels).Error; err != nil {
+		return err
+	}
+	for _, channel := range channels {
+		models := channel.GetModels()
+		kept := slices.DeleteFunc(slices.Clone(models), func(name string) bool {
+			_, retired := hwRetiredModels[strings.TrimSpace(name)]
+			return retired
+		})
+		if len(kept) == len(models) {
+			continue
+		}
+		if err := model.DB.Model(&model.Channel{}).Where("id = ?", channel.Id).Update("models", strings.Join(kept, ",")).Error; err != nil {
+			return err
+		}
+	}
+	retired := slices.Collect(maps.Keys(hwRetiredModels))
+	if err := model.DB.Where("model IN ?", retired).Delete(&model.Ability{}).Error; err != nil {
+		return err
+	}
+	for _, option := range []struct {
+		key    string
+		ratios map[string]float64
+	}{
+		{hwModelRatioOption, ratio_setting.GetModelRatioCopy()},
+		{hwCompletionRatioOption, ratio_setting.GetCompletionRatioCopy()},
+	} {
+		changed := false
+		for _, name := range retired {
+			if _, ok := option.ratios[name]; ok {
+				delete(option.ratios, name)
+				changed = true
+			}
+		}
+		if !changed {
+			continue
+		}
+		if err := hwWriteRatioOption(option.key, option.ratios); err != nil {
 			return err
 		}
 	}

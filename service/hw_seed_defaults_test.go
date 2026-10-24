@@ -123,8 +123,6 @@ func TestHwSeedDefaultOptions(t *testing.T) {
 			"claude-opus-5-5":   1,
 			"claude-sonnet-5-5": 0.5,
 			"claude-haiku-5-5":  0.025,
-			"claude-sonnet-5":   0.5,
-			"claude-haiku-4-5":  0.025,
 			"claude-fable-5-1":  2.5,
 			"gpt-6-astra":       2.5,
 			"gpt-6.1-sol":       0.5,
@@ -279,9 +277,9 @@ func TestHwApplySnapshotModelRatios(t *testing.T) {
 	setupHwSeedDefaultsTest(t)
 	// An operator priced two sold models itself and one model outside the catalog.
 	require.NoError(t, model.UpdateOption(hwModelRatioOption,
-		`{"claude-opus-5-5":3.5,"claude-sonnet-5":1,"gemini-3.8-flash":0.75,"gpt-4o":1.25}`))
+		`{"claude-opus-5-5":3.5,"claude-haiku-5-5":1,"gemini-3.8-flash":0.75,"gpt-4o":1.25}`))
 	require.NoError(t, model.UpdateOption(hwCompletionRatioOption,
-		`{"claude-opus-5-5":4,"claude-sonnet-5":5,"gemini-3.8-flash":6}`))
+		`{"claude-opus-5-5":4,"claude-haiku-5-5":5,"gemini-3.8-flash":6}`))
 
 	snapshot := &model.HwPriceSnapshot{
 		Models: `{"claude-opus-5-5":{"in":6000000,"out":30000000},` +
@@ -305,15 +303,62 @@ func TestHwApplySnapshotModelRatios(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, 1.25, ratio)
 	// A sold model the snapshot does not price keeps its entry.
-	ratio, ok, _ = ratio_setting.GetModelRatio("claude-sonnet-5")
+	ratio, ok, _ = ratio_setting.GetModelRatio("claude-haiku-5-5")
 	require.True(t, ok)
 	assert.Equal(t, 1.0, ratio)
-	assert.Equal(t, 5.0, ratio_setting.GetCompletionRatio("claude-sonnet-5"))
+	assert.Equal(t, 5.0, ratio_setting.GetCompletionRatio("claude-haiku-5-5"))
 	// An unusable price never lowers the bill of a sold model to zero.
 	ratio, ok, _ = ratio_setting.GetModelRatio("gemini-3.8-flash")
 	require.True(t, ok)
 	assert.Equal(t, 0.75, ratio)
 	assert.Equal(t, 6.0, ratio_setting.GetCompletionRatio("gemini-3.8-flash"))
+}
+
+// TestHwSeedRetiredModels protects the retirement of an old model on a running
+// database: after startup no channel, ability or billing ratio offers it any
+// more, and a second start changes nothing.
+func TestHwSeedRetiredModels(t *testing.T) {
+	setupHwSeedDefaultsTest(t)
+	channels := []model.Channel{
+		{Name: "mixed", Key: "k1", Status: common.ChannelStatusEnabled, Group: "free,paid", Models: "claude-haiku-4-5,claude-haiku-5-5,claude-sonnet-5,claude-sonnet-5-5"},
+		{Name: "only-retired", Key: "k2", Status: common.ChannelStatusEnabled, Group: "paid", Models: "claude-sonnet-5"},
+		{Name: "untouched", Key: "k3", Status: common.ChannelStatusEnabled, Group: "paid", Models: "gpt-6-luna,claude-haiku-5-5"},
+	}
+	for i := range channels {
+		require.NoError(t, channels[i].Insert())
+	}
+	require.NoError(t, model.UpdateOption(hwModelRatioOption, `{"claude-haiku-4-5":0.025,"claude-sonnet-5":0.5,"gpt-4o":1.25}`))
+	require.NoError(t, model.UpdateOption(hwCompletionRatioOption, `{"claude-haiku-4-5":5,"claude-sonnet-5":5,"gpt-4o":4}`))
+
+	for range 2 {
+		require.NoError(t, HwSeedDefaultOptions())
+
+		models := map[string]string{}
+		var stored []model.Channel
+		require.NoError(t, model.DB.Find(&stored).Error)
+		for _, channel := range stored {
+			models[channel.Name] = channel.Models
+		}
+		assert.Equal(t, map[string]string{
+			"mixed":        "claude-haiku-5-5,claude-sonnet-5-5",
+			"only-retired": "",
+			"untouched":    "gpt-6-luna,claude-haiku-5-5",
+		}, models)
+
+		var abilityModels []string
+		require.NoError(t, model.DB.Model(&model.Ability{}).Distinct("model").Order("model").Pluck("model", &abilityModels).Error)
+		assert.Equal(t, []string{"claude-haiku-5-5", "claude-sonnet-5-5", "gpt-6-luna"}, abilityModels)
+
+		for retired := range hwRetiredModels {
+			_, ok := ratio_setting.GetModelRatioCopy()[retired]
+			assert.False(t, ok, "model ratio of %s", retired)
+			_, ok = ratio_setting.GetCompletionRatioCopy()[retired]
+			assert.False(t, ok, "completion ratio of %s", retired)
+		}
+		ratio, ok, _ := ratio_setting.GetModelRatio("gpt-4o")
+		require.True(t, ok)
+		assert.Equal(t, 1.25, ratio, "an operator ratio of another model stays")
+	}
 }
 
 // TestHwSyncDisplayCurrencyRate protects the TL display against a stale rate:

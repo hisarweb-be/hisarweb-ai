@@ -51,7 +51,7 @@ func hwSnapshotFixture(t *testing.T, stale bool) {
 	t.Helper()
 	modelsJSON, err := common.Marshal(map[string]model.HwModelPrice{
 		"claude-sonnet-5-5": {InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000},
-		"claude-haiku-4-5":  {InputMicroUsd: 100_000, OutputMicroUsd: 500_000},
+		"claude-haiku-5-5":  {InputMicroUsd: 100_000, OutputMicroUsd: 500_000},
 	})
 	require.NoError(t, err)
 	staleAt := int64(0)
@@ -134,7 +134,7 @@ func TestHwPricingCompareMarksStaleSnapshot(t *testing.T) {
 	engine := setupHwPricingTestDB(t)
 	hwSnapshotFixture(t, true)
 
-	recorder, body := hwGetCompare(t, engine, "model=claude-haiku-4-5&input_tokens=1000&output_tokens=1000")
+	recorder, body := hwGetCompare(t, engine, "model=claude-haiku-5-5&input_tokens=1000&output_tokens=1000")
 	require.Equal(t, http.StatusOK, recorder.Code)
 	data, ok := body["data"].(map[string]any)
 	require.True(t, ok)
@@ -151,7 +151,8 @@ func TestHwPricingCompareRejectsUnknownAndInvalidInput(t *testing.T) {
 
 	unknown := []string{
 		"model=gpt-9-turbo&input_tokens=1000&output_tokens=1000",
-		"model=claude-opus-5-5&input_tokens=1000&output_tokens=1000", // sold, but not in this snapshot
+		"model=claude-opus-5-5&input_tokens=1000&output_tokens=1000",  // sold, but not in this snapshot
+		"model=claude-haiku-4-5&input_tokens=1000&output_tokens=1000", // retired, no longer sold
 	}
 	for _, query := range unknown {
 		recorder, body := hwGetCompare(t, engine, query)

@@ -42,7 +42,7 @@ func hwStatusIdentityFixture(t *testing.T) {
 
 	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.Option{}))
+	require.NoError(t, db.AutoMigrate(&model.Option{}, &model.Channel{}, &model.Ability{}))
 	model.DB = db
 	common.IsMasterNode = true
 	common.OptionMap = map[string]string{}

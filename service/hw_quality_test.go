@@ -333,7 +333,7 @@ func TestHwQualityTrafficFromCustomerLogs(t *testing.T) {
 	hwTrafficTestLog(t, model.LogTypeConsume, "not-sold-model", model.HwPaidGroupName, recent, 1, 1, "unsold")
 	// A model with too few requests shows its count and no figures.
 	for i := range 5 {
-		hwTrafficTestLog(t, model.LogTypeConsume, "claude-haiku-4-5", model.HwFreeGroupName, recent, 3, 10, fmt.Sprintf("haiku-%d", i))
+		hwTrafficTestLog(t, model.LogTypeConsume, "claude-haiku-5-5", model.HwFreeGroupName, recent, 3, 10, fmt.Sprintf("haiku-%d", i))
 	}
 
 	traffic, err := HwReadQualityTrafficAt(now)
@@ -359,7 +359,7 @@ func TestHwQualityTrafficFromCustomerLogs(t *testing.T) {
 	assert.InDelta(t, 32.6, *sonnetWeek.OutputTokensPerSecond, 1e-9) // 3000 tokens over 92 s
 
 	haikuWeek := week.Models[1]
-	assert.Equal(t, "claude-haiku-4-5", haikuWeek.Model)
+	assert.Equal(t, "claude-haiku-5-5", haikuWeek.Model)
 	assert.Equal(t, int64(5), haikuWeek.Requests)
 	assert.False(t, haikuWeek.EnoughData)
 	assert.Nil(t, haikuWeek.SuccessPercent)
