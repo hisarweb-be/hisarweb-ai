@@ -661,7 +661,7 @@ export const ModelGroupSelector: React.FC<ModelGroupSelectorProps> = ({
       aria-label={currentModel?.label || t('Model')}
       className={cn(
         'h-8 max-w-[15rem] justify-start gap-2 border px-2.5 font-medium shadow-none',
-        'bg-background/80 hover:bg-accent/70 text-foreground disabled:opacity-100 disabled:text-muted-foreground',
+        'bg-background/80 hover:bg-accent/70 text-foreground disabled:opacity-100 disabled:text-foreground',
         'focus:!ring-0 focus:!outline-none',
         className
       )}

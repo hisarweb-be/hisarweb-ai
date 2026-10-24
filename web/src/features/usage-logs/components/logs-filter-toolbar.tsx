@@ -210,7 +210,10 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
                 {t('Adjust filters, then search to refresh the logs.')}
               </DrawerDescription>
             </DrawerHeader>
-            <div className='flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 py-3'>
+            <div
+              className='flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 py-3'
+              tabIndex={0}
+            >
               {props.mobileFilters ?? (
                 <>
                   {props.primaryFilters}
