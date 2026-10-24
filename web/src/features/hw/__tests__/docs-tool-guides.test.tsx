@@ -29,7 +29,6 @@ import {
   KEY_PLACEHOLDER,
   KEY_TEST_STEPS,
   MODEL_HAIKU,
-  MODEL_HAIKU_FREE,
   OPENAI_BASE_URL,
   TOOL_GUIDES,
   TOOL_ORDER,
@@ -246,7 +245,6 @@ describe.each(LANGS)('program guide in %s', (lang) => {
     expect(within(table).getByText(ANTHROPIC_BASE_URL)).toBeInTheDocument()
     expect(within(table).getByText(ui.protocolNoSlash)).toBeInTheDocument()
     expect(container).toHaveTextContent(MODEL_HAIKU)
-    expect(container).toHaveTextContent(MODEL_HAIKU_FREE)
     expect(container).toHaveTextContent(ui.rooNote)
   })
 

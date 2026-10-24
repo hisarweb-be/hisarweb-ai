@@ -64,6 +64,7 @@ func hwSetOption(t *testing.T, key string, value string) {
 const hwTestPriceListBody = `{
   "claude-sonnet-5-5": {"input_cost_per_token": 2e-06, "output_cost_per_token": 1e-05, "mode": "chat"},
   "claude-haiku-4-5": {"input_cost_per_token": 1e-06, "output_cost_per_token": 5e-06, "mode": "chat"},
+  "claude-haiku-5-5": {"input_cost_per_token": 1e-07, "output_cost_per_token": 5e-07, "mode": "chat"},
   "some-other-model": {"input_cost_per_token": 3e-06, "output_cost_per_token": 1.5e-05, "mode": "chat"}
 }`
 
@@ -114,11 +115,13 @@ func TestHwPriceSnapshotFetchStoresSourceTimeAndRateDate(t *testing.T) {
 	assert.Equal(t, fetchedAt.Unix(), snapshot.FetchedAt)
 	assert.Equal(t, "2026-10-19", snapshot.FxDate)
 	assert.Equal(t, "49.5523", snapshot.TryPerUsd)
-	assert.Equal(t, 3, snapshot.ListedCount)
+	assert.Equal(t, 4, snapshot.ListedCount)
 	prices, err := snapshot.HwSnapshotModelPrices()
 	require.NoError(t, err)
 	assert.Equal(t, model.HwModelPrice{InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000}, prices["claude-sonnet-5-5"])
-	assert.Equal(t, model.HwModelPrice{InputMicroUsd: 1_000_000, OutputMicroUsd: 5_000_000}, prices["claude-haiku-4-5"])
+	// Haiku 4.5 is billed as its successor Haiku 5.5, never at its own older, higher price.
+	assert.Equal(t, model.HwModelPrice{InputMicroUsd: 100_000, OutputMicroUsd: 500_000}, prices["claude-haiku-4-5"])
+	assert.Equal(t, model.HwModelPrice{InputMicroUsd: 100_000, OutputMicroUsd: 500_000}, prices["claude-haiku-5-5"])
 	assert.NotContains(t, prices, "some-other-model", "only sold models belong in the snapshot")
 }
 

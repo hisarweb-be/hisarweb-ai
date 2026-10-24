@@ -67,31 +67,37 @@ export const MODEL_GUIDE: Readonly<Record<string, ModelGuide>> = {
     },
   },
   'claude-sonnet-5-5': {
-    tag: { tr: 'En iyi fiyat/performans', en: 'Best value' },
+    tag: {
+      tr: 'Önerilen: en iyi fiyat/performans',
+      en: 'Recommended: best value',
+    },
     description: {
       tr: 'Her gün kodlama yapmak ve uygulama geliştirmek için en dengeli seçim. Bir açılış sayfasını ya da basit bir uygulamayı hızlıca kurmak için idealdir.',
       en: 'The best balance of price and quality for everyday coding and building apps. Ideal for quickly putting together a landing page or a simple app.',
     },
   },
   'claude-haiku-5-5': {
-    tag: { tr: 'En hızlı ve ucuz', en: 'Fastest and cheapest' },
+    tag: {
+      tr: 'Önerilen: en hızlı ve ucuz',
+      en: 'Recommended: fastest and cheapest',
+    },
     description: {
       tr: 'Çok hızlı ve çok ucuz. Sohbet botu, metin özetleme ya da yüzlerce küçük işi (sınıflandırma, bilgi çıkarma) arka arkaya yapmak için uygundur.',
       en: 'Very fast and very cheap. A good fit for a chatbot, summarising text, or running hundreds of small jobs (sorting, extracting facts) in a row.',
     },
   },
   'claude-sonnet-5': {
-    tag: { tr: 'Dengeli', en: 'Balanced' },
+    tag: { tr: 'Sonnet 5.5 ile çalışır', en: 'Runs on Sonnet 5.5' },
     description: {
-      tr: 'Önceki nesil dengeli model. Günlük kodlama ve yazı işleri için yeterince iyi, fiyatı Sonnet 5.5 ile aynı.',
-      en: 'The balanced model of the previous generation. Good enough for daily coding and writing, at the same price as Sonnet 5.5.',
+      tr: 'Eski ad, mevcut kurulumlar bozulmasın diye duruyor. Bu adla gelen her istek otomatik olarak Sonnet 5.5 ile yanıtlanır, aynı fiyata. Yeni kurulumlarda claude-sonnet-5-5 yazın.',
+      en: 'An older name, kept so existing setups keep working. Every request under this name is answered by Sonnet 5.5 automatically, at the same price. Write claude-sonnet-5-5 in new setups.',
     },
   },
   'claude-haiku-4-5': {
-    tag: { tr: 'Hızlı ve ucuz', en: 'Fast and cheap' },
+    tag: { tr: 'Haiku 5.5 ile çalışır', en: 'Runs on Haiku 5.5' },
     description: {
-      tr: 'Hızlı ve uygun fiyatlı. Basit sorulara yanıt vermek, metin düzeltmek ya da veriyi sınıflandırmak gibi küçük işler için.',
-      en: 'Fast and affordable. For small jobs such as answering simple questions, fixing text or sorting data into categories.',
+      tr: 'Eski ad, mevcut kurulumlar bozulmasın diye duruyor. Bu adla gelen her istek otomatik olarak Haiku 5.5 ile yanıtlanır ve Haiku 5.5 fiyatıyla ücretlendirilir. Yeni kurulumlarda claude-haiku-5-5 yazın.',
+      en: 'An older name, kept so existing setups keep working. Every request under this name is answered by Haiku 5.5 automatically and billed at the Haiku 5.5 price. Write claude-haiku-5-5 in new setups.',
     },
   },
   'gpt-6.1-sol': {
@@ -109,7 +115,10 @@ export const MODEL_GUIDE: Readonly<Record<string, ModelGuide>> = {
     },
   },
   'gpt-6-luna': {
-    tag: { tr: 'En hızlı ve ucuz', en: 'Fastest and cheapest' },
+    tag: {
+      tr: 'Önerilen: en hızlı ve ucuz',
+      en: 'Recommended: fastest and cheapest',
+    },
     description: {
       tr: 'Çok hızlı ve çok ucuz. Sohbet botu, özetleme ve çok sayıda küçük, tekrarlayan iş için.',
       en: 'Very fast and very cheap. For a chatbot, summaries and lots of small, repetitive jobs.',

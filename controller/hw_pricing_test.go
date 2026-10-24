@@ -51,7 +51,7 @@ func hwSnapshotFixture(t *testing.T, stale bool) {
 	t.Helper()
 	modelsJSON, err := common.Marshal(map[string]model.HwModelPrice{
 		"claude-sonnet-5-5": {InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000},
-		"claude-haiku-4-5":  {InputMicroUsd: 1_000_000, OutputMicroUsd: 5_000_000},
+		"claude-haiku-4-5":  {InputMicroUsd: 100_000, OutputMicroUsd: 500_000},
 	})
 	require.NoError(t, err)
 	staleAt := int64(0)

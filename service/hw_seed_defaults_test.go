@@ -124,7 +124,7 @@ func TestHwSeedDefaultOptions(t *testing.T) {
 			"claude-sonnet-5-5": 0.5,
 			"claude-haiku-5-5":  0.025,
 			"claude-sonnet-5":   0.5,
-			"claude-haiku-4-5":  0.25,
+			"claude-haiku-4-5":  0.025,
 			"claude-fable-5-1":  2.5,
 			"gpt-6-astra":       2.5,
 			"gpt-6.1-sol":       0.5,

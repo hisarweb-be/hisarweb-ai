@@ -35,7 +35,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 import { useDocsGuideText } from '../docs-guide-texts'
-import { MODEL_HAIKU_FREE, OPENAI_BASE_URL } from '../docs-tool-guides'
+import { MODEL_HAIKU, OPENAI_BASE_URL } from '../docs-tool-guides'
 import { useHwText, type HwTextKey } from '../texts'
 import { ToolGuides } from './docs-tool-guides'
 
@@ -44,7 +44,7 @@ const GUIDE_VIDEO_SRC = '/rehber/hisarweb-ai-rehber.mp4'
 const GUIDE_VIDEO_POSTER = '/rehber/hisarweb-ai-rehber.jpg'
 
 /** The cheapest model, used in every example so the samples work on a trial account. */
-const EXAMPLE_MODEL = MODEL_HAIKU_FREE
+const EXAMPLE_MODEL = MODEL_HAIKU
 
 const CHAT_COMPLETIONS_EXAMPLE = `curl ${OPENAI_BASE_URL}/chat/completions \\
   -H "Authorization: Bearer $HISARWEB_API_KEY" \\
@@ -204,7 +204,11 @@ function BeginnerGuide() {
           <CardTitle className='text-base'>{t('Costs and refunds')}</CardTitle>
         </CardHeader>
         <CardContent className='space-y-3 text-sm'>
-          <Paragraph>{t('HisarWeb pays the payment and currency conversion costs. You get the full credit for what you pay, with no surcharge or deduction.')}</Paragraph>
+          <Paragraph>
+            {t(
+              'HisarWeb pays the payment and currency conversion costs. You get the full credit for what you pay, with no surcharge or deduction.'
+            )}
+          </Paragraph>
           <Paragraph>
             {t(
               'On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.'
