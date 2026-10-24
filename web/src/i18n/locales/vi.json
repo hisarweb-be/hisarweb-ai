@@ -6664,7 +6664,7 @@
     "Type the confirmation text here": "Nhập văn bản xác nhận tại đây",
     "Type-Specific Settings": "Cài đặt theo loại",
     "Type:": "Loại:",
-    "UI granularity only &mdash; data is still aggregated hourly": "Chỉ là độ chi tiết UI &mdash; dữ liệu vẫn được tổng hợp theo giờ",
+    "UI granularity only, data is still aggregated hourly": "Chỉ là độ chi tiết UI, dữ liệu vẫn được tổng hợp theo giờ",
     "Unable to build Passkey assertion": "Không thể tạo xác nhận Passkey",
     "Unable to compare versions": "Không thể so sánh phiên bản",
     "Unable to confirm the update result": "Không thể xác nhận kết quả cập nhật",

@@ -6664,7 +6664,7 @@
     "Type the confirmation text here": "Введите текст подтверждения здесь",
     "Type-Specific Settings": "Настройки для конкретного типа",
     "Type:": "Тип:",
-    "UI granularity only &mdash; data is still aggregated hourly": "Только детализация пользовательского интерфейса &mdash; данные по-прежнему агрегируются ежечасно",
+    "UI granularity only, data is still aggregated hourly": "Только детализация пользовательского интерфейса, данные по-прежнему агрегируются ежечасно",
     "Unable to build Passkey assertion": "Не удалось создать утверждение Passkey",
     "Unable to compare versions": "Невозможно сравнить версии",
     "Unable to confirm the update result": "Не удалось подтвердить результат обновления",

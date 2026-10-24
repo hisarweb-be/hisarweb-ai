@@ -6664,7 +6664,7 @@
     "Type the confirmation text here": "Saisissez ici le texte de confirmation",
     "Type-Specific Settings": "Paramètres spécifiques au type",
     "Type:": "Type :",
-    "UI granularity only &mdash; data is still aggregated hourly": "Granularité de l'interface uniquement &mdash; les données sont toujours agrégées par heure",
+    "UI granularity only, data is still aggregated hourly": "Granularité de l'interface uniquement, les données sont toujours agrégées par heure",
     "Unable to build Passkey assertion": "Impossible de créer l’assertion Passkey",
     "Unable to compare versions": "Comparaison des versions impossible",
     "Unable to confirm the update result": "Impossible de confirmer le résultat",

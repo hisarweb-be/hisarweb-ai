@@ -31,12 +31,14 @@ var hwAgentAdminRoutes = []hwAgentRoute{
 	{http.MethodPost, "/api/hw/admin/agent/texts", `{"lang":"tr","key":"Save","value":"Kaydet"}`},
 	{http.MethodPost, "/api/hw/admin/agent/texts/revert", `{"lang":"tr","key":"Save"}`},
 	{http.MethodPost, "/api/hw/admin/agent/escalate", `{"title":"t","summary":"s"}`},
+	{http.MethodGet, "/api/hw/admin/agent/escalations", ``},
+	{http.MethodPost, "/api/hw/admin/agent/escalations/card", `{"id":1,"card":"HIS-1"}`},
 }
 
 func hwAgentEnv(t *testing.T) (*hwReserveTestEnv, *model.User, *model.User) {
 	t.Helper()
 	env := hwReserveTestCase(t)
-	require.NoError(t, model.DB.AutoMigrate(&model.HwTextOverride{}))
+	require.NoError(t, model.DB.AutoMigrate(&model.HwTextOverride{}, &model.HwAdminEscalation{}))
 	env.engine.Use(middleware.RequestId())
 	SetHwRouter(env.engine.Group("/api"))
 	customer, _ := env.customer("default")
@@ -123,4 +125,23 @@ func TestHwAdminAgentChatReachesTheGatewayForAnAdmin(t *testing.T) {
 	assert.Contains(t, response.Body.String(), `"proposed":"Kaydet"`)
 	assert.Equal(t, "Bearer agent-test-key", gotAuth)
 	assert.Equal(t, "claude-haiku-5-5", gotModel, "the cheapest capable model is the default")
+}
+
+func TestHwAdminAgentEscalationQueuesWhenBoardIsUnreachable(t *testing.T) {
+	env, _, admin := hwAgentEnv(t)
+	adminBearer := env.bearer(admin)
+	t.Setenv("HW_BUREAU_URL", "")
+
+	queued := env.agentCall(hwAgentRoute{http.MethodPost, "/api/hw/admin/agent/escalate", `{"title":"Betaling mislukt","summary":"500 TRY geeft een fout","page":"/console/topup"}`}, adminBearer)
+	require.Equal(t, http.StatusOK, queued.Code, queued.Body.String())
+	assert.Contains(t, queued.Body.String(), `"success":true`)
+	assert.Contains(t, queued.Body.String(), `"queued":true`)
+
+	pending := env.agentCall(hwAgentRoute{http.MethodGet, "/api/hw/admin/agent/escalations", ``}, adminBearer)
+	assert.Contains(t, pending.Body.String(), "Betaling mislukt")
+
+	linked := env.agentCall(hwAgentRoute{http.MethodPost, "/api/hw/admin/agent/escalations/card", `{"id":1,"card":"HIS-7"}`}, adminBearer)
+	assert.Contains(t, linked.Body.String(), `"success":true`)
+	after := env.agentCall(hwAgentRoute{http.MethodGet, "/api/hw/admin/agent/escalations", ``}, adminBearer)
+	assert.NotContains(t, after.Body.String(), "Betaling mislukt", "a linked escalation is no longer pending")
 }

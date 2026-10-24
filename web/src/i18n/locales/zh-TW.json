@@ -6664,7 +6664,7 @@
     "Type the confirmation text here": "在此輸入確認文字",
     "Type-Specific Settings": "特定類型設定",
     "Type:": "類型：",
-    "UI granularity only &mdash; data is still aggregated hourly": "僅 UI 粒度 &mdash; 數據仍按小時匯總",
+    "UI granularity only, data is still aggregated hourly": "僅 UI 粒度, 數據仍按小時匯總",
     "Unable to build Passkey assertion": "無法建立 Passkey 斷言",
     "Unable to compare versions": "無法比較版本",
     "Unable to confirm the update result": "無法確認更新結果",

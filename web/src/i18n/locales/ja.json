@@ -6664,7 +6664,7 @@
     "Type the confirmation text here": "確認テキストをここに入力",
     "Type-Specific Settings": "タイプ固有の設定",
     "Type:": "タイプ:",
-    "UI granularity only &mdash; data is still aggregated hourly": "UIの粒度のみ &mdash; データは引き続き時間単位で集計されます",
+    "UI granularity only, data is still aggregated hourly": "UIの粒度のみ, データは引き続き時間単位で集計されます",
     "Unable to build Passkey assertion": "Passkey アサーションを作成できません",
     "Unable to compare versions": "バージョンを比較できません",
     "Unable to confirm the update result": "更新結果を確認できません",
