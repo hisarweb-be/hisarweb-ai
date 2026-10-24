@@ -32,6 +32,9 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/status/test", middleware.AdminAuth(), controller.TestStatus)
 		// Abuse review: thaw an account the daily sweep froze for inspection.
 		apiRouter.POST("/hw/admin/unfreeze", middleware.AdminAuth(), controller.HwAdminUnfreeze)
+		// Partner channels: grant the channel credit, list the results.
+		apiRouter.POST("/hw/admin/channel-grant", middleware.AdminAuth(), controller.HwAdminChannelGrant)
+		apiRouter.GET("/hw/admin/channels", middleware.AdminAuth(), controller.HwAdminChannels)
 		apiRouter.GET("/notice", controller.GetNotice)
 		apiRouter.GET("/user-agreement", controller.GetUserAgreement)
 		apiRouter.GET("/privacy-policy", controller.GetPrivacyPolicy)

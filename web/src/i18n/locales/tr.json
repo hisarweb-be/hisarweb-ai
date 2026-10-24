@@ -2768,6 +2768,13 @@
     "Billing": "Ücretlendirme",
     "HisarWeb pays the payment and currency conversion costs. You get the full credit for what you pay, with no surcharge or deduction.": "Ödeme ve kur dönüşümü masraflarını HisarWeb öder. Ödediğiniz tutarın tamamı krediniz olarak yüklenir; ek ücret veya kesinti yoktur.",
     "Costs and refunds": "Masraflar ve iade",
-    "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.": "İade durumunda, HisarWeb'in ödediği ödeme işleme ve kur dönüşümü masrafları iade edilecek tutardan düşülür."
+    "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.": "İade durumunda, HisarWeb'in ödediği ödeme işleme ve kur dönüşümü masrafları iade edilecek tutardan düşülür.",
+    "Three steps to earn credit with your personal link.": "Kişisel bağlantınızla kredi kazanmak için üç adım.",
+    "Share your link": "Bağlantınızı paylaşın",
+    "Copy your personal link below and send it to a friend.": "Aşağıdaki kişisel bağlantınızı kopyalayın ve bir arkadaşınıza gönderin.",
+    "Your friend pays": "Arkadaşınız öder",
+    "Your friend signs up through your link and tops up credit.": "Arkadaşınız bağlantınızla kaydolur ve kredi yükler.",
+    "You get {{percent}}% as credit": "%{{percent}} kredi kazanırsınız",
+    "If your friend buys {{paid}}, you get {{reward}} as credit on your balance.": "Arkadaşınız {{paid}} tutarında satın alırsa, bakiyenize {{reward}} kredi olarak eklenir."
   }
 }

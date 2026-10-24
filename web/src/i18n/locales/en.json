@@ -2833,7 +2833,7 @@
     "footer.columns.related.links.oneApi": "One API",
     "footer.columns.related.title": "Related Projects",
     "footer.defaultCopyright": "All rights reserved.",
-    "footer.new\u0061pi.projectAttributionSuffix": "All rights reserved. Designed and developed by the project contributors.",
+    "footer.newapi.projectAttributionSuffix": "All rights reserved. Designed and developed by the project contributors.",
     "For advanced custom channels this applies only to /v1/responses routes without protocol conversion.": "For advanced custom channels this applies only to /v1/responses routes without protocol conversion.",
     "GitHub ID is empty!": "GitHub ID is empty!",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment",
@@ -7448,6 +7448,13 @@
     "Connection type: {{name}}": "Connection type: {{name}}",
     "HisarWeb pays the payment and currency conversion costs. You get the full credit for what you pay, with no surcharge or deduction.": "HisarWeb pays the payment and currency conversion costs. You get the full credit for what you pay, with no surcharge or deduction.",
     "Costs and refunds": "Costs and refunds",
-    "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.": "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount."
+    "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.": "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.",
+    "Three steps to earn credit with your personal link.": "Three steps to earn credit with your personal link.",
+    "Share your link": "Share your link",
+    "Copy your personal link below and send it to a friend.": "Copy your personal link below and send it to a friend.",
+    "Your friend pays": "Your friend pays",
+    "Your friend signs up through your link and tops up credit.": "Your friend signs up through your link and tops up credit.",
+    "You get {{percent}}% as credit": "You get {{percent}}% as credit",
+    "If your friend buys {{paid}}, you get {{reward}} as credit on your balance.": "If your friend buys {{paid}}, you get {{reward}} as credit on your balance."
   }
 }

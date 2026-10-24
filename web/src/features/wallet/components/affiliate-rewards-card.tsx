@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Share2 } from 'lucide-react'
+import { CreditCard, Gift, Share2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { CopyButton } from '@/components/copy-button'
@@ -25,8 +25,12 @@ import { Card, CardContent } from '@/components/ui/card'
 import { IconBadge } from '@/components/ui/icon-badge'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useHwCurrency } from '@/features/hw/hooks/use-hw-currency'
+import { formatHwAmount } from '@/features/hw/lib/format'
+import { toIntlLocale } from '@/i18n/languages'
 import { formatQuota } from '@/lib/format'
 
+import { AFFILIATE_PERCENT, affiliateExample } from '../lib/affiliate'
 import type { UserWalletData } from '../types'
 
 interface AffiliateRewardsCardProps {
@@ -44,7 +48,8 @@ export function AffiliateRewardsCard({
   complianceConfirmed = true,
   loading,
 }: AffiliateRewardsCardProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const { currency, rates } = useHwCurrency()
   if (loading) {
     return (
       <Card data-card-hover='false' className='bg-muted/20 py-0'>
@@ -61,25 +66,74 @@ export function AffiliateRewardsCard({
   }
 
   const hasRewards = (user?.aff_quota ?? 0) > 0
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
+  const example = affiliateExample(currency, rates)
+  const steps = [
+    {
+      icon: Share2,
+      title: t('Share your link'),
+      text: t('Copy your personal link below and send it to a friend.'),
+    },
+    {
+      icon: CreditCard,
+      title: t('Your friend pays'),
+      text: t('Your friend signs up through your link and tops up credit.'),
+    },
+    {
+      icon: Gift,
+      title: t('You get {{percent}}% as credit', {
+        percent: AFFILIATE_PERCENT,
+      }),
+      text: t(
+        'If your friend buys {{paid}}, you get {{reward}} as credit on your balance.',
+        {
+          paid: formatHwAmount(example.paid, example.currency, locale),
+          reward: formatHwAmount(example.reward, example.currency, locale),
+        }
+      ),
+    },
+  ]
 
   return (
     <Card data-card-hover='false' className='bg-muted/20 py-0'>
-      <CardContent className='grid gap-3 p-3 sm:gap-4 sm:p-4 lg:grid-cols-[minmax(200px,1fr)_minmax(180px,0.65fr)_minmax(280px,1fr)] lg:items-center'>
-        <div className='flex min-w-0 items-center gap-2.5'>
+      <CardContent className='grid gap-3 p-3 sm:gap-4 sm:p-4 lg:grid-cols-[minmax(200px,0.65fr)_minmax(280px,1fr)] lg:items-center'>
+        <div className='flex min-w-0 items-center gap-2.5 lg:col-span-2'>
           <IconBadge tone='chart-3'>
             <Share2 />
           </IconBadge>
           <div className='min-w-0'>
-            <h3 className='truncate text-sm font-semibold'>
-              {t('Referral Program')}
-            </h3>
-            <p className='text-muted-foreground line-clamp-1 text-xs'>
-              {t(
-                'Earn rewards when users join through your referral link. Transfer accumulated rewards to your balance anytime.'
-              )}
+            <h3 className='text-sm font-semibold'>{t('Referral Program')}</h3>
+            <p className='text-muted-foreground text-xs'>
+              {t('Three steps to earn credit with your personal link.')}
             </p>
           </div>
         </div>
+
+        <ol className='grid gap-2 sm:grid-cols-3 lg:col-span-2'>
+          {steps.map((step, index) => (
+            <li
+              key={step.title}
+              className='bg-background/70 animate-in fade-in slide-in-from-bottom-2 fill-mode-both flex gap-2.5 rounded-lg border p-3 motion-reduce:animate-none'
+              style={{ animationDelay: `${index * 120}ms` }}
+            >
+              <span
+                className={`bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded-full ${
+                  index === steps.length - 1 ? 'motion-safe:animate-pulse' : ''
+                }`}
+              >
+                <step.icon className='size-4' />
+              </span>
+              <div className='min-w-0'>
+                <div className='text-sm font-semibold'>
+                  {index + 1}. {step.title}
+                </div>
+                <p className='text-muted-foreground mt-0.5 text-xs'>
+                  {step.text}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ol>
 
         <div className='grid grid-cols-3 gap-1.5 text-center'>
           {[
@@ -88,10 +142,10 @@ export function AffiliateRewardsCard({
             [t('Invites'), String(user?.aff_count ?? 0)],
           ].map(([label, value]) => (
             <div key={label}>
-              <div className='text-muted-foreground truncate text-[10px] font-medium tracking-wider uppercase'>
+              <div className='text-muted-foreground text-[10px] font-medium tracking-wider uppercase'>
                 {label}
               </div>
-              <div className='mt-0.5 truncate text-sm font-semibold tabular-nums'>
+              <div className='mt-0.5 text-sm font-semibold tabular-nums'>
                 {value}
               </div>
             </div>
@@ -124,7 +178,7 @@ export function AffiliateRewardsCard({
           )}
         </div>
         {!complianceConfirmed ? (
-          <p className='text-muted-foreground text-xs lg:col-span-3'>
+          <p className='text-muted-foreground text-xs lg:col-span-2'>
             {t(
               'Referral reward transfer is disabled until the administrator confirms compliance terms.'
             )}

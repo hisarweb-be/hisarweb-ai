@@ -2833,7 +2833,7 @@
     "footer.columns.related.links.oneApi": "One API",
     "footer.columns.related.title": "Projets liés",
     "footer.defaultCopyright": "Tous droits réservés.",
-    "footer.new\u0061pi.projectAttributionSuffix": "Tous droits réservés. Conçu et développé par les contributeurs du projet.",
+    "footer.newapi.projectAttributionSuffix": "Tous droits réservés. Conçu et développé par les contributeurs du projet.",
     "For advanced custom channels this applies only to /v1/responses routes without protocol conversion.": "Pour les canaux personnalisés avancés, ceci ne s’applique qu’aux routes /v1/responses sans conversion de protocole.",
     "GitHub ID is empty!": "L’ID GitHub est vide !",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "Pour les canaux ajoutés après le 10 mai 2025, pas besoin de supprimer \".\" des noms de modèles lors du déploiement",
@@ -7339,6 +7339,13 @@
     "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.": "Saving the token points the bot at this site, so customers can share their phone number for the free trial credit.",
     "HisarWeb pays the payment and currency conversion costs. You get the full credit for what you pay, with no surcharge or deduction.": "HisarWeb prend en charge les frais de paiement et de conversion de devise. Vous recevez le crédit complet pour le montant payé, sans supplément ni retenue.",
     "Costs and refunds": "Frais et remboursements",
-    "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.": "En cas de remboursement, les frais de traitement du paiement et de conversion de devise payés par HisarWeb sont déduits du montant remboursé."
+    "On a refund, the payment processing and currency conversion costs that HisarWeb paid are deducted from the refunded amount.": "En cas de remboursement, les frais de traitement du paiement et de conversion de devise payés par HisarWeb sont déduits du montant remboursé.",
+    "Three steps to earn credit with your personal link.": "Trois étapes pour gagner des crédits avec votre lien personnel.",
+    "Share your link": "Partagez votre lien",
+    "Copy your personal link below and send it to a friend.": "Copiez votre lien personnel ci-dessous et envoyez-le à un ami.",
+    "Your friend pays": "Votre ami paie",
+    "Your friend signs up through your link and tops up credit.": "Votre ami s'inscrit via votre lien et recharge des crédits.",
+    "You get {{percent}}% as credit": "Vous recevez {{percent}} % en crédit",
+    "If your friend buys {{paid}}, you get {{reward}} as credit on your balance.": "Si votre ami achète pour {{paid}}, vous recevez {{reward}} de crédit sur votre solde."
   }
 }
