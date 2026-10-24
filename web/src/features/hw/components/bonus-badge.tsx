@@ -16,10 +16,49 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-/**
- * Placeholder for the bonus badge. The hw-platform session replaces this file
- * with the real badge (rules come from the API); pages only place it.
- */
-export function BonusBadge() {
-  return null
+import { Gift } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+
+import { Badge } from '@/components/ui/badge'
+
+import { formatHwAmount } from '../lib/format'
+import type { HwCurrency } from '../lib/currency'
+
+interface BonusBadgeProps {
+  currency: HwCurrency
+  /** Bonus in whole units of `currency`. Nothing is drawn for zero. */
+  amount: number
+  locale?: string
+  className?: string
 }
+
+/** "+₺50 bonus": what a top-up earns on top of the amount paid. */
+export function HwBonusBadge(props: BonusBadgeProps) {
+  const { t } = useTranslation()
+  if (!(props.amount > 0)) return null
+  const text = t('+{{amount}} bonus', {
+    amount: formatHwAmount(props.amount, props.currency, props.locale),
+  })
+  return (
+    <Badge variant='warning' className={props.className} aria-label={text}>
+      <Gift aria-hidden='true' />
+      {text}
+    </Badge>
+  )
+}
+
+/** The badge of a finished order, whose bonus is stored in minor units. */
+export function HwOrderBonusBadge(props: {
+  currency: HwCurrency
+  bonusMinor: number
+  locale?: string
+}) {
+  return (
+    <HwBonusBadge
+      currency={props.currency}
+      amount={props.bonusMinor / 100}
+      locale={props.locale}
+    />
+  )
+}
+

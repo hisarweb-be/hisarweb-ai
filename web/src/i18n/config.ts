@@ -29,6 +29,7 @@ import tr from './locales/tr.json'
 import vi from './locales/vi.json'
 import zhTW from './locales/zh-TW.json'
 import zhCN from './locales/zh.json'
+import { loadTextOverrides } from './text-overrides'
 
 export const resources = {
   tr,
@@ -83,6 +84,18 @@ export function applyDocumentLanguage(language?: string | null): void {
 }
 
 i18n.on('languageChanged', applyDocumentLanguage)
+
+// Admin-applied text replacements load once per language; loading them
+// re-emits languageChanged, which the guard turns into a no-op.
+let overridesLoadedFor = ''
+function refreshTextOverrides(language?: string | null): void {
+  if (!language || language === overridesLoadedFor) return
+  if (typeof fetch === 'undefined') return
+  overridesLoadedFor = language
+  void loadTextOverrides(i18n)
+}
+i18n.on('languageChanged', refreshTextOverrides)
+refreshTextOverrides(i18n.language)
 applyDocumentLanguage(i18n.resolvedLanguage ?? i18n.language)
 
 export default i18n

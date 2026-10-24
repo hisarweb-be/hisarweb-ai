@@ -24,6 +24,7 @@ import { AttributionNotice } from '@/components/attribution-notice'
 import { TrustBlock } from '@/features/hw/components/trust-block'
 import { useStatus } from '@/hooks/use-status'
 import { useSystemConfig } from '@/hooks/use-system-config'
+import { BUILD_STAMP } from '@/lib/build-stamp'
 import { DEFAULT_SYSTEM_NAME } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 
@@ -43,6 +44,8 @@ interface FooterProps {
   columns?: FooterColumnProps[]
   copyright?: string
   className?: string
+  /** compact: one centered line for the dashboard and the sign-in screens. */
+  variant?: 'full' | 'compact'
 }
 
 function FooterLinkItem(props: { link: FooterLink }) {
@@ -76,7 +79,7 @@ function FooterLinkItem(props: { link: FooterLink }) {
 // Renders User Agreement / Privacy Policy links inline with the parent's
 // copyright row when either is configured in System Settings → Site. Emits
 // fragmented siblings so the parent flex container's gap controls spacing.
-function LegalLinks(props: { leadingSeparator?: boolean }) {
+function LegalLinks() {
   const { t } = useTranslation()
   const { status } = useStatus()
   const items: { key: string; label: string; href: string }[] = []
@@ -97,47 +100,66 @@ function LegalLinks(props: { leadingSeparator?: boolean }) {
   if (items.length === 0) {
     return null
   }
+  // On narrow screens the links move under the copyright line, so the dot
+  // that joins them only shows from sm upwards.
   return (
     <>
-      {items.map((item, index) => (
-        <Fragment key={item.key}>
-          {(props.leadingSeparator || index > 0) && (
-            <span aria-hidden='true' className='text-muted-foreground/30'>
-              ·
-            </span>
-          )}
-          <Link
-            to={item.href}
-            className='hover:text-foreground transition-colors duration-200'
-          >
-            {item.label}
-          </Link>
-        </Fragment>
-      ))}
+      <span
+        aria-hidden='true'
+        className='text-muted-foreground/30 hidden sm:inline'
+      >
+        ·
+      </span>
+      <span className='flex items-center gap-x-2.5'>
+        {items.map((item, index) => (
+          <Fragment key={item.key}>
+            {index > 0 && (
+              <span aria-hidden='true' className='text-muted-foreground/30'>
+                ·
+              </span>
+            )}
+            <Link
+              to={item.href}
+              className='hover:text-foreground transition-colors duration-200'
+            >
+              {item.label}
+            </Link>
+          </Fragment>
+        ))}
+      </span>
     </>
   )
 }
 
-// inline=true returns just the inner span for composition in a parent flex
-// row. inline=false wraps in a centered/right-aligned div (default).
-// The attribution is a legal notice, not marketing copy: AGPL-3.0 section 7
-// requires it to stay visible, and the upstream NOTICE line is quoted verbatim.
-// "New API" and "QuantumNous" appear there and nowhere else in the interface.
-function ProjectAttribution(props: { currentYear: number; inline?: boolean }) {
-  const content = (
-    <span className='text-muted-foreground/90'>
-      &copy; {props.currentYear} HisarWeb AI
-      <br />
-      <AttributionNotice />
-    </span>
-  )
-  if (props.inline) {
-    return content
-  }
+// Copyright, legal links, the licence notice and the version stamp, centered.
+// The attribution is a legal notice, not marketing copy: the upstream NOTICE
+// (AGPL-3.0 section 7(b)) requires its line and the link to the original
+// project to stay visible in the footer, so it is shown small but readable.
+function FooterLegalBlock(props: { name: string; copyright: string }) {
+  const currentYear = new Date().getFullYear()
   return (
-    <div className='text-muted-foreground/90 text-center text-xs sm:text-right'>
-      {content}
+    <div className='flex flex-col items-center gap-3 text-center'>
+      <div className='text-muted-foreground flex flex-col items-center justify-center gap-x-2.5 gap-y-1.5 text-xs sm:flex-row'>
+        <span>
+          &copy; {currentYear} {props.name}. {props.copyright}
+        </span>
+        <LegalLinks />
+      </div>
+      <AttributionNotice className='text-muted-foreground/60 text-[11px] leading-relaxed' />
+      <BuildStamp />
     </div>
+  )
+}
+
+function BuildStamp() {
+  if (!BUILD_STAMP) return null
+  return (
+    <span
+      className='text-muted-foreground/50 font-mono text-[10px] tracking-wide tabular-nums'
+      data-testid='build-stamp'
+    >
+      {BUILD_STAMP}
+    </span>
   )
 }
 
@@ -153,7 +175,7 @@ export function Footer(props: FooterProps) {
   const displayLogo = systemLogo || props.logo || '/logo.png'
   const displayName = systemName || props.name || DEFAULT_SYSTEM_NAME
   const isDemoSiteMode = Boolean(demoSiteEnabled)
-  const currentYear = new Date().getFullYear()
+  const copyright = props.copyright ?? t('footer.defaultCopyright')
 
   // Only our own documentation page is offered; the upstream project's wiki and
   // its related projects are not written for our customers, so those links are
@@ -170,27 +192,16 @@ export function Footer(props: FooterProps) {
 
   const displayColumns = props.columns ?? fallbackColumns
 
-  if (footerHtml) {
+  if (props.variant === 'compact') {
     return (
       <footer
         className={cn(
-          'border-border/40 relative z-10 border-t',
+          'border-border/40 shrink-0 border-t px-4 py-3',
           props.className
         )}
       >
-        <div className='mx-auto w-full max-w-6xl px-6 py-5'>
-          <TrustBlock centered className='mb-4' />
-          <div className='bg-muted/20 border-border/50 flex flex-col items-center justify-between gap-4 rounded-2xl border px-4 py-4 backdrop-blur-sm sm:flex-row sm:px-5'>
-            <div
-              className='custom-footer text-muted-foreground min-w-0 text-center text-sm sm:text-left'
-              dangerouslySetInnerHTML={{ __html: footerHtml }}
-            />
-            <div className='border-border/60 text-muted-foreground/90 flex w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 border-t pt-4 text-xs sm:w-auto sm:justify-end sm:border-t-0 sm:border-l sm:pt-0 sm:pl-5'>
-              <LegalLinks />
-              <ProjectAttribution currentYear={currentYear} inline />
-            </div>
-          </div>
-        </div>
+        <TrustBlock centered className='mb-3' />
+        <FooterLegalBlock name={displayName} copyright={copyright} />
       </footer>
     )
   }
@@ -199,60 +210,57 @@ export function Footer(props: FooterProps) {
     <footer
       className={cn('border-border/40 relative z-10 border-t', props.className)}
     >
-      <div className='mx-auto max-w-6xl px-6 py-12 md:py-16'>
-        <div className='flex flex-col justify-between gap-10 md:flex-row md:gap-16'>
-          {/* Brand column */}
-          <div className='shrink-0'>
-            <Link to='/' className='group flex items-center gap-2.5'>
+      <div className='mx-auto flex max-w-3xl flex-col items-center gap-8 px-6 py-12 text-center md:py-14'>
+        {footerHtml ? (
+          <div
+            className='custom-footer text-muted-foreground text-sm'
+            dangerouslySetInnerHTML={{ __html: footerHtml }}
+          />
+        ) : (
+          <div className='flex flex-col items-center gap-3'>
+            <Link to='/' className='flex items-center gap-2.5'>
               <img
                 src={displayLogo}
                 alt={displayName}
-                className='size-7 rounded-lg object-contain'
+                className='size-8 rounded-lg object-contain'
               />
-              <span className='text-sm font-semibold tracking-tight'>
+              <span className='text-base font-semibold tracking-tight'>
                 {displayName}
               </span>
             </Link>
-            <p className='text-muted-foreground/90 mt-3 max-w-[200px] text-xs leading-relaxed'>
+            <p className='text-muted-foreground text-xs'>
               {t('Powerful API Management Platform')}
             </p>
           </div>
+        )}
 
-          {/* Links columns */}
-          {isDemoSiteMode && (
-            <div className='grid grid-cols-3 gap-8 md:gap-16'>
-              {displayColumns.map((column) => (
-                <div key={column.title}>
-                  <p className='text-muted-foreground/50 mb-3 text-xs font-medium tracking-wider uppercase'>
-                    {t(column.title)}
-                  </p>
-                  <ul className='space-y-2.5'>
-                    {column.links.map((link) => (
-                      <li key={link.href}>
-                        <FooterLinkItem link={link} />
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <TrustBlock centered className='border-border/30 mt-10 border-t pt-6' />
-
-        {/* Copyright + optional legal links inline on the left, project
-            attribution on the right; wraps on narrow screens. */}
-        <div className='border-border/30 mt-12 flex flex-col items-center justify-between gap-x-3 gap-y-2 border-t pt-6 sm:flex-row'>
-          <div className='text-muted-foreground/90 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs sm:justify-start'>
-            <span>
-              &copy; {currentYear} {displayName}.{' '}
-              {props.copyright ?? t('footer.defaultCopyright')}
-            </span>
-            <LegalLinks leadingSeparator />
+        {isDemoSiteMode && (
+          <div className='flex flex-wrap justify-center gap-x-12 gap-y-6'>
+            {displayColumns.map((column) => (
+              <div key={column.title}>
+                <p className='text-muted-foreground/50 mb-3 text-xs font-medium tracking-wider uppercase'>
+                  {t(column.title)}
+                </p>
+                <ul className='space-y-2.5'>
+                  {column.links.map((link) => (
+                    <li key={link.href}>
+                      <FooterLinkItem link={link} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
-          <ProjectAttribution currentYear={currentYear} />
-        </div>
+        )}
+
+        <div
+          aria-hidden='true'
+          className='via-border h-px w-full max-w-md bg-gradient-to-r from-transparent to-transparent'
+        />
+
+        <TrustBlock centered />
+
+        <FooterLegalBlock name={displayName} copyright={copyright} />
       </div>
     </footer>
   )

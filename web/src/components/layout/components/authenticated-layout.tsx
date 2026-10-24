@@ -22,11 +22,13 @@ import { SkipToMain } from '@/components/skip-to-main'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { LayoutProvider } from '@/context/layout-provider'
 import { SearchProvider } from '@/context/search-provider'
+import { AdminAgentPanel } from '@/features/hw/admin-agent/admin-agent-panel'
 import { getCookie } from '@/lib/cookies'
 import { cn } from '@/lib/utils'
 
 import { AppHeader } from './app-header'
 import { AppSidebar } from './app-sidebar'
+import { Footer } from './footer'
 
 type AuthenticatedLayoutProps = {
   children?: React.ReactNode
@@ -52,10 +54,12 @@ export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
               )}
             >
               {props.children ?? <AnimatedOutlet />}
+              <Footer variant='compact' />
             </SidebarInset>
           </div>
         </SidebarProvider>
         <CommandMenu />
+        <AdminAgentPanel />
       </SearchProvider>
     </LayoutProvider>
   )

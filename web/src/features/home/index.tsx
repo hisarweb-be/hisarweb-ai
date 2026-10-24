@@ -20,7 +20,6 @@ import { useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { PublicLayout } from '@/components/layout'
-import { Footer } from '@/components/layout/components/footer'
 import { RichContent } from '@/components/rich-content'
 import { useTheme } from '@/context/theme-provider'
 import { LandingPage } from '@/features/hw/components/landing-page'
@@ -120,7 +119,6 @@ export function Home() {
   return (
     <PublicLayout backdrop={false} showMainContainer={false}>
       <LandingPage />
-      <Footer />
     </PublicLayout>
   )
 }

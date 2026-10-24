@@ -127,6 +127,23 @@ func TestHwStatusTellsWhetherCardPaymentIsOpen(t *testing.T) {
 	assert.Equal(t, true, data["hw_payment_available"])
 }
 
+// TestHwStatusAnnouncesBonusAndValidityToVisitors: the landing page is public,
+// so the bonus rules and the validity days come from the status answer.
+func TestHwStatusAnnouncesBonusAndValidityToVisitors(t *testing.T) {
+	hwStatusIdentityFixture(t)
+	common.OptionMapRWMutex.Lock()
+	common.OptionMap[model.HwBonusTryMinOption] = "500"
+	common.OptionMap[model.HwBonusTryAmountOption] = "50"
+	common.OptionMapRWMutex.Unlock()
+
+	data, _ := hwStatusIdentityServe(t)
+	assert.Equal(t, 30.0, data["hw_credit_validity_days"])
+	rules, ok := data["hw_bonus_rules"].([]any)
+	require.True(t, ok)
+	require.Len(t, rules, 3)
+	assert.Equal(t, map[string]any{"currency": "TRY", "min": 500.0, "amount": 50.0}, rules[0])
+}
+
 // TestHwStatusListsTheCurrenciesThatCanBeSold: the shop shows the currencies
 // that can be charged right now, with their rates per dollar and the top-up
 // bounds. Without Stripe only the lira is offered, and a euro rate older than a

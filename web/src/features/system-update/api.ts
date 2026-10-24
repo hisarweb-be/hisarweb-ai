@@ -16,13 +16,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useAuthStore } from '@/stores/auth-store'
+import { getFreshAuthHeaders } from '@/lib/api'
 
 import { selectLatestRelease, type SystemRelease } from './releases'
 
 // The Content-Security-Policy keeps connect-src at 'self', so the server asks
 // GitHub on our behalf and caches the answer for an hour. Plain fetch on
 // purpose: the shared api client would send a failed check to the sign-in page.
+// The access token is short-lived, so the headers come from the refreshing
+// helper; reading the stored token directly gave 401 as soon as it expired.
 export const SYSTEM_RELEASES_URL = '/api/hw/upstream-releases'
 
 export type UpdateCheckErrorCode =
@@ -48,10 +50,9 @@ export async function fetchLatestSystemRelease(
   const timeout = setTimeout(cancel, 10_000)
 
   try {
-    const accessToken = useAuthStore.getState().auth.accessToken
     const response = await fetch(SYSTEM_RELEASES_URL, {
       credentials: 'same-origin',
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      headers: await getFreshAuthHeaders(),
       signal: controller.signal,
     })
     if (response.status === 429) {

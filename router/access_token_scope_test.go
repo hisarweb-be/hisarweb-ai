@@ -29,6 +29,8 @@ var accessTokenExemptRoutes = []string{
 	"GET /api/notice",
 	// The public service status is readable without any account.
 	"GET /api/hw/status",
+	// The text overrides are public: every visitor reads the corrected words.
+	"GET /api/hw/text-overrides",
 	"GET /api/user-agreement",
 	"GET /api/privacy-policy",
 	"GET /api/about",

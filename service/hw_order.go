@@ -183,6 +183,11 @@ func HwCreateTopUpOrder(ctx context.Context, userID int, request HwTopUpRequest,
 		releaseClaim()
 		return HwTopUpOrder{}, ErrHwTopUpAmountOutOfRange
 	}
+	bonusQuota, bonusMinor, err := hwTopUpBonus(currency, amount, rate)
+	if err != nil {
+		releaseClaim()
+		return HwTopUpOrder{}, ErrHwTopUpAmountOutOfRange
+	}
 	payableMinor := quote.Payable.Mul(decimal.NewFromInt(100)).Round(0)
 	if !payableMinor.IsPositive() || payableMinor.GreaterThan(decimal.NewFromInt(hwMaxOrderMoneyMinor)) {
 		releaseClaim()
@@ -200,6 +205,8 @@ func HwCreateTopUpOrder(ctx context.Context, userID int, request HwTopUpRequest,
 		ListValueTryMinor: int64(amount) * 100,
 		PayableTryMinor:   payableMinor.IntPart(),
 		Currency:          currency,
+		BonusQuota:        bonusQuota,
+		BonusMinor:        bonusMinor,
 		DiscountKind:      discountKind,
 		Language:          hwLanguageTag(request.Language),
 		Status:            model.HwOrderStatusCreated,
@@ -461,6 +468,9 @@ func hwSettleConfirmedOrder(order *model.HwOrder, providerOrder hwRevolutOrderRe
 	}
 	if settlement.Granted {
 		model.HwSyncCachesAfterGrant(settlement.UserId, settlement.GrantedQuota, model.HwSourcePurchase)
+		if settlement.BonusQuota > 0 {
+			model.HwSyncCachesAfterGrant(settlement.UserId, settlement.BonusQuota, model.HwSourceBonus)
+		}
 		model.HwSyncCachesAfterFreeForfeit(settlement.UserId, settlement.ForfeitedFreeQuota)
 	}
 	// Re-record the card signal of every paid discounted order, so the
@@ -679,6 +689,9 @@ type HwAdminRefundResult struct {
 	// SpentQuota is what the customer had already spent; it stays recorded as
 	// owed and is not recovered from other packages.
 	SpentQuota int
+	// BonusReturnedQuota is the unspent bonus of the order that was taken back
+	// together with the purchase; zero when the order earned no bonus.
+	BonusReturnedQuota int
 	// Note is the admin note stored on the order.
 	Note string
 	// Currency, FeeMinor and RefundedMinor describe the card part of a Stripe
@@ -737,6 +750,7 @@ func HwAdminRefundOrder(merchantRef string, now time.Time) (HwAdminRefundResult,
 	result.GrantedQuota = revocation.GrantedQuota
 	result.ReturnedQuota = revocation.RemainingQuota
 	result.SpentQuota = max(revocation.GrantedQuota-revocation.RemainingQuota, 0)
+	result.BonusReturnedQuota = revocation.BonusReturnedQuota
 	if alreadyRefunded {
 		result.Note = order.AdminNote
 		// A card refund that failed on the first call is retried here; Stripe's
@@ -749,6 +763,9 @@ func HwAdminRefundOrder(merchantRef string, now time.Time) (HwAdminRefundResult,
 	}
 	result.Note = fmt.Sprintf("refund: granted %d quota, returned %d quota, %d quota already spent stays owed",
 		result.GrantedQuota, result.ReturnedQuota, result.SpentQuota)
+	if result.BonusReturnedQuota > 0 {
+		result.Note += fmt.Sprintf("; bonus: %d quota taken back with it", result.BonusReturnedQuota)
+	}
 	if hasPlan {
 		result.Note += fmt.Sprintf("; card: paid %d, provider costs deducted %d, refunded %d (%s, minor units)",
 			plan.PaidMinor, plan.FeeMinor, result.RefundedMinor, plan.Currency)

@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import '@/styles/hw-landing.css'
 import '@/styles/hw-cinematic.css'
 import type { TopNavLink } from '../types'
+import { Footer } from './footer'
 import { PublicHeader, type PublicHeaderProps } from './public-header'
 
 type PublicLayoutProps = {
@@ -75,6 +76,8 @@ export function PublicLayout(props: PublicLayoutProps) {
       ) : (
         props.children
       )}
+      {/* Every public page ends with the same footer. */}
+      <Footer />
     </div>
   )
 }

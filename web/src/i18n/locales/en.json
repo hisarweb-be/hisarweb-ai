@@ -7463,6 +7463,22 @@
     "Amount spent in this period": "Amount spent in this period",
     "By clicking sign in, you agree to our": "By clicking sign in, you agree to our",
     "By creating an account, you agree to our": "By creating an account, you agree to our",
-    "Too many requests. Please wait a moment and try again.": "Too many requests. Please wait a moment and try again."
+    "Too many requests. Please wait a moment and try again.": "Too many requests. Please wait a moment and try again.",
+    "Credit validity": "Credit validity",
+    "Credit validity: {{days}} days left": "Credit validity: {{days}} days left",
+    "Credit validity: expired": "Credit validity: expired",
+    "Your credit is valid until {{date}}. Every top-up renews all of it for 30 days.": "Your credit is valid until {{date}}. Every top-up renews all of it for 30 days.",
+    "Your credit expired on {{date}} and was removed from the balance. A new top-up gives you a new 30 days.": "Your credit expired on {{date}} and was removed from the balance. A new top-up gives you a new 30 days.",
+    "+{{amount}} bonus": "+{{amount}} bonus",
+    "Admin assistant": "Admin assistant",
+    "Report an error or a hard word. The assistant suggests a fix.": "Report an error or a hard word. The assistant suggests a fix.",
+    "What is wrong or unclear?": "What is wrong or unclear?",
+    "Apply this text": "Apply this text",
+    "Send to the bureau": "Send to the bureau",
+    "Text changed.": "Text changed.",
+    "This text was not found on the screen.": "This text was not found on the screen.",
+    "This text is used in too many places to change at once.": "This text is used in too many places to change at once.",
+    "The original text is back after a reload.": "The original text is back after a reload.",
+    "Card created: {{card}}": "Card created: {{card}}"
   }
 }

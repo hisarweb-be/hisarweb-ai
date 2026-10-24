@@ -27,4 +27,12 @@ func SetHwRouter(apiRouter *gin.RouterGroup) {
 	// The bureau reserve of the current window (part B2). Admin only; it reports
 	// numbers, never the token or the URL of the measurement.
 	hwRouter.GET("/admin/reserve", middleware.AdminAuth(), controller.HwAdminReserveStatus)
+	// The admin agent: chat, one-click text fixes and the escalation card.
+	// Admin only; the text read is public (the pages merge it at start-up).
+	hwRouter.GET("/text-overrides", middleware.HwPublicReadRateLimit(), middleware.HwPublicReadCache(), controller.HwTextOverrides)
+	hwRouter.POST("/admin/agent/chat", middleware.AdminAuth(), controller.HwAdminAgentChat)
+	hwRouter.GET("/admin/agent/texts", middleware.AdminAuth(), controller.HwAdminAgentListTexts)
+	hwRouter.POST("/admin/agent/texts", middleware.AdminAuth(), controller.HwAdminAgentApplyText)
+	hwRouter.POST("/admin/agent/texts/revert", middleware.AdminAuth(), controller.HwAdminAgentRevertText)
+	hwRouter.POST("/admin/agent/escalate", middleware.AdminAuth(), controller.HwAdminAgentEscalate)
 }

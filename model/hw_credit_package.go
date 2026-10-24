@@ -38,10 +38,19 @@ const (
 	HwSourceFree      = "free"
 	HwSourceAffiliate = "affiliate"
 	HwSourceAdmin     = "admin"
+	// HwSourceBonus is the extra credit a large enough top-up earns (see
+	// HwOrder.BonusQuota). It is booked next to the purchase package under the
+	// same order reference, so a repeated webhook cannot book it twice and a
+	// refund of the order takes it back.
+	HwSourceBonus = "bonus"
 )
 
+// HwCreditValidityDays is how long a paid top-up keeps the whole balance valid.
+// The public status answer announces it, so the pages never hardcode the number.
+const HwCreditValidityDays = 30
+
 const (
-	hwCreditPackageValiditySeconds = 30 * 24 * 3600
+	hwCreditPackageValiditySeconds = HwCreditValidityDays * 24 * 3600
 	hwFreeCreditValiditySeconds    = 14 * 24 * 3600
 	hwCreditExpiryJobInterval      = time.Hour
 
@@ -113,7 +122,7 @@ type HwPackageView struct {
 
 func isValidHwCreditSource(source string) bool {
 	switch source {
-	case HwSourcePurchase, HwSourceFree, HwSourceAffiliate, HwSourceAdmin:
+	case HwSourcePurchase, HwSourceFree, HwSourceAffiliate, HwSourceAdmin, HwSourceBonus:
 		return true
 	default:
 		return false
@@ -244,6 +253,9 @@ func grantCreditPackageTx(tx *gorm.DB, userID int, quota int, source string, ord
 	}
 	if source == HwSourcePurchase {
 		if err := HwPromoteToPaidGroup(tx, userID); err != nil {
+			return false, 0, err
+		}
+		if err := hwResetCreditValidity(tx, userID, now); err != nil {
 			return false, 0, err
 		}
 		// Paying lifts the account out of the free group. A frozen account must
