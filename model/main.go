@@ -411,6 +411,9 @@ func migrateDB() error {
 	if err != nil {
 		return err
 	}
+	if _, err := HwMigrateCreditValidity(DB, common.GetTimestamp()); err != nil {
+		return fmt.Errorf("migrate credit validity: %w", err)
+	}
 	if err := InitializeUserAuthVersions(); err != nil {
 		return err
 	}

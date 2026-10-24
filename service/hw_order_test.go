@@ -382,6 +382,14 @@ func hwOrderTestSetup(t *testing.T) *hwFakeProvider {
 		model.HwEurPerUsdOption,
 		model.HwEurPerUsdDateOption,
 		model.HwEurPresetBaseOption,
+		// Deleted, so the bonus counts as switched off and the other tests
+		// keep checking the plain purchase; the bonus tests set their own.
+		model.HwBonusUsdMinOption,
+		model.HwBonusUsdAmountOption,
+		model.HwBonusEurMinOption,
+		model.HwBonusEurAmountOption,
+		model.HwBonusTryMinOption,
+		model.HwBonusTryAmountOption,
 	}
 	common.OptionMapRWMutex.Lock()
 	if common.OptionMap == nil {

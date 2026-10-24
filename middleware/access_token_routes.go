@@ -51,6 +51,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	// router/hw-revolut.go: card top-up orders and admin refunds (session only)
 	"POST /api/user/hw/orders":         accessTokenSessionRule,
 	"GET /api/user/hw/packages":        accessTokenSessionRule,
+	"GET /api/user/hw/orders":          accessTokenSessionRule,
 	"POST /api/hw/admin/orders/refund": accessTokenSessionRule,
 	"POST /api/hw/admin/unfreeze":      accessTokenSessionRule,
 	"POST /api/hw/admin/channel-grant": accessTokenSessionRule,

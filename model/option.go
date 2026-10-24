@@ -68,6 +68,12 @@ func InitOptionMap() {
 	common.OptionMap[HwPhase0MeasurementDoneOption] = "false"
 	common.OptionMap[HwCustomerWindowCeilingUSDOption] = ""
 	common.OptionMap[HwCheckoutReturnURLOption] = ""
+	common.OptionMap[HwBonusUsdMinOption] = "10"
+	common.OptionMap[HwBonusUsdAmountOption] = "1"
+	common.OptionMap[HwBonusEurMinOption] = "10"
+	common.OptionMap[HwBonusEurAmountOption] = "1"
+	common.OptionMap[HwBonusTryMinOption] = "500"
+	common.OptionMap[HwBonusTryAmountOption] = "50"
 	common.OptionMap[HwUpstreamPromptOverheadOption] = ""
 	common.OptionMap["TaskPluginEnabled"] = strconv.FormatBool(constant.TaskPluginEnabled)
 	jsplugin.DefaultRegistry.SetEnabled(constant.TaskPluginEnabled)
