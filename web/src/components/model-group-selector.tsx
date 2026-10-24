@@ -116,6 +116,7 @@ const ModelTriggerButton = React.forwardRef<
     role='combobox'
     size='sm'
     disabled={isDisabled}
+    aria-label={currentLabel || undefined}
     className={cn(
       'flex h-8 items-center gap-2 border px-3 font-medium',
       'justify-center p-0 sm:w-auto sm:justify-start sm:px-3',
@@ -152,6 +153,7 @@ const GroupTriggerButton = React.forwardRef<
     role='combobox'
     size='sm'
     disabled={isDisabled}
+    aria-label={currentLabel || undefined}
     className={cn(
       'flex h-8 items-center gap-2 border px-3 font-medium',
       'justify-center p-0 sm:w-auto sm:justify-start sm:px-3',
@@ -656,6 +658,7 @@ export const ModelGroupSelector: React.FC<ModelGroupSelectorProps> = ({
   const renderTrigger = () => (
     <Button
       aria-expanded={open}
+      aria-label={currentModel?.label || t('Model')}
       className={cn(
         'h-8 max-w-[15rem] justify-start gap-2 border px-2.5 font-medium shadow-none',
         'bg-background/80 hover:bg-accent/70 text-foreground',

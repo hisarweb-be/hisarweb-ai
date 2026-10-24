@@ -276,7 +276,7 @@ function OverviewMetric(props: {
 
   return (
     <div className='flex min-w-0 items-center gap-2 px-3 py-2'>
-      <Icon className='text-muted-foreground/70 size-3.5 shrink-0' />
+      <Icon className='text-muted-foreground size-3.5 shrink-0' />
       <div className='min-w-0 flex-1'>
         <div className='text-muted-foreground truncate text-[10px] font-medium tracking-wider uppercase'>
           {props.label}
@@ -965,7 +965,7 @@ function PriceSection(props: {
                     key={entry.key}
                     className='flex items-baseline justify-between gap-4'
                   >
-                    <span className='text-muted-foreground/70 text-sm'>
+                    <span className='text-muted-foreground text-sm'>
                       <DynamicPriceEntryLabel entry={entry} />
                     </span>
                     <span className='text-muted-foreground font-mono text-sm tabular-nums'>
@@ -1058,7 +1058,7 @@ function PriceSection(props: {
                 key={item.type}
                 className='flex items-baseline justify-between gap-4'
               >
-                <span className='text-muted-foreground/70 text-sm'>
+                <span className='text-muted-foreground text-sm'>
                   <Hint hint={item.hint}>{item.label}</Hint>
                 </span>
                 <span className='text-muted-foreground font-mono text-sm tabular-nums'>

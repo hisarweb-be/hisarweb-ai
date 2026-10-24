@@ -35,7 +35,7 @@ export function GrowthText(props: GrowthTextProps) {
     return (
       <span
         className={cn(
-          'text-muted-foreground/80 font-mono tabular-nums',
+          'text-muted-foreground font-mono tabular-nums',
           props.className
         )}
       >

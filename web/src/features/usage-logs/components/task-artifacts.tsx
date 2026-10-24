@@ -423,7 +423,7 @@ export function TaskArtifactsCell(props: { log: TaskLog }) {
     )
   }
   if (!shouldLoadTaskArtifacts(props.log, true)) {
-    return <span className='text-muted-foreground/60 text-xs'>-</span>
+    return <span className='text-muted-foreground text-xs'>-</span>
   }
   if (previewMode === 'legacy-suno') {
     return <LegacyAudioPreview taskId={props.log.task_id} />

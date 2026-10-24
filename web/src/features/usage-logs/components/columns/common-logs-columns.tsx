@@ -510,7 +510,7 @@ export function useCommonLogsColumns(
                       )}
                     </div>
                     {log.channel_name && (
-                      <span className='text-muted-foreground/70 truncate [font-family:var(--font-body)] !text-xs'>
+                      <span className='text-muted-foreground truncate [font-family:var(--font-body)] !text-xs'>
                         {channelName}
                       </span>
                     )}
@@ -667,7 +667,7 @@ export function useCommonLogsColumns(
                 ) : null}
                 {group && groupRatio != null ? ' ' : null}
                 {groupRatio != null ? (
-                  <span className='text-muted-foreground/60 relative top-px align-baseline tabular-nums'>
+                  <span className='text-muted-foreground relative top-px align-baseline tabular-nums'>
                     {formatRatioCompact(groupRatio)}x
                   </span>
                 ) : null}
@@ -757,12 +757,12 @@ export function useCommonLogsColumns(
               {(cacheReadTokens > 0 || cacheWriteTokens > 0) && (
                 <div className='flex items-center gap-1 text-[11px]'>
                   {cacheReadTokens > 0 && (
-                    <span className='text-muted-foreground/60'>
+                    <span className='text-muted-foreground'>
                       {t('Cache')}↓ {formatNumber(cacheReadTokens)}
                     </span>
                   )}
                   {cacheWriteTokens > 0 && (
-                    <span className='text-muted-foreground/60'>
+                    <span className='text-muted-foreground'>
                       ↑ {formatNumber(cacheWriteTokens)}
                     </span>
                   )}
@@ -844,7 +844,7 @@ export function useCommonLogsColumns(
           const hasMore = segments.length > 1
           let primaryTextClass = 'text-foreground'
           if (primary?.muted) {
-            primaryTextClass = 'text-muted-foreground/60'
+            primaryTextClass = 'text-muted-foreground'
           } else if (primary?.danger) {
             primaryTextClass = 'text-red-600 dark:text-red-400'
           }

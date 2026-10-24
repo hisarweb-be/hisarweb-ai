@@ -137,8 +137,9 @@ function SplitHeaderTableView<TData>({
       )}
     >
       <div
+        tabIndex={0}
         className={cn(
-          'min-h-0 flex-1 overflow-auto',
+          'min-h-0 flex-1 overflow-auto focus-visible:ring-ring/50 focus-visible:ring-2 outline-none',
           '**:data-[slot=table-header]:[--table-header-bg:var(--table-header)]',
           '**:data-[slot=table-header]:bg-(--table-header-bg)',
           props.splitHeaderScrollClassName,

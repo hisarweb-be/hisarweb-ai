@@ -114,7 +114,7 @@ function CompactCell<TData>({
       {cell ? (
         flexRender(cell.column.columnDef.cell, cell.getContext())
       ) : (
-        <span className='text-muted-foreground/50'>{fallback}</span>
+        <span className='text-muted-foreground'>{fallback}</span>
       )}
     </div>
   )

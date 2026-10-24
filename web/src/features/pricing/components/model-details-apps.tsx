@@ -134,7 +134,7 @@ export function ModelDetailsApps(props: { model: PricingModel }) {
           <div className='text-foreground mt-1 font-mono text-lg font-semibold tabular-nums'>
             {apps.length}
           </div>
-          <p className='text-muted-foreground/70 text-[11px]'>
+          <p className='text-muted-foreground text-[11px]'>
             {t('Top integrations using this model')}
           </p>
         </div>
@@ -145,7 +145,7 @@ export function ModelDetailsApps(props: { model: PricingModel }) {
           <div className='text-foreground mt-1 font-mono text-lg font-semibold tabular-nums'>
             {compactNumber(totalMonthlyTokens)}
           </div>
-          <p className='text-muted-foreground/70 text-[11px]'>
+          <p className='text-muted-foreground text-[11px]'>
             {t('Aggregated across the apps below')}
           </p>
         </div>
@@ -156,7 +156,7 @@ export function ModelDetailsApps(props: { model: PricingModel }) {
           <div className='text-foreground mt-1 truncate text-base font-semibold'>
             {top.name}
           </div>
-          <p className='text-muted-foreground/70 truncate text-[11px]'>
+          <p className='text-muted-foreground truncate text-[11px]'>
             {top.category} · {formatTokenVolume(top.monthly_tokens)}{' '}
             {t('tokens / mo')}
           </p>
@@ -228,7 +228,7 @@ export function ModelDetailsApps(props: { model: PricingModel }) {
         ]}
       />
 
-      <p className='text-muted-foreground/60 text-[11px] leading-relaxed'>
+      <p className='text-muted-foreground text-[11px] leading-relaxed'>
         {t(
           'App rankings shown here are simulated for preview purposes and will be replaced with live usage data once the backend integration is complete.'
         )}

@@ -145,7 +145,7 @@ function FooterLegalBlock(props: { name: string; copyright: string }) {
         </span>
         <LegalLinks />
       </div>
-      <AttributionNotice className='text-muted-foreground/60 text-[11px] leading-relaxed' />
+      <AttributionNotice className='text-muted-foreground text-[11px] leading-relaxed' />
       <BuildStamp />
     </div>
   )
@@ -155,7 +155,7 @@ function BuildStamp() {
   if (!BUILD_STAMP) return null
   return (
     <span
-      className='text-muted-foreground/50 font-mono text-[10px] tracking-wide tabular-nums'
+      className='text-muted-foreground font-mono text-[10px] tracking-wide tabular-nums'
       data-testid='build-stamp'
     >
       {BUILD_STAMP}
@@ -238,7 +238,7 @@ export function Footer(props: FooterProps) {
           <div className='flex flex-wrap justify-center gap-x-12 gap-y-6'>
             {displayColumns.map((column) => (
               <div key={column.title}>
-                <p className='text-muted-foreground/50 mb-3 text-xs font-medium tracking-wider uppercase'>
+                <p className='text-muted-foreground mb-3 text-xs font-medium tracking-wider uppercase'>
                   {t(column.title)}
                 </p>
                 <ul className='space-y-2.5'>

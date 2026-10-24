@@ -241,7 +241,7 @@ it.each([
 ])('renders the %s progress bar in a neutral color', (_label, overrides) => {
   renderQuota({ ...key, ...overrides })
   expect(screen.getByRole('progressbar')).toHaveClass(
-    'text-muted-foreground/60'
+    'text-muted-foreground'
   )
 })
 
