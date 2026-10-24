@@ -32,9 +32,48 @@ export interface HwCreditPackage {
   expires_at: number
 }
 
+/** How long the balance stays valid, from `validity` in the packages answer. */
+export interface HwCreditValidity {
+  /** `active` while credit is left, `expired` after it lapsed, `none` without credit. */
+  status: 'active' | 'expired' | 'none'
+  /** Unix seconds of the earliest expiry; 0 unless `active`. */
+  valid_until: number
+  /** Whole days left, a started day counts; 0 unless `active`. */
+  days_remaining: number
+  /** Unix seconds the lapsed credit ran out; 0 unless `expired`. */
+  expired_at: number
+  /** Quota that was removed when it lapsed; 0 unless `expired`. */
+  expired_quota: number
+}
+
+/** One top-up bonus rule: pay at least `min` in `currency`, get `amount` extra. */
+export interface HwBonusRule {
+  currency: HwCurrency
+  min: number
+  amount: number
+}
+
+/** One paid order of `GET /api/user/hw/orders`. */
+export interface HwOrderSummary {
+  merchant_ref: string
+  status: string
+  currency: HwCurrency
+  list_minor: number
+  payable_minor: number
+  /** Bonus in minor units of `currency`; 0 when the order earned none. */
+  bonus_minor: number
+  bonus_quota: number
+  created_at: number
+  paid_at: number
+}
+
 /** Answer of `GET /api/user/hw/packages`. */
 export interface HwCreditPackages {
   packages: HwCreditPackage[]
+  /** Absent on an older server. */
+  validity?: HwCreditValidity
+  /** Absent on an older server; an empty list means no bonus is offered. */
+  bonus_rules?: HwBonusRule[]
   total_remaining_quota: number
   /** Quota units per US dollar. */
   quota_per_unit: number

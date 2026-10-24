@@ -2800,6 +2800,12 @@
     "Updates have not been checked yet.": "Güncellemeler henüz denetlenmedi.",
     "You are offline. Updates will be checked when you reconnect.": "Çevrimdışısınız. Bağlantı gelince güncellemeler denetlenecek.",
     "New version available: {{version}}": "Yeni sürüm var: {{version}}",
-    "System updates, current version: {{version}}": "Sistem güncellemeleri, mevcut sürüm: {{version}}"
+    "System updates, current version: {{version}}": "Sistem güncellemeleri, mevcut sürüm: {{version}}",
+    "Credit validity": "Kredi geçerliliği",
+    "Credit validity: {{days}} days left": "Kredi geçerliliği: {{days}} gün kaldı",
+    "Credit validity: expired": "Kredi geçerliliği: süresi doldu",
+    "Your credit is valid until {{date}}. Every top-up renews all of it for 30 days.": "Krediniz {{date}} tarihine kadar geçerli. Her yükleme, tüm bakiyenizi 30 gün daha uzatır.",
+    "Your credit expired on {{date}} and was removed from the balance. A new top-up gives you a new 30 days.": "Krediniz {{date}} tarihinde sona erdi ve bakiyenizden düşüldü. Yeni bir yükleme size yeniden 30 gün verir.",
+    "+{{amount}} bonus": "+{{amount}} bonus"
   }
 }
