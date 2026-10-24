@@ -2806,6 +2806,17 @@
     "Credit validity: expired": "Kredi geçerliliği: süresi doldu",
     "Your credit is valid until {{date}}. Every top-up renews all of it for 30 days.": "Krediniz {{date}} tarihine kadar geçerli. Her yükleme, tüm bakiyenizi 30 gün daha uzatır.",
     "Your credit expired on {{date}} and was removed from the balance. A new top-up gives you a new 30 days.": "Krediniz {{date}} tarihinde sona erdi ve bakiyenizden düşüldü. Yeni bir yükleme size yeniden 30 gün verir.",
-    "+{{amount}} bonus": "+{{amount}} bonus"
+    "+{{amount}} bonus": "+{{amount}} bonus",
+    "Admin assistant": "Yönetici asistanı",
+    "Report an error or a hard word. The assistant suggests a fix.": "Bir hatayı veya zor bir kelimeyi bildirin. Asistan bir çözüm önerir.",
+    "What is wrong or unclear?": "Neyin yanlış veya anlaşılmaz olduğunu yazın",
+    "Apply this text": "Bu metni uygula",
+    "Undo": "Geri al",
+    "Send to the bureau": "Büroya gönder",
+    "Text changed.": "Metin değiştirildi.",
+    "This text was not found on the screen.": "Bu metin ekranda bulunamadı.",
+    "This text is used in too many places to change at once.": "Bu metin çok fazla yerde kullanılıyor, tek seferde değiştirilemez.",
+    "The original text is back after a reload.": "Özgün metin sayfa yenilenince geri gelir.",
+    "Card created: {{card}}": "Kart oluşturuldu: {{card}}"
   }
 }

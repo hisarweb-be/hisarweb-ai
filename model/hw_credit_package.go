@@ -45,8 +45,12 @@ const (
 	HwSourceBonus = "bonus"
 )
 
+// HwCreditValidityDays is how long a paid top-up keeps the whole balance valid.
+// The public status answer announces it, so the pages never hardcode the number.
+const HwCreditValidityDays = 30
+
 const (
-	hwCreditPackageValiditySeconds = 30 * 24 * 3600
+	hwCreditPackageValiditySeconds = HwCreditValidityDays * 24 * 3600
 	hwFreeCreditValiditySeconds    = 14 * 24 * 3600
 	hwCreditExpiryJobInterval      = time.Hour
 
