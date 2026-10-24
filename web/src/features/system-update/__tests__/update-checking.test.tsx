@@ -63,6 +63,18 @@ function Wrapper(props: { children: ReactNode }) {
   )
 }
 
+// The release request needs a still-valid access token, so every test starts
+// signed in with one that does not expire during the run.
+function signIn(accessToken = 'test-token'): void {
+  useAuthStore.setState((state) => ({
+    auth: {
+      ...state.auth,
+      accessToken,
+      accessExpiresAt: 4_102_444_800,
+    },
+  }))
+}
+
 function respondWithRelease(tag = release.tag_name): void {
   fetchMock.mockImplementation(
     async () =>
@@ -79,6 +91,7 @@ beforeEach(() => {
   useAuthStore
     .getState()
     .auth.setUser({ id: 1, username: 'admin', role: ROLE.ADMIN })
+  signIn()
   focusManager.setFocused(true)
   onlineManager.setOnline(true)
   fetchMock.mockReset()
@@ -140,6 +153,28 @@ describe('administrator update entry', () => {
       expect(options?.credentials).toBe('same-origin')
     }
   )
+
+  test('sends the access token as a bearer header', async () => {
+    render(<SystemUpdateAction />, { wrapper: Wrapper })
+    await screen.findByRole('button', {
+      name: 'New version available: v1.0.0-rc.36',
+    })
+    const [, options] = fetchMock.mock.calls[0]
+    expect(new Headers(options?.headers).get('Authorization')).toBe(
+      'Bearer test-token'
+    )
+  })
+
+  test('never sends a request with an expired token when the token cannot be refreshed', async () => {
+    useAuthStore.setState((state) => ({
+      auth: { ...state.auth, accessExpiresAt: 1 },
+    }))
+    render(<SystemUpdateAction />, { wrapper: Wrapper })
+    await waitFor(() =>
+      expect(useSystemUpdateStore.getState().snapshot?.error).toBeTruthy()
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
 
   test('shares results with maintenance, opens release details by keyboard and returns focus on Escape', async () => {
     const user = userEvent.setup()
@@ -383,6 +418,7 @@ describe('version label presentation', () => {
     expect(
       within(trigger).queryByText('Check for updates')
     ).not.toBeInTheDocument()
+    await waitFor(() => expect(finishRequest).toBeDefined())
     await act(async () => {
       finishRequest?.(new Response(JSON.stringify([release])))
     })
