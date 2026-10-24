@@ -184,7 +184,7 @@ test('highlights only the accent phrase inside the headline', async () => {
   const heading = await screen.findByRole('heading', { level: 1 })
   const accent = heading.querySelector('.hwl-accent')
   expect(accent).toHaveTextContent('resmî fiyatın yarısına')
-  expect(heading.textContent).toContain('Claude, GPT ve Gemini')
+  expect(heading.textContent).toContain('Claude ve Gemini')
 })
 
 test('teases the vibe coding guide with a button to its page', async () => {

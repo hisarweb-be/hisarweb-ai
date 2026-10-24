@@ -130,27 +130,6 @@ export const MODEL_PRICES: readonly ModelPrice[] = [
     hisarweb: { input: 0.05, output: 0.25 },
   },
   {
-    model: 'gpt-6.1-sol',
-    provider: 'OpenAI',
-    official: { input: 2, output: 10 },
-    openrouter: { input: 2, output: 10 },
-    hisarweb: { input: 1, output: 5 },
-  },
-  {
-    model: 'gpt-6-astra',
-    provider: 'OpenAI',
-    official: { input: 10, output: 50 },
-    openrouter: { input: 10, output: 50 },
-    hisarweb: { input: 5, output: 25 },
-  },
-  {
-    model: 'gpt-6-luna',
-    provider: 'OpenAI',
-    official: { input: 0.1, output: 0.5 },
-    openrouter: { input: 0.1, output: 0.5 },
-    hisarweb: { input: 0.05, output: 0.25 },
-  },
-  {
     // OpenRouter charges 10% above the official price for this model.
     model: 'gemini-3.8-flash',
     provider: 'Google',

@@ -43,9 +43,6 @@ export const RECOMMENDED_ORDER = [
   'claude-opus-5-5',
   'claude-sonnet-5-5',
   'claude-haiku-5-5',
-  'gpt-6.1-sol',
-  'gpt-6-astra',
-  'gpt-6-luna',
   'gemini-3.8-flash',
 ] as const
 
@@ -82,30 +79,6 @@ export const MODEL_GUIDE: Readonly<Record<string, ModelGuide>> = {
     description: {
       tr: 'Çok hızlı ve çok ucuz. Sohbet botu, metin özetleme ya da yüzlerce küçük işi (sınıflandırma, bilgi çıkarma) arka arkaya yapmak için uygundur.',
       en: 'Very fast and very cheap. A good fit for a chatbot, summarising text, or running hundreds of small jobs (sorting, extracting facts) in a row.',
-    },
-  },
-  'gpt-6.1-sol': {
-    tag: { tr: 'Astra’ya yakın, ucuz', en: 'Near Astra, cheaper' },
-    description: {
-      tr: 'Zor işlerde Astra’ya yakın sonuç verir, ama daha ucuzdur. Günlük kodlama, yazı yazma ve araştırma için iyi bir OpenAI seçeneği.',
-      en: 'Gets close to Astra on hard work, but costs less. A good OpenAI choice for everyday coding, writing and research.',
-    },
-  },
-  'gpt-6-astra': {
-    tag: { tr: 'OpenAI’nin en güçlüsü', en: 'OpenAI’s strongest' },
-    description: {
-      tr: 'OpenAI’nin en güçlü modeli, en zorlu işler için. Karmaşık mantık sorunlarında ve büyük kod tabanlarında kullanın.',
-      en: 'OpenAI’s strongest model, for the most demanding work. Use it for complex reasoning problems and large codebases.',
-    },
-  },
-  'gpt-6-luna': {
-    tag: {
-      tr: 'Önerilen: en hızlı ve ucuz',
-      en: 'Recommended: fastest and cheapest',
-    },
-    description: {
-      tr: 'Çok hızlı ve çok ucuz. Sohbet botu, özetleme ve çok sayıda küçük, tekrarlayan iş için.',
-      en: 'Very fast and very cheap. For a chatbot, summaries and lots of small, repetitive jobs.',
     },
   },
   'gemini-3.8-flash': {
