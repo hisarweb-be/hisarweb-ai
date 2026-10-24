@@ -235,16 +235,16 @@ const cline: ToolGuide = {
     },
     {
       message: {
-        tr: 'GPT-6 modellerinde max_tokens hatası',
-        en: 'max_tokens error with GPT-6 models',
+        tr: 'max_tokens parametresi reddedildi',
+        en: 'max_tokens parameter rejected',
       },
       cause: {
-        tr: 'GPT-6 modelleri bu alanı farklı bir adla bekler.',
-        en: 'GPT-6 models expect this field under a different name.',
+        tr: 'Araç, eski adı kullanan bir istek gövdesi gönderiyor.',
+        en: 'The tool sends a request body that uses the older field name.',
       },
       fix: {
-        tr: 'Başlangıçta bir Claude modeli seçin; GPT modelleri için Cline’ı güncelleyin.',
-        en: 'Start with a Claude model; for GPT models update Cline.',
+        tr: 'Cline’ı güncelleyin ya da istek gövdesinden max_tokens satırını çıkarın.',
+        en: 'Update Cline, or drop the max_tokens line from the request body.',
       },
     },
   ],
@@ -977,8 +977,8 @@ notepad "$env:USERPROFILE\.continue\config.yaml"`
     },
     {
       message: {
-        tr: 'GPT modelleriyle istek hatası (/responses)',
-        en: 'Request error with GPT models (/responses)',
+        tr: 'İstek hatası (/responses)',
+        en: 'Request error (/responses)',
       },
       cause: {
         tr: 'Continue bazı yeni OpenAI modellerinde /responses ucunu kullanabilir.',

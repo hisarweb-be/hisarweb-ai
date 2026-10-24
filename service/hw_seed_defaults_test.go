@@ -337,3 +337,90 @@ func TestHwSyncDisplayCurrencyRate(t *testing.T) {
 	assert.Equal(t, 41.0, operation_setting.GetGeneralSetting().CustomCurrencyExchangeRate,
 		"a display the operator set to another currency is left alone")
 }
+
+// TestHwSeedRetiredSoldModels protects the step that takes a name out of the
+// channels a database already carries: /api/pricing reads the abilities table,
+// so shortening the catalog list alone leaves the old name on sale.
+func TestHwSeedRetiredSoldModels(t *testing.T) {
+	t.Run("a retired name leaves the channel and its abilities", func(t *testing.T) {
+		setupHwSeedDefaultsTest(t)
+		channel := &model.Channel{
+			Name:   "openai",
+			Key:    "sk-test",
+			Models: "claude-sonnet-5-5,gpt-6-astra,claude-haiku-5-5,gpt-6.1-sol,gpt-6-luna",
+			Group:  "free,paid,vip",
+			Status: common.ChannelStatusEnabled,
+		}
+		require.NoError(t, model.DB.Create(channel).Error)
+		require.NoError(t, channel.UpdateAbilities(nil))
+
+		require.NoError(t, hwSeedRetiredSoldModels(hwSeedTestOptionValues(t)))
+
+		stored, err := model.GetChannelById(channel.Id, true)
+		require.NoError(t, err)
+		assert.Equal(t, "claude-sonnet-5-5,claude-haiku-5-5", stored.Models)
+		for _, group := range []string{"free", "paid", "vip"} {
+			for _, name := range []string{"gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"} {
+				var count int64
+				require.NoError(t, model.DB.Model(&model.Ability{}).
+					Where("channel_id = ? AND group = ? AND model = ?", channel.Id, group, name).
+					Count(&count).Error)
+				assert.Zero(t, count, "ability %s/%s is gone", group, name)
+			}
+			for _, name := range []string{"claude-sonnet-5-5", "claude-haiku-5-5"} {
+				var count int64
+				require.NoError(t, model.DB.Model(&model.Ability{}).
+					Where("channel_id = ? AND group = ? AND model = ?", channel.Id, group, name).
+					Count(&count).Error)
+				assert.Equal(t, int64(1), count, "ability %s/%s stays", group, name)
+			}
+		}
+	})
+
+	t.Run("a second run writes nothing", func(t *testing.T) {
+		setupHwSeedDefaultsTest(t)
+		channel := &model.Channel{
+			Name:   "openai",
+			Key:    "sk-test",
+			Models: "claude-sonnet-5-5,gpt-6.1-sol",
+			Group:  "paid",
+			Status: common.ChannelStatusEnabled,
+		}
+		require.NoError(t, model.DB.Create(channel).Error)
+		require.NoError(t, channel.UpdateAbilities(nil))
+
+		require.NoError(t, hwSeedRetiredSoldModels(hwSeedTestOptionValues(t)))
+		first, err := model.GetChannelById(channel.Id, true)
+		require.NoError(t, err)
+		var firstAbilities []model.Ability
+		require.NoError(t, model.DB.Where("channel_id = ?", channel.Id).Order("id").Find(&firstAbilities).Error)
+
+		require.NoError(t, hwSeedRetiredSoldModels(hwSeedTestOptionValues(t)))
+		second, err := model.GetChannelById(channel.Id, true)
+		require.NoError(t, err)
+		var secondAbilities []model.Ability
+		require.NoError(t, model.DB.Where("channel_id = ?", channel.Id).Order("id").Find(&secondAbilities).Error)
+
+		assert.Equal(t, first.Models, second.Models)
+		assert.Equal(t, len(firstAbilities), len(secondAbilities), "the abilities are not rebuilt twice")
+	})
+
+	t.Run("a channel without a retired name keeps every model", func(t *testing.T) {
+		setupHwSeedDefaultsTest(t)
+		channel := &model.Channel{
+			Name:   "anthropic",
+			Key:    "sk-test",
+			Models: "claude-opus-5-5,claude-sonnet-5-5",
+			Group:  "paid",
+			Status: common.ChannelStatusEnabled,
+		}
+		require.NoError(t, model.DB.Create(channel).Error)
+		require.NoError(t, channel.UpdateAbilities(nil))
+
+		require.NoError(t, hwSeedRetiredSoldModels(hwSeedTestOptionValues(t)))
+
+		stored, err := model.GetChannelById(channel.Id, true)
+		require.NoError(t, err)
+		assert.Equal(t, "claude-opus-5-5,claude-sonnet-5-5", stored.Models)
+	})
+}

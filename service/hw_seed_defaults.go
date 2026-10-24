@@ -82,6 +82,7 @@ func HwSeedDefaultOptions() error {
 		hwSeedGroupRatios,
 		hwSeedUserUsableGroups,
 		hwSeedSoldModelRatios,
+		hwSeedRetiredSoldModels,
 		hwSeedThinkingAdapter,
 		hwSeedDisplayCurrency,
 		hwSeedSiteIdentity,
