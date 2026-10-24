@@ -175,7 +175,7 @@ Rol dağılımı:
 
   filmTitle: 'Kısa film: aboneliğiniz düşünsün, HisarWeb AI işi yapsın',
   filmBody:
-    'Yeni başlayanlar için kısa bir film. Film Türkçe seslendirmeli ve Türkçe altyazılıdır; görseller yapay zekâ ile üretilmiştir.',
+    'Yeni başlayanlar için kısa bir film. Sayfanın diline göre Türkçe ya da İngilizce seslendirilir, ekrandaki yazılar da aynı dildedir; görseller yapay zekâ ile üretilmiştir.',
   filmLabel: 'HisarWeb AI vibe kodlama tanıtım filmi',
 
   ctaTitle: 'Önce ücretsiz deneyin',
@@ -342,7 +342,7 @@ Working rules:
   filmTitle:
     'Short film: let your subscription think, let HisarWeb AI do the work',
   filmBody:
-    'A short film for new vibecoders. It has a Turkish voice-over with Turkish subtitles; the images are AI-generated.',
+    'A short film for new vibecoders. Voice and on-screen text follow the page language (Turkish or English); the images are AI-generated.',
   filmLabel: 'HisarWeb AI film for new vibecoders',
 
   ctaTitle: 'Try it for free first',
