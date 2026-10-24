@@ -9,18 +9,14 @@ import (
 )
 
 // Partner channels (for example a YouTuber) get an admin-granted credit package
-// with a long validity and a spending cap per API key. A channel needs no table
-// of its own: it is the account that holds an admin package whose order
-// reference starts with hwChannelRefPrefix, and the signups, paying customers
-// and earned affiliate credit come from the invite and ledger data that exist
-// anyway.
+// with a long validity. A channel needs no table of its own: it is the account
+// that holds an admin package whose order reference starts with
+// hwChannelRefPrefix, and the signups, paying customers and earned affiliate
+// credit come from the invite and ledger data that exist anyway. The balance of
+// the account is the only spending limit; its API keys are ordinary keys.
 const (
 	HwChannelCreditUSD = 250
 	HwChannelBonusTRY  = 250
-	// HwChannelKeyCapUSD is the most one API key of a channel account can hold
-	// or spend. The package is shared by all keys of the account; the cap keeps
-	// one leaked key from draining all of it.
-	HwChannelKeyCapUSD = 50
 
 	hwChannelValiditySeconds = 90 * 24 * 3600
 	hwChannelRefPrefix       = "channel:"
@@ -40,7 +36,6 @@ type HwChannelGrantResult struct {
 	// BonusPending is true while the account has not completed the free steps
 	// (a verified device or phone); the bonus follows on a later call.
 	BonusPending bool `json:"bonus_pending"`
-	CappedKeys   int  `json:"capped_keys"`
 }
 
 // HwChannelRow is one line of the channel overview.
@@ -57,10 +52,6 @@ type HwChannelRow struct {
 	EarnedQuota int `json:"earned_quota"`
 }
 
-func hwChannelKeyCapQuota() int {
-	return common.QuotaFromFloat(HwChannelKeyCapUSD * common.QuotaPerUnit)
-}
-
 // hwChannelBonusQuota converts the TRY bonus into quota with the published daily
 // rate, so the customer gets the same value the price page shows.
 func hwChannelBonusQuota() (int, error) {
@@ -74,58 +65,8 @@ func hwChannelBonusQuota() (int, error) {
 	return common.QuotaFromFloat(HwChannelBonusTRY / rate * common.QuotaPerUnit), nil
 }
 
-// HwIsChannelAccount reports whether the user holds a channel package.
-func HwIsChannelAccount(userID int) (bool, error) {
-	var count int64
-	err := DB.Model(&HwCreditPackage{}).
-		Where("user_id = ? AND source = ? AND order_ref = ?", userID, HwSourceAdmin, hwChannelRefPrefix+strconv.Itoa(userID)).
-		Count(&count).Error
-	return count > 0, err
-}
-
-// HwClampChannelTokenQuota applies the per-key cap to a key that a channel
-// account creates or edits: no unlimited key, and no more than the cap. Other
-// accounts are left alone. It returns whether it changed the values.
-func HwClampChannelTokenQuota(userID int, unlimited *bool, remain *int) (bool, error) {
-	if !*unlimited && *remain <= hwChannelKeyCapQuota() {
-		return false, nil
-	}
-	channel, err := HwIsChannelAccount(userID)
-	if err != nil || !channel {
-		return false, err
-	}
-	*unlimited, *remain = hwCapTokenQuota(*unlimited, *remain)
-	return true, nil
-}
-
-// hwCapTokenQuota returns the limited form of a key: an unlimited key gets the
-// full cap, a limited key keeps what it has up to the cap.
-func hwCapTokenQuota(unlimited bool, remain int) (bool, int) {
-	if unlimited {
-		return false, hwChannelKeyCapQuota()
-	}
-	return false, min(remain, hwChannelKeyCapQuota())
-}
-
-// hwCapChannelTokens lowers the keys a channel account already has to the cap.
-func hwCapChannelTokens(userID int) (int, error) {
-	capQuota := hwChannelKeyCapQuota()
-	var tokens []Token
-	if err := DB.Where("user_id = ? AND (unlimited_quota = ? OR remain_quota > ?)", userID, true, capQuota).
-		Find(&tokens).Error; err != nil {
-		return 0, err
-	}
-	for i := range tokens {
-		tokens[i].UnlimitedQuota, tokens[i].RemainQuota = hwCapTokenQuota(tokens[i].UnlimitedQuota, tokens[i].RemainQuota)
-		if err := tokens[i].Update(); err != nil {
-			return i, err
-		}
-	}
-	return len(tokens), nil
-}
-
 // HwGrantChannel gives a partner account the channel credit (HwChannelCreditUSD,
-// 90 days) and caps its API keys. The TRY bonus follows once the account has a
+// 90 days). The TRY bonus follows once the account has a
 // verified device or phone, so the free steps come first. Every part is
 // idempotent on its order reference, so the call can be repeated until the bonus
 // is in.
@@ -162,8 +103,7 @@ func HwGrantChannel(userID int, now int64) (HwChannelGrantResult, error) {
 	} else {
 		result.BonusPending = true
 	}
-	result.CappedKeys, err = hwCapChannelTokens(userID)
-	return result, err
+	return result, nil
 }
 
 type hwChannelCount struct {
