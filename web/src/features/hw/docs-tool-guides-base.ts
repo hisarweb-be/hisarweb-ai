@@ -155,10 +155,13 @@ export const ANTHROPIC_BASE_URL = 'https://api.hisarweb.be'
 /** Main choice for coding. */
 export const MODEL_DEFAULT = 'claude-sonnet-5-5'
 export const MODEL_OPUS = 'claude-opus-5-5'
-/** The two haiku models: the only ones a free trial key can use. */
+/**
+ * The cheap default and the model of a free trial key. claude-haiku-4-5 still
+ * works, but is served by Haiku 5.5 at the Haiku 5.5 price, so the guides only
+ * name the newest model.
+ */
 export const MODEL_HAIKU = 'claude-haiku-5-5'
-export const MODEL_HAIKU_FREE = 'claude-haiku-4-5'
-export const FREE_TRIAL_MODELS = [MODEL_HAIKU, MODEL_HAIKU_FREE] as const
+export const FREE_TRIAL_MODELS = [MODEL_HAIKU] as const
 /** Default model of OpenAI Codex. */
 export const MODEL_CODEX = 'gpt-6.1-sol'
 export const MODEL_GPT_SMALL = 'gpt-6-luna'
@@ -169,7 +172,6 @@ export const LISTED_MODELS: readonly { id: string; name: string }[] = [
   { id: MODEL_DEFAULT, name: 'Claude Sonnet 5.5' },
   { id: MODEL_OPUS, name: 'Claude Opus 5.5' },
   { id: MODEL_HAIKU, name: 'Claude Haiku 5.5' },
-  { id: MODEL_HAIKU_FREE, name: 'Claude Haiku 4.5' },
 ]
 
 /** Builds a block; keeps the data files short. */

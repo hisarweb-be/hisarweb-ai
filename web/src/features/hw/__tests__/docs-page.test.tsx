@@ -23,6 +23,8 @@ import { I18nextProvider } from 'react-i18next'
 import { describe, expect, it, vi } from 'vitest'
 
 import { DocsPage } from '../components/docs-page'
+import { VibeFilm, VibePage } from '../components/vibe-page'
+import { vibeTexts } from '../vibe-texts'
 
 vi.mock('@/components/layout', () => ({
   PublicLayout: (props: { children?: React.ReactNode }) => (
@@ -147,5 +149,149 @@ describe('documentation page', () => {
     const text = document.body.textContent?.toLowerCase() ?? ''
     expect(text).not.toContain('lumia')
     expect(text).not.toContain('openrouter')
+  })
+})
+
+function renderVibe(i18n: typeof trI18n) {
+  return render(
+    <I18nextProvider i18n={i18n}>
+      <VibePage />
+    </I18nextProvider>
+  )
+}
+
+describe('documentation page, vibe coding link', () => {
+  it('links to the vibe coding guide for beginners', () => {
+    renderPage(trI18n)
+
+    expect(
+      screen.getByRole('link', {
+        name: 'Yeni başlayanlar için vibe coding rehberi',
+      })
+    ).toHaveAttribute('href', '/vibe-kodlama')
+  })
+})
+
+describe('vibe coding page', () => {
+  it('states the rule in one Turkish sentence and keeps the order of sections', () => {
+    renderVibe(trI18n)
+
+    expect(
+      screen.getByText('Düşünmeyi abonelik yapar, işi HisarWeb AI yapar.')
+    ).toBeInTheDocument()
+    const headings = [
+      ...document.querySelectorAll('[data-slot="card-title"]'),
+    ].map((heading) => heading.textContent)
+    expect(headings).toEqual([
+      'Bu sayfa kimin için?',
+      'Kural tek cümle',
+      'Tek anahtar, bütün modeller',
+      'Önbellek ve token tasarrufu',
+      'Araç araç ayarlar',
+      'Yönlendirme promptu',
+      'HisarWeb AI ne zaman işinize yarar?',
+      'Önce ücretsiz deneyin',
+    ])
+  })
+
+  it('reads English when the interface language is English', () => {
+    renderVibe(enI18n)
+
+    expect(
+      screen.getByText('The subscription thinks, HisarWeb AI does the work.')
+    ).toBeInTheDocument()
+  })
+
+  it('warns in a visible box not to switch model inside a session', () => {
+    renderVibe(trI18n)
+
+    expect(
+      screen.getByText('Önemli: oturumun ortasında model değiştirmeyin')
+    ).toBeInTheDocument()
+    expect(screen.getByText(/önbellekten \(cache\) yararlanamaz/)).toBeVisible()
+  })
+
+  it('prints no subscription price and promises no cache discount', () => {
+    renderVibe(trI18n)
+
+    const text = document.body.textContent ?? ''
+    expect(text).not.toMatch(/\d\s?(TL|₺)/)
+    expect(text).toContain('Önbellek indirimi için bir söz vermiyoruz')
+    expect(
+      screen.getByRole('link', { name: 'Claude fiyatları (claude.com)' })
+    ).toHaveAttribute('href', 'https://claude.com/pricing')
+    expect(
+      screen.getByRole('link', { name: 'ChatGPT fiyatları (chatgpt.com)' })
+    ).toHaveAttribute('href', 'https://chatgpt.com/pricing')
+  })
+
+  it('shows copyable settings with the key placeholder and never a real key', () => {
+    renderVibe(trI18n)
+
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('ANTHROPIC_BASE_URL="https://api.hisarweb.be"')
+    expect(text).toContain('CLAUDE_CODE_SUBAGENT_MODEL')
+    expect(text).toContain('--architect --model openai/claude-opus-5-5')
+    expect(text).toContain('BURAYA_ANAHTARINIZ')
+    expect(text).not.toMatch(/sk-[A-Za-z0-9]{10,}/)
+    expect(text).toContain('PLAN.md')
+  })
+
+  it('says honestly that Cursor needs a paid plan and Roo Code is closed', () => {
+    renderVibe(trI18n)
+
+    expect(
+      screen.getByText(/ücretli bir Cursor planı ister/)
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/Roo Code 15 Mayıs 2026’da kapandı/)
+    ).toBeInTheDocument()
+  })
+
+  it('links the sign-up and the setup guides', () => {
+    renderVibe(trI18n)
+
+    expect(
+      screen.getByRole('button', { name: 'Ücretsiz hesap aç' })
+    ).toHaveAttribute('href', '/sign-up')
+    expect(
+      screen.getByRole('link', { name: 'Adım adım kurulum rehberleri' })
+    ).toHaveAttribute('href', '/docs')
+  })
+
+  it('shows no film player until a film file is set', () => {
+    renderVibe(trI18n)
+
+    expect(document.querySelector('video')).toBeNull()
+    expect(screen.queryByText('Filmi izleyin')).toBeNull()
+  })
+
+  it('offers the film with controls, a poster and no autoplay once it exists', () => {
+    render(
+      <VibeFilm
+        film={{ src: '/film/a.mp4', poster: '/film/a.jpg' }}
+        title='Filmi izleyin'
+        label='Film'
+      />
+    )
+
+    const film = screen.getByLabelText('Film')
+    expect(film).toHaveAttribute('controls')
+    expect(film).toHaveAttribute('preload', 'metadata')
+    expect(film).toHaveAttribute('poster', '/film/a.jpg')
+    expect(film).not.toHaveAttribute('autoplay')
+  })
+
+  it('keeps both languages complete and free of dashes, emoji and suppliers', () => {
+    expect(Object.keys(vibeTexts.en).sort()).toEqual(
+      Object.keys(vibeTexts.tr).sort()
+    )
+    for (const language of ['tr', 'en'] as const) {
+      const dictionary = JSON.stringify(vibeTexts[language]).toLowerCase()
+      expect(dictionary).not.toContain('—')
+      expect(dictionary).not.toMatch(/\p{Extended_Pictographic}/u)
+      expect(dictionary).not.toContain('lumia')
+      expect(dictionary).not.toContain('openrouter')
+    }
   })
 })

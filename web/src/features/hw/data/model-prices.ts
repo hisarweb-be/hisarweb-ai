@@ -141,7 +141,8 @@ export const MODEL_PRICES: readonly ModelPrice[] = [
     provider: 'Anthropic',
     official: { input: 1, output: 5 },
     openrouter: { input: 1, output: 5 },
-    hisarweb: { input: 0.5, output: 2.5 },
+    // Served by Haiku 5.5 and billed at its price (hwSoldModels in service/hw_pricing.go).
+    hisarweb: { input: 0.05, output: 0.25 },
   },
   {
     model: 'gpt-6.1-sol',

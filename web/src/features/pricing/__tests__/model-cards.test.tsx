@@ -308,7 +308,7 @@ describe('model cards', () => {
       />
     )
 
-    expect(screen.getByText('Best value')).toBeVisible()
+    expect(screen.getByText('Recommended: best value')).toBeVisible()
     expect(screen.getByText(/everyday coding/i)).toBeVisible()
     expect(
       screen.queryByText('No description available.')

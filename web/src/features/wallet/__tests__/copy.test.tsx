@@ -27,6 +27,7 @@ import zh from '@/i18n/locales/zh.json'
 import { api } from '@/lib/api'
 
 import { RechargeFormCard } from '../components/recharge-form-card'
+import { affiliateExample } from '../lib/affiliate'
 
 const i18n = createInstance()
 
@@ -125,3 +126,26 @@ it.each([
     expect(screen.getByPlaceholderText('Minimum 1')).toBeVisible()
   }
 )
+
+it('words the affiliate example in the chosen currency and never promises more than 5%', () => {
+  expect(affiliateExample('TRY', { TRY: 40 })).toEqual({
+    currency: 'TRY',
+    paid: 800,
+    reward: 40,
+  })
+  expect(affiliateExample('EUR', { EUR: 0.92 })).toEqual({
+    currency: 'EUR',
+    paid: 18,
+    reward: 0.9,
+  })
+  expect(affiliateExample('USD', {})).toEqual({
+    currency: 'USD',
+    paid: 20,
+    reward: 1,
+  })
+  expect(affiliateExample('TRY', {})).toEqual({
+    currency: 'USD',
+    paid: 20,
+    reward: 1,
+  })
+})

@@ -58,7 +58,9 @@ var (
 
 // HwSoldModel links the model name we sell to its key in the open price list
 // and to the list price we bill from. The name is the customer-facing own name;
-// the price list key never appears in a customer-facing answer.
+// the price list key never appears in a customer-facing answer. A PriceKey that
+// differs from the name marks an older name that is served and billed as its
+// newer successor; its ratio is reset to the successor price at every start.
 //
 // The prices are the official USD list prices per million tokens, in integer
 // micro-dollars ($1.75 = 1750000) — the same unit the daily snapshot stores, so
@@ -80,7 +82,10 @@ var hwSoldModels = []HwSoldModel{
 	{Name: "claude-sonnet-5-5", PriceKey: "claude-sonnet-5-5", InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000},
 	{Name: "claude-haiku-5-5", PriceKey: "claude-haiku-5-5", InputMicroUsd: 100_000, OutputMicroUsd: 500_000},
 	{Name: "claude-sonnet-5", PriceKey: "claude-sonnet-5", InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000},
-	{Name: "claude-haiku-4-5", PriceKey: "claude-haiku-4-5", InputMicroUsd: 1_000_000, OutputMicroUsd: 5_000_000},
+	// claude-haiku-4-5 stays a valid name for existing setups, but the channel
+	// serves it with Haiku 5.5 and it is billed at the Haiku 5.5 price: nobody
+	// pays more for an older model (see TestHwSoldModelsNeverCostMoreThanTheNewestOfTheirFamily).
+	{Name: "claude-haiku-4-5", PriceKey: "claude-haiku-5-5", InputMicroUsd: 100_000, OutputMicroUsd: 500_000},
 	{Name: "claude-fable-5-1", PriceKey: "claude-fable-5-1", InputMicroUsd: 10_000_000, OutputMicroUsd: 50_000_000},
 	{Name: "gpt-6-astra", PriceKey: "gpt-6-astra", InputMicroUsd: 10_000_000, OutputMicroUsd: 50_000_000},
 	{Name: "gpt-6.1-sol", PriceKey: "gpt-6.1-sol", InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000},

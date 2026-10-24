@@ -22,7 +22,7 @@ import {
   KEY_ENV_NAME,
   KEY_PLACEHOLDER,
   MODEL_DEFAULT,
-  MODEL_HAIKU_FREE,
+  MODEL_HAIKU,
   OPENAI_BASE_URL,
   type GuideStep,
   type ToolGuide,
@@ -123,8 +123,8 @@ const cline: ToolGuide = {
             block('settings', 'text', MODEL_DEFAULT),
           ],
           note: {
-            tr: `Ücretsiz deneme anahtarı yalnızca haiku modellerini kullanabilir: o durumda Model ID olarak ${MODEL_HAIKU_FREE} yazın. Model adında boşluk bırakmayın.`,
-            en: `A free trial key can only use the haiku models: in that case type ${MODEL_HAIKU_FREE} as the Model ID. Do not leave spaces in the model name.`,
+            tr: `Ücretsiz deneme anahtarı yalnızca haiku modellerini kullanabilir: o durumda Model ID olarak ${MODEL_HAIKU} yazın. Model adında boşluk bırakmayın.`,
+            en: `A free trial key can only use the haiku models: in that case type ${MODEL_HAIKU} as the Model ID. Do not leave spaces in the model name.`,
           },
         },
         {
@@ -229,8 +229,8 @@ const cline: ToolGuide = {
         en: 'The Model ID is misspelled, or a non-haiku model was chosen with a free trial key.',
       },
       fix: {
-        tr: 'Model ID olarak claude-sonnet-5-5 (ücretli anahtar) ya da claude-haiku-4-5 (deneme anahtarı) yazın.',
-        en: 'Use claude-sonnet-5-5 (paid key) or claude-haiku-4-5 (trial key) as the Model ID.',
+        tr: 'Model ID olarak claude-sonnet-5-5 (ücretli anahtar) ya da claude-haiku-5-5 (deneme anahtarı) yazın.',
+        en: 'Use claude-sonnet-5-5 (paid key) or claude-haiku-5-5 (trial key) as the Model ID.',
       },
     },
     {
@@ -339,8 +339,8 @@ const copilot: ToolGuide = {
           },
           blocks: [block('settings', 'json', COPILOT_MODELS)],
           note: {
-            tr: 'max_tokens gibi sayılar bizim tahminimizdir. Ücretsiz deneme anahtarı için "id" olarak claude-haiku-4-5 yazın. "url" tam uç adresi olmalıdır: sonunda /chat/completions bulunur.',
-            en: 'The numbers such as the token limits are our estimate. For a free trial key write claude-haiku-4-5 as the "id". The "url" must be the full endpoint address: it ends with /chat/completions.',
+            tr: 'max_tokens gibi sayılar bizim tahminimizdir. Ücretsiz deneme anahtarı için "id" olarak claude-haiku-5-5 yazın. "url" tam uç adresi olmalıdır: sonunda /chat/completions bulunur.',
+            en: 'The numbers such as the token limits are our estimate. For a free trial key write claude-haiku-5-5 as the "id". The "url" must be the full endpoint address: it ends with /chat/completions.',
           },
         },
         {
@@ -469,8 +469,8 @@ const kilo: ToolGuide = {
           },
           blocks: [block('settings', 'text', MODEL_DEFAULT)],
           note: {
-            tr: `Ücretsiz deneme anahtarında yalnızca ${MODEL_HAIKU_FREE} çalışır.`,
-            en: `With a free trial key only ${MODEL_HAIKU_FREE} works.`,
+            tr: `Ücretsiz deneme anahtarında yalnızca ${MODEL_HAIKU} çalışır.`,
+            en: `With a free trial key only ${MODEL_HAIKU} works.`,
           },
         },
         {
@@ -725,8 +725,8 @@ const aider: ToolGuide = {
             block('command', 'bash', `aider --model openai/${MODEL_DEFAULT}`),
           ],
           note: {
-            tr: `Ücretsiz deneme anahtarı için openai/${MODEL_HAIKU_FREE} yazın. “aider tanınmıyor” hatası alırsanız python -m aider deneyin.`,
-            en: `For a free trial key write openai/${MODEL_HAIKU_FREE}. If you get an “aider is not recognized” error, try python -m aider.`,
+            tr: `Ücretsiz deneme anahtarı için openai/${MODEL_HAIKU} yazın. “aider tanınmıyor” hatası alırsanız python -m aider deneyin.`,
+            en: `For a free trial key write openai/${MODEL_HAIKU}. If you get an “aider is not recognized” error, try python -m aider.`,
           },
           see: {
             tr: 'Aider bir karşılama metni ve “>” işaretiyle komut beklemeye başlar. Projeniz bir git deposu değilse Aider bir tane oluşturmayı önerir.',
@@ -920,8 +920,8 @@ notepad "$env:USERPROFILE\.continue\config.yaml"`
           },
           blocks: [block('config', 'yaml', CONTINUE_CONFIG)],
           note: {
-            tr: `Ücretsiz deneme anahtarı için model satırına ${MODEL_HAIKU_FREE} yazın. Bu dosyayı asla git’e göndermeyin: içinde anahtarınız var.`,
-            en: `For a free trial key write ${MODEL_HAIKU_FREE} on the model line. Never send this file to git: it contains your key.`,
+            tr: `Ücretsiz deneme anahtarı için model satırına ${MODEL_HAIKU} yazın. Bu dosyayı asla git’e göndermeyin: içinde anahtarınız var.`,
+            en: `For a free trial key write ${MODEL_HAIKU} on the model line. Never send this file to git: it contains your key.`,
           },
         },
         {

@@ -480,3 +480,70 @@ func TestHwFreeTrialCreditLeavesOperatorAccountsAlone(t *testing.T) {
 	require.NoError(t, DB.Model(&User{}).Where("id = ?", admin.Id).Select(commonGroupCol).Find(&group).Error)
 	assert.Equal(t, hwGroupDefault, group)
 }
+
+func TestHwChannelGrantAndOverview(t *testing.T) {
+	now := int64(1_700_000_000)
+	hwCreditTestSetup(t)
+	common.OptionMapRWMutex.Lock()
+	previousMap := common.OptionMap
+	common.OptionMap = map[string]string{HwTryPerUsdOption: "40"}
+	common.OptionMapRWMutex.Unlock()
+	t.Cleanup(func() {
+		common.OptionMapRWMutex.Lock()
+		common.OptionMap = previousMap
+		common.OptionMapRWMutex.Unlock()
+	})
+
+	channel := createHwTestUser(t, 0)
+
+	t.Run("credit first, bonus after the free steps", func(t *testing.T) {
+		result, err := HwGrantChannel(channel.Id, now)
+		require.NoError(t, err)
+		assert.True(t, result.CreditGranted)
+		assert.False(t, result.BonusGranted)
+		assert.True(t, result.BonusPending)
+
+		creditQuota := common.QuotaFromFloat(HwChannelCreditUSD * common.QuotaPerUnit)
+		assert.Equal(t, creditQuota, getUserQuotaFromDB(t, channel.Id))
+		var pkg HwCreditPackage
+		require.NoError(t, DB.Where("user_id = ? AND source = ?", channel.Id, HwSourceAdmin).First(&pkg).Error)
+		assert.Equal(t, now+90*24*3600, pkg.ExpiresAt)
+	})
+
+	t.Run("the bonus follows once and only once", func(t *testing.T) {
+		hwMarkVerified(t, channel.Id)
+		result, err := HwGrantChannel(channel.Id, now)
+		require.NoError(t, err)
+		assert.False(t, result.CreditGranted)
+		assert.True(t, result.BonusGranted)
+		assert.False(t, result.BonusPending)
+
+		bonus := common.QuotaFromFloat(float64(HwChannelBonusTRY) / 40 * common.QuotaPerUnit)
+		assert.Equal(t, common.QuotaFromFloat(HwChannelCreditUSD*common.QuotaPerUnit)+bonus, getUserQuotaFromDB(t, channel.Id))
+
+		result, err = HwGrantChannel(channel.Id, now)
+		require.NoError(t, err)
+		assert.False(t, result.CreditGranted)
+		assert.False(t, result.BonusGranted)
+	})
+
+	t.Run("overview counts signups, paying customers and earned credit", func(t *testing.T) {
+		buyer := createHwTestInvitee(t, 0, channel.Id)
+		createHwTestInvitee(t, 0, channel.Id)
+		hwMarkVerified(t, buyer.Id)
+		_, err := GrantCreditPackage(nil, buyer.Id, 1000, HwSourcePurchase, "ord-ch", now)
+		require.NoError(t, err)
+		granted, reason, err := HwGrantAffiliateReward(buyer.Id, 1000, "ord-ch", now)
+		require.NoError(t, err)
+		require.True(t, granted, reason)
+
+		rows, err := HwListChannels()
+		require.NoError(t, err)
+		require.Len(t, rows, 1)
+		assert.Equal(t, channel.Id, rows[0].UserId)
+		assert.Equal(t, 2, rows[0].Signups)
+		assert.Equal(t, 1, rows[0].PayingCustomers)
+		assert.Equal(t, 50, rows[0].EarnedQuota)
+		assert.Equal(t, now+90*24*3600, rows[0].ExpiresAt)
+	})
+}

@@ -348,7 +348,7 @@ const tr = {
   docsModelsTitle: 'Hangi modeller ücretsiz?',
   docsModelsBody:
     'Ücretsiz deneme hesabı haiku sınıfı hızlı modelleri kullanabilir; bunlar küçük ve hızlı işler için yeterlidir. Ücretli hesap katalogdaki tüm modelleri kullanabilir.',
-  docsModelsFree: 'Ücretsiz: haiku sınıfı modeller (örneğin claude-haiku-4-5).',
+  docsModelsFree: 'Ücretsiz: haiku sınıfı modeller (örneğin claude-haiku-5-5).',
   docsModelsPaid:
     'Ücretli: katalogdaki diğer tüm modeller; güncel fiyatlar fiyat karşılaştırma sayfasında yazar.',
   docsErrorsTitle: 'Hata kodları',
@@ -361,6 +361,7 @@ const tr = {
   docsLinksTitle: 'Daha fazla',
   docsLinkStatus: 'Servis durumu (7/24)',
   docsLinkCompare: 'Fiyat karşılaştırma',
+  docsLinkVibe: 'Yeni başlayanlar için vibe coding rehberi',
 
   aboutDefaultTitle: 'HisarWeb AI hakkında',
   aboutDefaultIntroForeign:
@@ -715,7 +716,7 @@ const en: Record<HwTextKey, string> = {
   docsModelsTitle: 'Which models are free?',
   docsModelsBody:
     'A free trial account can use the fast haiku-class models; they are enough for small, quick jobs. A paid account can use every model in the catalog.',
-  docsModelsFree: 'Free: haiku-class models (for example claude-haiku-4-5).',
+  docsModelsFree: 'Free: haiku-class models (for example claude-haiku-5-5).',
   docsModelsPaid:
     'Paid: every other model in the catalog; the current prices are on the price comparison page.',
   docsErrorsTitle: 'Error codes',
@@ -727,6 +728,7 @@ const en: Record<HwTextKey, string> = {
   docsLinksTitle: 'More',
   docsLinkStatus: 'Service status (24/7)',
   docsLinkCompare: 'Price comparison',
+  docsLinkVibe: 'Vibe coding guide for beginners',
 
   aboutDefaultTitle: 'About HisarWeb AI',
   aboutDefaultIntroForeign:
