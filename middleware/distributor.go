@@ -120,6 +120,12 @@ func Distribute() func(c *gin.Context) {
 				if selectErr.FilterKind == taskdto.FilterTaskPluginIdentity {
 					logTaskPluginChannelDecision(c, selectErr.Channel, modelRequest.Model, "channel_rejected", "identity_mismatch")
 				}
+				// A retired model has no channel left; name the newer model that
+				// replaces it instead of reporting an outage.
+				if successor, retired := service.HwRetiredModelSuccessor(modelRequest.Model); retired && selectErr.NoAvailableChannel {
+					abortWithOpenAiMessage(c, http.StatusNotFound, service.HwModelRetiredMessage(c, modelRequest.Model, successor), service.HwErrorCodeModelRetired)
+					return
+				}
 				message := selectErr.Message
 				if selectErr.NoAvailableChannel {
 					message = noAvailableChannelMessage(c, usingGroup, modelRequest.Model)

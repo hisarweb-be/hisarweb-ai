@@ -156,9 +156,8 @@ export const ANTHROPIC_BASE_URL = 'https://api.hisarweb.be'
 export const MODEL_DEFAULT = 'claude-sonnet-5-5'
 export const MODEL_OPUS = 'claude-opus-5-5'
 /**
- * The cheap default and the model of a free trial key. claude-haiku-4-5 still
- * works, but is served by Haiku 5.5 at the Haiku 5.5 price, so the guides only
- * name the newest model.
+ * The cheap default and the model of a free trial key. The older Haiku 4.5
+ * cost more than Haiku 5.5 and is no longer sold.
  */
 export const MODEL_HAIKU = 'claude-haiku-5-5'
 export const FREE_TRIAL_MODELS = [MODEL_HAIKU] as const

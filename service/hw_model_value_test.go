@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -14,9 +15,10 @@ import (
 )
 
 // Gouden regel (Altuner, 24 okt 2026): always the best quality for the best
-// price. No sold model may be billed above the newest model of its own family:
-// an older Haiku, Sonnet, Opus, Fable, GPT-6 tier or Gemini tier is never more
-// expensive than its newer successor.
+// price, and we never lower the price of an old model. An older model stays in
+// the catalog only while it is cheaper than the newest model of its own family;
+// an old model that costs the same or more is retired (hwRetiredModels) and the
+// customer is sent to the newer one.
 
 var (
 	hwClaudeModelPattern = regexp.MustCompile(`^claude-(haiku|sonnet|opus|fable)-(\d+(?:-\d+)*)$`)
@@ -62,9 +64,10 @@ func hwVersionNewer(a, b []int) bool {
 	return false
 }
 
-// hwAssertNoOlderModelCostsMore fails for every model whose input or output
-// price lies above the newest model of its family.
-func hwAssertNoOlderModelCostsMore(t *testing.T, prices map[string]model.HwModelPrice) {
+// hwOlderModelsNotCheaper lists every model of the catalog that is older than
+// another model of its family and not cheaper than the newest one, on input or
+// on output.
+func hwOlderModelsNotCheaper(t *testing.T, catalog []HwSoldModel, prices map[string]model.HwModelPrice) []string {
 	t.Helper()
 	type member struct {
 		name    string
@@ -72,7 +75,7 @@ func hwAssertNoOlderModelCostsMore(t *testing.T, prices map[string]model.HwModel
 	}
 	newest := map[string]member{}
 	familyOf := map[string]string{}
-	for _, sold := range hwSoldModels {
+	for _, sold := range catalog {
 		family, version, err := hwValueFamily(sold.Name)
 		require.NoError(t, err)
 		familyOf[sold.Name] = family
@@ -80,7 +83,8 @@ func hwAssertNoOlderModelCostsMore(t *testing.T, prices map[string]model.HwModel
 			newest[family] = member{name: sold.Name, version: version}
 		}
 	}
-	for _, sold := range hwSoldModels {
+	var offenders []string
+	for _, sold := range catalog {
 		top := newest[familyOf[sold.Name]].name
 		if top == sold.Name {
 			continue
@@ -89,37 +93,56 @@ func hwAssertNoOlderModelCostsMore(t *testing.T, prices map[string]model.HwModel
 		require.True(t, ok, "no price for %s", sold.Name)
 		topPrice, ok := prices[top]
 		require.True(t, ok, "no price for %s", top)
-		assert.LessOrEqual(t, price.InputMicroUsd, topPrice.InputMicroUsd,
-			"%s is billed above the newer %s (input)", sold.Name, top)
-		assert.LessOrEqual(t, price.OutputMicroUsd, topPrice.OutputMicroUsd,
-			"%s is billed above the newer %s (output)", sold.Name, top)
-		assert.LessOrEqual(t, hwModelRatioFromInputPrice(price.InputMicroUsd), hwModelRatioFromInputPrice(topPrice.InputMicroUsd),
-			"%s has a higher model ratio than the newer %s", sold.Name, top)
-	}
-}
-
-// TestHwSoldModelsNeverCostMoreThanTheNewestOfTheirFamily checks the catalog
-// prices that seed the billing ratios.
-func TestHwSoldModelsNeverCostMoreThanTheNewestOfTheirFamily(t *testing.T) {
-	hwAssertNoOlderModelCostsMore(t, hwSoldModelFallbackPrices())
-
-	// The test only means something while a family has an older member.
-	family, _, err := hwValueFamily("claude-haiku-4-5")
-	require.NoError(t, err)
-	members := 0
-	for _, sold := range hwSoldModels {
-		if f, _, _ := hwValueFamily(sold.Name); f == family {
-			members++
+		if price.InputMicroUsd >= topPrice.InputMicroUsd || price.OutputMicroUsd >= topPrice.OutputMicroUsd {
+			offenders = append(offenders, sold.Name)
 		}
 	}
-	assert.GreaterOrEqual(t, members, 2, "the haiku family should hold an older and a newer model")
+	return offenders
 }
 
-// TestHwDailyPriceListKeepsOlderModelsAtTheSuccessorPrice checks the daily
-// refresh path: even when the open price list still prices the older model at
-// its own (higher) list price, the snapshot bills it at its successor's price.
-func TestHwDailyPriceListKeepsOlderModelsAtTheSuccessorPrice(t *testing.T) {
-	// Official list prices of 24 Oct 2026, including the older, pricier models.
+// TestHwSoldModelsOnlyKeepOlderModelsThatAreCheaper fails as soon as the catalog
+// sells an older model that is not cheaper than the newest of its family.
+func TestHwSoldModelsOnlyKeepOlderModelsThatAreCheaper(t *testing.T) {
+	assert.Empty(t, hwOlderModelsNotCheaper(t, hwSoldModels, hwSoldModelFallbackPrices()))
+
+	// The official list prices of 24 Oct 2026: Haiku 4.5 costs ten times Haiku
+	// 5.5 and Sonnet 5 as much as Sonnet 5.5, so a catalog that still sold them
+	// fails; a cheaper older model would be allowed.
+	catalog := append(slices.Clone(hwSoldModels),
+		HwSoldModel{Name: "claude-haiku-4-5", PriceKey: "claude-haiku-4-5", InputMicroUsd: 1_000_000, OutputMicroUsd: 5_000_000},
+		HwSoldModel{Name: "claude-sonnet-5", PriceKey: "claude-sonnet-5", InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000},
+		HwSoldModel{Name: "claude-opus-5", PriceKey: "claude-opus-5", InputMicroUsd: 3_000_000, OutputMicroUsd: 15_000_000},
+	)
+	prices := map[string]model.HwModelPrice{}
+	for _, sold := range catalog {
+		prices[sold.Name] = model.HwModelPrice{InputMicroUsd: sold.InputMicroUsd, OutputMicroUsd: sold.OutputMicroUsd}
+	}
+	assert.ElementsMatch(t, []string{"claude-haiku-4-5", "claude-sonnet-5"}, hwOlderModelsNotCheaper(t, catalog, prices))
+}
+
+// TestHwRetiredModelsAreNotSoldAndPointAtASoldModel keeps the retirement list
+// consistent with the catalog: a retired name is never sold, its successor is,
+// and both belong to the same family.
+func TestHwRetiredModelsAreNotSoldAndPointAtASoldModel(t *testing.T) {
+	sold := map[string]bool{}
+	for _, entry := range hwSoldModels {
+		sold[entry.Name] = true
+	}
+	for retired, successor := range hwRetiredModels {
+		assert.False(t, sold[retired], "%s is retired but still sold", retired)
+		assert.True(t, sold[successor], "the successor %s of %s is not sold", successor, retired)
+		retiredFamily, _, err := hwValueFamily(retired)
+		require.NoError(t, err)
+		successorFamily, _, err := hwValueFamily(successor)
+		require.NoError(t, err)
+		assert.Equal(t, retiredFamily, successorFamily, retired)
+	}
+}
+
+// TestHwDailyPriceListSkipsRetiredModels checks the daily refresh path: the open
+// price list still lists the retired models, but the snapshot only prices what
+// we sell.
+func TestHwDailyPriceListSkipsRetiredModels(t *testing.T) {
 	list := map[string]hwPriceListEntry{}
 	for name, price := range map[string][2]string{
 		"claude-opus-5-5":   {"4e-06", "2e-05"},
@@ -138,8 +161,10 @@ func TestHwDailyPriceListKeepsOlderModelsAtTheSuccessorPrice(t *testing.T) {
 	prices, err := hwExtractSoldModelPrices(list)
 	require.NoError(t, err)
 	require.Len(t, prices, len(hwSoldModels))
-	hwAssertNoOlderModelCostsMore(t, prices)
-	assert.Equal(t, prices["claude-haiku-5-5"], prices["claude-haiku-4-5"])
+	assert.Empty(t, hwOlderModelsNotCheaper(t, hwSoldModels, prices))
+	for retired := range hwRetiredModels {
+		assert.NotContains(t, prices, retired)
+	}
 }
 
 func TestHwValueFamily(t *testing.T) {

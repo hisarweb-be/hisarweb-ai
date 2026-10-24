@@ -65,13 +65,13 @@ afterEach(async () => {
   await useLanguage('en')
 })
 
-test('lists all 10 channel-1 models, one row each', () => {
+test('lists all 8 channel-1 models, one row each', () => {
   render(<PriceTable />)
 
   const rows = within(screen.getByRole('table')).getAllByRole('row')
   // Two header rows, then one row per model.
-  expect(rows).toHaveLength(2 + 10)
-  expect(MODEL_PRICES).toHaveLength(10)
+  expect(rows).toHaveLength(2 + 8)
+  expect(MODEL_PRICES).toHaveLength(8)
   for (const entry of MODEL_PRICES) {
     expect(screen.getByText(entry.model)).toBeInTheDocument()
   }
