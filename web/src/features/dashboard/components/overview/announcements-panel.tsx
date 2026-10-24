@@ -96,7 +96,7 @@ export function AnnouncementsPanel() {
                     </p>
                     <div className='flex items-center justify-between'>
                       {item.publishDate && (
-                        <time className='text-muted-foreground/60 text-xs'>
+                        <time className='text-muted-foreground text-xs'>
                           {formatDateTimeObject(new Date(item.publishDate))}
                         </time>
                       )}

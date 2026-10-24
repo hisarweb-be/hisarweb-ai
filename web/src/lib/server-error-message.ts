@@ -86,6 +86,8 @@ const serverErrorMessageKeys = {
   TELEGRAM_BIND_INTERNAL_ERROR: 'Telegram binding failed. Please try again.',
 } as const
 
+const GENERIC_HTTP_MESSAGE = /^Request failed with status code \d+$/
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object'
 }
@@ -219,9 +221,14 @@ export function getServerErrorMessage(
   const status = getServerErrorStatus(value)
   if (status === 304) return i18next.t('Content not modified!')
   if (status === 204) return i18next.t('Content not found.')
+  if (status === 429) {
+    return i18next.t('Too many requests. Please wait a moment and try again.')
+  }
   for (const source of sources) {
     const message = messageText(source.message)
-    if (message) return message
+    // The bare HTTP client text ("Request failed with status code 500") means
+    // nothing to a customer, so fall through to the friendly fallback.
+    if (message && !GENERIC_HTTP_MESSAGE.test(message)) return message
   }
   return messageText(value) || (fallback ?? i18next.t('Something went wrong!'))
 }

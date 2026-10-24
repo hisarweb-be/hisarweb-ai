@@ -41,8 +41,31 @@ interface StatCardConfig {
   getValue: (stat: Record<string, number>, days?: number) => number
 }
 
-export function useModelStatCardsConfig(): StatCardConfig[] {
+export function useModelStatCardsConfig(simple = false): StatCardConfig[] {
   const { t } = useTranslation()
+
+  // Ordinary customers get the two figures a beginner understands: how many
+  // requests they made and how much they spent.
+  if (simple) {
+    return [
+      {
+        key: 'count',
+        title: t('Requests made'),
+        description: t('Number of requests in this period'),
+        icon: Hash,
+        iconTone: 'info',
+        getValue: (stat) => stat?.rpm ?? 0,
+      },
+      {
+        key: 'quota',
+        title: t('Total spent'),
+        description: t('Amount spent in this period'),
+        icon: Coins,
+        iconTone: 'success',
+        getValue: (stat) => stat?.quota ?? 0,
+      },
+    ]
+  }
 
   return [
     {

@@ -276,7 +276,7 @@ export function JsonCodeEditor({
         <div className='text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs font-medium'>
           <Braces className='h-3.5 w-3.5' aria-hidden='true' />
           <span>{t('JSON')}</span>
-          <span className='text-muted-foreground/70 font-mono'>
+          <span className='text-muted-foreground font-mono'>
             {cursorText}
           </span>
         </div>

@@ -49,7 +49,12 @@ import { taskUsageUnitLabel } from '@/features/pricing/lib/task-price-display'
 import type { BillingUsageSchema } from '@/features/pricing/types'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
 import { formatBillingCurrencyFromUSD } from '@/lib/currency'
-import { formatLogQuota, formatTimestampToDate } from '@/lib/format'
+import {
+  formatLogQuota,
+  formatTimestampToDate,
+  formatNumber,
+  formatDecimal,
+} from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 
@@ -87,9 +92,7 @@ interface DetailSegment {
 
 function formatRatioCompact(ratio: number | undefined): string {
   if (ratio == null || !Number.isFinite(ratio)) return '-'
-  return ratio % 1 === 0
-    ? String(ratio)
-    : ratio.toFixed(4).replace(/\.?0+$/, '')
+  return ratio % 1 === 0 ? formatNumber(ratio) : formatDecimal(ratio, 4)
 }
 
 function getGroupRatio(other: LogOtherData | null): number | null {
@@ -340,6 +343,12 @@ function buildTypeDetailSegments(
   return segments
 }
 
+const CUSTOMER_HIDDEN_COLUMNS = new Set([
+  'is_stream',
+  'prompt_tokens',
+  'use_time',
+])
+
 export function useCommonLogsColumns(
   isAdmin: boolean,
   isRoot: boolean,
@@ -501,7 +510,7 @@ export function useCommonLogsColumns(
                       )}
                     </div>
                     {log.channel_name && (
-                      <span className='text-muted-foreground/70 truncate [font-family:var(--font-body)] !text-xs'>
+                      <span className='text-muted-foreground truncate [font-family:var(--font-body)] !text-xs'>
                         {channelName}
                       </span>
                     )}
@@ -619,9 +628,10 @@ export function useCommonLogsColumns(
 
         const other = parseLogOther(log.other)
         const displayName = sensitiveVisible ? tokenName : '••••'
-        let group = log.group
-        if (!group) group = other?.group || ''
-        const groupRatio = getGroupRatio(other)
+        // Group and ratio are billing internals that only admins read.
+        let group = ''
+        if (isAdmin) group = log.group || other?.group || ''
+        const groupRatio = isAdmin ? getGroupRatio(other) : null
 
         return (
           <div className='flex max-w-[200px] flex-col gap-0.5'>
@@ -657,7 +667,7 @@ export function useCommonLogsColumns(
                 ) : null}
                 {group && groupRatio != null ? ' ' : null}
                 {groupRatio != null ? (
-                  <span className='text-muted-foreground/60 relative top-px align-baseline tabular-nums'>
+                  <span className='text-muted-foreground relative top-px align-baseline tabular-nums'>
                     {formatRatioCompact(groupRatio)}x
                   </span>
                 ) : null}
@@ -742,19 +752,18 @@ export function useCommonLogsColumns(
           return (
             <div className='flex flex-col gap-0.5'>
               <span className='font-mono text-xs font-medium tabular-nums'>
-                {promptTokens.toLocaleString()} /{' '}
-                {completionTokens.toLocaleString()}
+                {formatNumber(promptTokens)} / {formatNumber(completionTokens)}
               </span>
               {(cacheReadTokens > 0 || cacheWriteTokens > 0) && (
                 <div className='flex items-center gap-1 text-[11px]'>
                   {cacheReadTokens > 0 && (
-                    <span className='text-muted-foreground/60'>
-                      {t('Cache')}↓ {cacheReadTokens.toLocaleString()}
+                    <span className='text-muted-foreground'>
+                      {t('Cache')}↓ {formatNumber(cacheReadTokens)}
                     </span>
                   )}
                   {cacheWriteTokens > 0 && (
-                    <span className='text-muted-foreground/60'>
-                      ↑ {cacheWriteTokens.toLocaleString()}
+                    <span className='text-muted-foreground'>
+                      ↑ {formatNumber(cacheWriteTokens)}
                     </span>
                   )}
                 </div>
@@ -835,7 +844,7 @@ export function useCommonLogsColumns(
           const hasMore = segments.length > 1
           let primaryTextClass = 'text-foreground'
           if (primary?.muted) {
-            primaryTextClass = 'text-muted-foreground/60'
+            primaryTextClass = 'text-muted-foreground'
           } else if (primary?.danger) {
             primaryTextClass = 'text-red-600 dark:text-red-400'
           }
@@ -891,7 +900,14 @@ export function useCommonLogsColumns(
       }
     )
 
-    return columns
+    if (isAdmin) return columns
+    // Ordinary customers keep time, key, model and cost: no streaming flag,
+    // token counts, timing or billing breakdown.
+    return columns.filter(
+      (column) =>
+        !('accessorKey' in column) ||
+        !CUSTOMER_HIDDEN_COLUMNS.has(String(column.accessorKey))
+    )
     // Log formatters read currency settings from the store.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [t, isAdmin, isRoot, showBillingSource, currency])

@@ -19,6 +19,8 @@ For commercial licensing, please contact support@quantumnous.com
 import { useRef, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { formatDecimal } from '@/lib/format'
+
 interface CounterProps {
   end: number
   suffix?: string
@@ -34,7 +36,7 @@ function Counter(props: CounterProps) {
 
   const formatValue = useCallback(
     (v: number) =>
-      decimals > 0 ? v.toFixed(decimals) : Math.round(v).toLocaleString(),
+      formatDecimal(decimals > 0 ? v : Math.round(v), decimals, decimals),
     [decimals]
   )
 

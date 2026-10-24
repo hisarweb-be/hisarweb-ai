@@ -32,6 +32,7 @@ import type {
   FlowSummary,
   ProcessedFlowData,
 } from '@/features/dashboard/types'
+import { formatDecimal } from '@/lib/format'
 
 import { getDashboardChartColors } from './charts'
 
@@ -833,9 +834,7 @@ function buildFlowGraph(
 }
 
 function formatNumber(value: number): string {
-  return Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-    value
-  )
+  return formatDecimal(value, 0)
 }
 
 function buildUserFilterOptions(
@@ -1113,7 +1112,7 @@ function tooltipMetricLines(
     {
       key: labels.share,
       value: (datum: Record<string, unknown>) =>
-        `${(metricValue(datum, 'share') * 100).toFixed(1)}%`,
+        `${formatDecimal(metricValue(datum, 'share') * 100, 1, 1)}%`,
       visible: (datum: Record<string, unknown>) => hasMetric(datum, 'share'),
     },
   ]

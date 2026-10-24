@@ -22,7 +22,7 @@ import { useTranslation } from 'react-i18next'
 
 import { TruncatedCell } from '@/components/data-table'
 import { StatusBadge } from '@/components/status-badge'
-import dayjs from '@/lib/dayjs'
+import { formatTimestampToDate } from '@/lib/format'
 
 import type { AuditLog } from '../api'
 import { buildAuditDetails } from '../lib/audit-details'
@@ -40,7 +40,7 @@ export function useAuditLogColumns(
         size: 180,
         cell: ({ row }) => (
           <span className='font-mono tabular-nums'>
-            {dayjs.unix(row.original.created_at).format('YYYY-MM-DD HH:mm:ss')}
+            {formatTimestampToDate(row.original.created_at)}
           </span>
         ),
         meta: { label: t('Time'), mobileTitle: true },

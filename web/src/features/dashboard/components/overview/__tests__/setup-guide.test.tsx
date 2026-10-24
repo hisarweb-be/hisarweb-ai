@@ -33,6 +33,11 @@ import { useSystemConfigStore } from '@/stores/system-config-store'
 
 import { OverviewDashboard } from '../overview-dashboard'
 
+// Admins also get the health panel; it is not what these tests are about.
+vi.mock('../performance-health-panel', () => ({
+  PerformanceHealthPanel: () => null,
+}))
+
 const storageKey = 'dashboard_overview_setup_guide_expanded'
 let client: QueryClient
 let keyLookupError: Error | null
@@ -43,7 +48,7 @@ beforeEach(() => {
   useAuthStore.getState().auth.setUser({
     id: 1,
     username: 'dashboard-user',
-    role: 1,
+    role: 10,
     quota: 1000000,
     used_quota: 1000,
     request_count: 1,
@@ -107,6 +112,27 @@ async function renderOverview() {
 }
 
 describe('overview setup guide', () => {
+  it('shows an ordinary customer no setup guide, request example or recommended actions', async () => {
+    useAuthStore
+      .getState()
+      .auth.setUser({ id: 1, username: 'new-user', role: 1 })
+    await renderOverview()
+
+    expect(
+      await screen.findByRole('heading', { name: 'Usage at a glance' })
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: /setup guide/i })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', {
+        name: 'Build on your API gateway in minutes',
+      })
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/Recommended actions/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/curl/i)).not.toBeInTheDocument()
+  })
+
   it('shows usage first and only a header entry when setup is complete', async () => {
     await renderOverview()
 
@@ -181,7 +207,7 @@ describe('overview setup guide', () => {
     const user = userEvent.setup()
     useAuthStore
       .getState()
-      .auth.setUser({ id: 1, username: 'new-user', role: 1 })
+      .auth.setUser({ id: 1, username: 'new-user', role: 10 })
     await renderOverview()
 
     await user.click(
@@ -205,7 +231,7 @@ describe('overview setup guide', () => {
     useAuthStore.getState().auth.setUser({
       id: 1,
       username: 'dashboard-user',
-      role: 1,
+      role: 10,
       quota: 1000000,
     })
     window.localStorage.setItem(storageKey, 'collapsed')
@@ -216,7 +242,7 @@ describe('overview setup guide', () => {
       useAuthStore.getState().auth.setUser({
         id: 1,
         username: 'dashboard-user',
-        role: 1,
+        role: 10,
         quota: 1000000,
         request_count: 1,
       })

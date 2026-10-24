@@ -132,16 +132,18 @@ describe('price comparator page', () => {
     ).toBeInTheDocument()
     expect(screen.getByText('Fiyat tarihi')).toBeInTheDocument()
     expect(
-      screen.getAllByText(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
+      screen.getAllByText(/^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2}$/)
     ).toHaveLength(1)
     expect(screen.getByText('Kur kaynağı')).toBeInTheDocument()
     expect(screen.getByText('https://example.com/kur.xml')).toBeInTheDocument()
     expect(screen.getByText('Kur tarihi')).toBeInTheDocument()
-    expect(screen.getByText('2026-10-19')).toBeInTheDocument()
+    expect(screen.getByText('19.10.2026')).toBeInTheDocument()
     expect(screen.getByText('Resmî liste fiyatı (USD)')).toBeInTheDocument()
     expect(screen.getByText('Resmî liste fiyatı (TL)')).toBeInTheDocument()
     expect(
-      screen.getByText('HisarWeb AI fiyatı (ilk alışveriş, hoş geldin indirimiyle)')
+      screen.getByText(
+        'HisarWeb AI fiyatı (ilk alışveriş, hoş geldin indirimiyle)'
+      )
     ).toBeInTheDocument()
     expect(
       screen.getByText('HisarWeb AI fiyatı (her alışverişte)')

@@ -42,7 +42,9 @@ import {
 import { getGroups } from '@/features/users/api'
 import { useMediaQuery } from '@/hooks'
 import { getUserGroups } from '@/lib/api'
+import { isOrdinaryCustomer } from '@/lib/roles'
 import { requireServerSuccess } from '@/lib/server-error-message'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { LOG_TYPE_ALL_VALUE, LOG_TYPE_FILTERS } from '../constants'
 import { buildSearchParams } from '../lib/filter'
@@ -125,6 +127,9 @@ export function CommonLogsFilterBar<TData>(
   const queryClient = useQueryClient()
   const searchParams = route.useSearch()
   const { isAdminView: isAdmin } = useLogsViewScope()
+  const isCustomer = useAuthStore((state) =>
+    isOrdinaryCustomer(state.auth.user?.role)
+  )
   const { sensitiveVisible, setSensitiveVisible } = useUsageLogsContext()
   const fetchingLogs = useIsFetching({ queryKey: ['logs'] })
   const { data: adminGroups } = useQuery({
@@ -465,22 +470,28 @@ export function CommonLogsFilterBar<TData>(
           />
         </LogsFilterField>
       )}
-      <LogsFilterField>
-        <LogsFilterInput
-          placeholder={t('Request ID')}
-          value={filters.requestId || ''}
-          onChange={(e) => handleChange('requestId', e.target.value)}
-          onKeyDown={handleKeyDown}
-        />
-      </LogsFilterField>
-      <LogsFilterField>
-        <LogsFilterInput
-          placeholder={t('Upstream Request ID')}
-          value={filters.upstreamRequestId || ''}
-          onChange={(e) => handleChange('upstreamRequestId', e.target.value)}
-          onKeyDown={handleKeyDown}
-        />
-      </LogsFilterField>
+      {isAdmin && (
+        <>
+          <LogsFilterField>
+            <LogsFilterInput
+              placeholder={t('Request ID')}
+              value={filters.requestId || ''}
+              onChange={(e) => handleChange('requestId', e.target.value)}
+              onKeyDown={handleKeyDown}
+            />
+          </LogsFilterField>
+          <LogsFilterField>
+            <LogsFilterInput
+              placeholder={t('Upstream Request ID')}
+              value={filters.upstreamRequestId || ''}
+              onChange={(e) =>
+                handleChange('upstreamRequestId', e.target.value)
+              }
+              onKeyDown={handleKeyDown}
+            />
+          </LogsFilterField>
+        </>
+      )}
     </>
   )
 
@@ -495,7 +506,7 @@ export function CommonLogsFilterBar<TData>(
         <>
           {dateRangeFilter}
           {modelFilter}
-          {groupFilter}
+          {!isCustomer && groupFilter}
           {typeFilter}
         </>
       }
@@ -504,7 +515,7 @@ export function CommonLogsFilterBar<TData>(
       mobileFilters={
         <>
           {modelFilter}
-          {groupFilter}
+          {!isCustomer && groupFilter}
           {typeFilter}
           {advancedFilters}
         </>

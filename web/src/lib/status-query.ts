@@ -18,9 +18,11 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { queryOptions, type QueryClient } from '@tanstack/react-query'
 
-import { getStatus } from '@/lib/api'
 import { parseHwCurrencyConfig } from '@/features/hw/lib/currency'
+import { parseHwBonusConfig } from '@/features/hw/lib/hw-bonus'
+import { getStatus } from '@/lib/api'
 import { DEFAULT_LOGO, resolveSystemName } from '@/lib/constants'
+import { useHwBonusStore } from '@/stores/hw-bonus-store'
 import { useHwCurrencyStore } from '@/stores/hw-currency-store'
 import {
   useSystemConfigStore,
@@ -146,6 +148,7 @@ async function fetchStatus(): Promise<StatusData | null> {
       }
     }
     useHwCurrencyStore.getState().setConfig(parseHwCurrencyConfig(status))
+    useHwBonusStore.getState().setStatus(parseHwBonusConfig(status))
     writeCachedStatus(status)
   }
 
@@ -153,7 +156,10 @@ async function fetchStatus(): Promise<StatusData | null> {
 }
 
 // Start from the last known currencies so the first paint is not TRY-only.
-useHwCurrencyStore.getState().setConfig(parseHwCurrencyConfig(readCachedStatus()))
+useHwCurrencyStore
+  .getState()
+  .setConfig(parseHwCurrencyConfig(readCachedStatus()))
+useHwBonusStore.getState().setStatus(parseHwBonusConfig(readCachedStatus()))
 
 export const statusQueryOptions = queryOptions({
   queryKey: STATUS_QUERY_KEY,

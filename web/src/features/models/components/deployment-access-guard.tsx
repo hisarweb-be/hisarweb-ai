@@ -83,7 +83,7 @@ function LoadingStep({
           'text-sm',
           status === 'loading' && 'text-foreground font-medium',
           status === 'done' && 'text-muted-foreground',
-          status === 'pending' && 'text-muted-foreground/60'
+          status === 'pending' && 'text-muted-foreground'
         )}
       >
         {label}

@@ -78,6 +78,7 @@ For commercial licensing, please contact support@quantumnous.com
  * 4. **Billing displays**: Use formatBillingCurrencyFromUSD() to avoid token display
  * 5. **Effective exchange rate**: When quotaDisplayType is 'USD', use rate of 1 regardless of config
  */
+import { getFormatLocale } from '@/lib/format-locale'
 import {
   useSystemConfigStore,
   DEFAULT_CURRENCY_CONFIG,
@@ -261,25 +262,55 @@ export function getCurrencyFractionDigits(
   return getFractionDigits(value, merged.digitsLarge, merged.digitsSmall)
 }
 
-function removeTrailingZeros(str: string): string {
-  if (!str.includes('.')) return str
-  return str.replace(/(\.[0-9]*?)0+$/, '$1').replace(/\.$/, '')
-}
-
+/**
+ * Format a plain amount in the notation of the interface language (Turkish by
+ * default: 1.234,56). Used for token counts and quota amounts shown without a
+ * currency, with an optional `k` suffix for thousands.
+ */
 function formatNumberWithSuffix(
   value: number,
   digitsLarge: number,
   digitsSmall: number,
-  abbreviate: boolean
+  abbreviate: boolean,
+  locale: Intl.LocalesArgument | undefined
 ): string {
+  const resolvedLocale = locale ?? getFormatLocale()
   const abs = Math.abs(value)
   if (abbreviate && abs >= 1000) {
     const result = value / 1000
-    return `${removeTrailingZeros(result.toFixed(1))}k`
+    return `${new Intl.NumberFormat(resolvedLocale, { maximumFractionDigits: 1 }).format(result)}k`
   }
 
   const digits = getFractionDigits(value, digitsLarge, digitsSmall)
-  return removeTrailingZeros(value.toFixed(digits))
+  return new Intl.NumberFormat(resolvedLocale, {
+    maximumFractionDigits: digits,
+  }).format(value)
+}
+
+/**
+ * Money always shows two decimals (₺245,02, $12,50, ₺0,00); a value that needs
+ * more precision keeps it up to `digits`, a zero-decimal setting stays whole.
+ */
+function getMinimumFractionDigits(digits: number, compact: boolean): number {
+  return compact ? 0 : Math.min(2, digits)
+}
+
+/** A custom currency written as TL or TRY is shown with the lira sign. */
+function resolveCustomSymbol(symbol: string): string {
+  const upper = symbol.trim().toUpperCase()
+  return upper === 'TL' || upper === 'TRY' ? '₺' : symbol
+}
+
+/**
+ * Put a currency sign in front of an already formatted number. A one-character
+ * sign (₺, €, $) sits directly in front of the number; a word such as
+ * "credits" keeps a space.
+ */
+export function joinCurrencySymbol(symbol: string, formatted: string): string {
+  const resolved = resolveCustomSymbol(symbol)
+  return [...resolved].length === 1
+    ? `${resolved}${formatted}`
+    : `${resolved} ${formatted}`
 }
 
 function adjustForMinimum(
@@ -302,9 +333,11 @@ function formatCurrencyValue(
   options: ResolvedCurrencyFormatOptions,
   meta: DisplayMeta
 ): string {
+  const locale = options.locale ?? getFormatLocale()
+
   if (meta.kind === 'tokens') {
     if (options.compact) {
-      return new Intl.NumberFormat(options.locale, {
+      return new Intl.NumberFormat(locale, {
         notation: 'compact',
         maximumFractionDigits: 1,
       }).format(value)
@@ -313,7 +346,8 @@ function formatCurrencyValue(
       value,
       options.digitsLarge,
       options.digitsSmall,
-      options.abbreviate
+      options.abbreviate,
+      locale
     )
   }
 
@@ -323,34 +357,40 @@ function formatCurrencyValue(
     options.digitsSmall
   )
   const adjustedValue = adjustForMinimum(value, digits, options.minimumNonZero)
+  const minimumFractionDigits = getMinimumFractionDigits(
+    digits,
+    options.compact
+  )
+  const maximumFractionDigits = options.compact ? 1 : digits
 
   if (meta.kind === 'currency') {
     if (!options.showSymbol) {
-      return new Intl.NumberFormat(options.locale, {
+      return new Intl.NumberFormat(locale, {
         notation: options.compact ? 'compact' : 'standard',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: options.compact ? 1 : digits,
+        minimumFractionDigits,
+        maximumFractionDigits,
       }).format(adjustedValue)
     }
 
-    const formatted = new Intl.NumberFormat(options.locale, {
+    return new Intl.NumberFormat(locale, {
       style: 'currency',
       currency: meta.currencyCode,
       currencyDisplay: 'narrowSymbol',
       notation: options.compact ? 'compact' : 'standard',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: options.compact ? 1 : digits,
+      minimumFractionDigits,
+      maximumFractionDigits,
     }).format(adjustedValue)
-    return formatted
   }
 
-  const decimal = new Intl.NumberFormat(options.locale, {
+  const decimal = new Intl.NumberFormat(locale, {
     notation: options.compact ? 'compact' : 'standard',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: options.compact ? 1 : digits,
+    minimumFractionDigits,
+    maximumFractionDigits,
   }).format(adjustedValue)
 
-  return options.showSymbol ? `${meta.symbol} ${decimal}` : decimal
+  if (!options.showSymbol) return decimal
+
+  return joinCurrencySymbol(meta.symbol, decimal)
 }
 
 /**
@@ -417,7 +457,7 @@ export function formatCurrencyFromUSD(
   if (meta.kind === 'tokens') {
     const tokens = amountUSD * config.quotaPerUnit
     if (merged.compact) {
-      return new Intl.NumberFormat(merged.locale, {
+      return new Intl.NumberFormat(merged.locale ?? getFormatLocale(), {
         notation: 'compact',
         maximumFractionDigits: 1,
       }).format(tokens)
@@ -426,7 +466,8 @@ export function formatCurrencyFromUSD(
       tokens,
       0,
       merged.digitsSmall,
-      merged.abbreviate
+      merged.abbreviate,
+      merged.locale
     )
   }
 

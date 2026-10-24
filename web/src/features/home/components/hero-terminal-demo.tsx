@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, useEffect, useRef, type ReactNode } from 'react'
 
+import { formatDecimal } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 type AccentTone = 'emerald' | 'amber' | 'blue' | 'violet'
@@ -303,7 +304,7 @@ export function HeroTerminalDemo(props: HeroTerminalDemoProps) {
             <span className='flex items-center gap-1'>
               <span className='tracking-wider uppercase'>cost</span>
               <span className='font-mono'>
-                ${(demo.tokens * 0.00003).toFixed(5)}
+                ${formatDecimal(demo.tokens * 0.00003, 5, 5)}
               </span>
             </span>
           </div>

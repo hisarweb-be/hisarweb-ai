@@ -28,6 +28,7 @@ import type {
   UptimeGroupResult,
   UptimeMonitor,
 } from '@/features/dashboard/types'
+import { formatDecimal } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 import { PanelWrapper } from '../ui/panel-wrapper'
@@ -163,7 +164,7 @@ export function UptimePanel() {
                       )}
                     </div>
                     <span className='text-foreground shrink-0 font-mono text-sm font-semibold tabular-nums'>
-                      {((monitor.uptime ?? 0) * 100).toFixed(2)}%
+                      {formatDecimal((monitor.uptime ?? 0) * 100, 2, 2)}%
                     </span>
                   </div>
                 )

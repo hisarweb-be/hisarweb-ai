@@ -45,7 +45,7 @@ import {
 } from '@/components/ui/sheet'
 import { SecureVerificationDialog } from '@/features/auth/secure-verification'
 import { AuditLogViewer } from '@/features/usage-logs/audit/components/audit-log-viewer'
-import { toIntlLocale } from '@/i18n/languages'
+import { formatDateTimeObject } from '@/lib/time'
 
 import type { AccessTokenItem as AccessToken } from '../api'
 import { useAccessTokens } from '../hooks/use-access-tokens'
@@ -55,19 +55,10 @@ import { AccessTokenDialog } from './dialogs/access-token-dialog'
 import { AccessTokenEditDialog } from './dialogs/access-token-edit-dialog'
 
 export function AccessTokensCard() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const access = useAccessTokens()
-  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
-  const timeFormat = useMemo(
-    () =>
-      new Intl.DateTimeFormat(locale, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      }),
-    [locale]
-  )
   const formatTime = (seconds: number) =>
-    timeFormat.format(new Date(seconds * 1000))
+    formatDateTimeObject(new Date(seconds * 1000), false)
   const [createOpen, setCreateOpen] = useState(false)
   const [revokeTarget, setRevokeTarget] = useState<
     AccessToken | 'legacy' | null

@@ -468,10 +468,10 @@ export function OverviewDashboard() {
   const user = useAuthStore((state) => state.auth.user)
   const { items: apiInfoItems } = useApiInfo()
   const {
-    apiInfo: showApiInfoPanel,
+    apiInfo: apiInfoPanelEnabled,
     announcements: showAnnouncementsPanel,
     faq: showFAQPanel,
-    uptimeKuma: showUptimePanel,
+    uptimeKuma: uptimePanelEnabled,
   } = useDashboardContentVisibility()
   const [manualSetupGuideExpanded, setManualSetupGuideExpanded] = useState<
     boolean | null
@@ -481,6 +481,10 @@ export function OverviewDashboard() {
   const remainQuota = Number(user?.quota ?? 0)
   const usedQuota = Number(user?.used_quota ?? 0)
   const isAdmin = Boolean(user?.role && user.role >= ROLE.ADMIN)
+  // Ordinary customers are beginners: the setup guide (API address, request
+  // example, recommended actions) and the technical panels are for admins.
+  const showApiInfoPanel = isAdmin && apiInfoPanelEnabled
+  const showUptimePanel = isAdmin && uptimePanelEnabled
 
   const apiKeysQuery = useQuery({
     queryKey: ['dashboard', 'overview', 'api-keys'],
@@ -614,7 +618,8 @@ export function OverviewDashboard() {
   const setupComplete = completedStepCount === startSteps.length
   const setupStatusReady = apiKeysQuery.isFetched && Boolean(user)
   const setupGuideExpanded =
-    manualSetupGuideExpanded ?? (setupStatusReady && !setupComplete)
+    isAdmin &&
+    (manualSetupGuideExpanded ?? (setupStatusReady && !setupComplete))
   const showLeftContentPanels =
     isAdmin || showApiInfoPanel || showAnnouncementsPanel || showFAQPanel
   const showContentPanels = showLeftContentPanels || showUptimePanel
@@ -632,7 +637,7 @@ export function OverviewDashboard() {
     <SectionPageLayout>
       <SectionPageLayout.Title>{t('Overview')}</SectionPageLayout.Title>
       <SectionPageLayout.Actions>
-        {setupStatusReady && setupComplete && (
+        {isAdmin && setupStatusReady && setupComplete && (
           <Button
             ref={setupGuideToggleRef}
             variant='ghost'
@@ -733,7 +738,7 @@ export function OverviewDashboard() {
               </CardStaggerContainer>
             )}
           </div>
-          {!setupGuideExpanded && !setupComplete && (
+          {isAdmin && !setupGuideExpanded && !setupComplete && (
             <CardStaggerContainer>
               <CardStaggerItem className='bg-card overflow-hidden rounded-2xl border shadow-xs'>
                 <div className='relative overflow-hidden px-4 py-3 sm:px-5'>

@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  CUSTOMER_TIME_RANGE_PRESETS,
   TIME_GRANULARITY_OPTIONS,
   TIME_RANGE_PRESETS,
 } from '@/features/dashboard/constants'
@@ -73,13 +74,14 @@ function granularityForRangeDays(days: number): TimeGranularity {
 // Highlights the matching quick-range button when the applied range spans an
 // exact preset; custom ranges leave every quick button unselected.
 function detectQuickRangeDays(
-  filters: DashboardFilters | undefined
+  filters: DashboardFilters | undefined,
+  presets: readonly { days: number }[]
 ): number | null {
   const start = filters?.start_timestamp
   const end = filters?.end_timestamp
   if (!start || !end) return null
   const days = Math.round((end.getTime() - start.getTime()) / 86_400_000)
-  return TIME_RANGE_PRESETS.some((preset) => preset.days === days) ? days : null
+  return presets.some((preset) => preset.days === days) ? days : null
 }
 
 /**
@@ -100,7 +102,11 @@ export function ModelsFilter(props: ModelsFilterProps) {
   const { t } = useTranslation()
   // 使用已缓存的用户数据，避免重复调用 API
   const user = useAuthStore((state) => state.auth.user)
-  const isAdmin = user?.role && user.role >= 10
+  const isAdmin = Boolean(user?.role && user.role >= 10)
+  // Ordinary customers only pick a period; granularity follows from it.
+  const rangePresets = isAdmin
+    ? TIME_RANGE_PRESETS
+    : CUSTOMER_TIME_RANGE_PRESETS
 
   const [open, setOpen] = useState(false)
   const [filters, setFilters] = useState<DashboardFilters>(
@@ -108,7 +114,7 @@ export function ModelsFilter(props: ModelsFilterProps) {
       props.currentFilters ?? buildDefaultDashboardFilters(props.preferences)
   )
   const [selectedRange, setSelectedRange] = useState<number | null>(() =>
-    detectQuickRangeDays(props.currentFilters)
+    detectQuickRangeDays(props.currentFilters, rangePresets)
   )
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -118,7 +124,7 @@ export function ModelsFilter(props: ModelsFilterProps) {
       const applied =
         props.currentFilters ?? buildDefaultDashboardFilters(props.preferences)
       setFilters(applied)
-      setSelectedRange(detectQuickRangeDays(applied))
+      setSelectedRange(detectQuickRangeDays(applied, rangePresets))
     }
     setOpen(nextOpen)
   }
@@ -206,7 +212,7 @@ export function ModelsFilter(props: ModelsFilterProps) {
               {t('Quick Range')}
             </Label>
             <div className='grid grid-cols-2 gap-2 sm:flex'>
-              {TIME_RANGE_PRESETS.map((range) => (
+              {rangePresets.map((range) => (
                 <Button
                   key={range.days}
                   type='button'
@@ -252,36 +258,38 @@ export function ModelsFilter(props: ModelsFilterProps) {
             </div>
           </div>
 
-          <SectionDivider label={t('Chart Settings')} />
+          {isAdmin && <SectionDivider label={t('Chart Settings')} />}
 
-          <div className='grid gap-2'>
-            <Label htmlFor='time_granularity'>{t('Time Granularity')}</Label>
-            <Select
-              items={[
-                ...TIME_GRANULARITY_OPTIONS.map((option) => ({
-                  value: option.value,
-                  label: t(option.label),
-                })),
-              ]}
-              value={filters.time_granularity}
-              onValueChange={(value) =>
-                handleChange('time_granularity', value as TimeGranularity)
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={t('Select time granularity')} />
-              </SelectTrigger>
-              <SelectContent alignItemWithTrigger={false}>
-                <SelectGroup>
-                  {TIME_GRANULARITY_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {t(option.label)}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </div>
+          {isAdmin && (
+            <div className='grid gap-2'>
+              <Label htmlFor='time_granularity'>{t('Time Granularity')}</Label>
+              <Select
+                items={[
+                  ...TIME_GRANULARITY_OPTIONS.map((option) => ({
+                    value: option.value,
+                    label: t(option.label),
+                  })),
+                ]}
+                value={filters.time_granularity}
+                onValueChange={(value) =>
+                  handleChange('time_granularity', value as TimeGranularity)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t('Select time granularity')} />
+                </SelectTrigger>
+                <SelectContent alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    {TIME_GRANULARITY_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {t(option.label)}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Admin-only fields */}
           {isAdmin && (

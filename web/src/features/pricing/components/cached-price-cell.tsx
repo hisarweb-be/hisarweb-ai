@@ -78,7 +78,7 @@ export function CachedPriceCell(props: {
   if (dynamicSummary) {
     if (dynamicSummary.isSpecialExpression) {
       return (
-        <span className='text-muted-foreground/50 text-xs'>
+        <span className='text-muted-foreground text-xs'>
           {t('Special billing expression')}
         </span>
       )
@@ -111,7 +111,7 @@ export function CachedPriceCell(props: {
             </span>
           </div>
         ))}
-        <div className='text-muted-foreground/50 text-[10px]'>
+        <div className='text-muted-foreground text-[10px]'>
           / {tokenUnitLabel}
         </div>
       </div>
@@ -143,7 +143,7 @@ export function CachedPriceCell(props: {
   return (
     <div className='max-w-full min-w-0'>
       <span className='font-mono text-sm tabular-nums'>{cachedPrice}</span>
-      <div className='text-muted-foreground/50 text-[10px]'>
+      <div className='text-muted-foreground text-[10px]'>
         / {tokenUnitLabel}
       </div>
     </div>

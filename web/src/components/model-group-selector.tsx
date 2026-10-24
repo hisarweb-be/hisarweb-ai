@@ -60,7 +60,9 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { isOrdinaryCustomer } from '@/lib/roles'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { formatGroupDetail } from './model-group-selector/group-detail'
 import {
@@ -114,6 +116,7 @@ const ModelTriggerButton = React.forwardRef<
     role='combobox'
     size='sm'
     disabled={isDisabled}
+    aria-label={currentLabel || undefined}
     className={cn(
       'flex h-8 items-center gap-2 border px-3 font-medium',
       'justify-center p-0 sm:w-auto sm:justify-start sm:px-3',
@@ -150,6 +153,7 @@ const GroupTriggerButton = React.forwardRef<
     role='combobox'
     size='sm'
     disabled={isDisabled}
+    aria-label={currentLabel || undefined}
     className={cn(
       'flex h-8 items-center gap-2 border px-3 font-medium',
       'justify-center p-0 sm:w-auto sm:justify-start sm:px-3',
@@ -588,7 +592,11 @@ export const ModelGroupSelector: React.FC<ModelGroupSelectorProps> = ({
     () => groups.find((group) => group.value === selectedGroup),
     [groups, selectedGroup]
   )
-  const showGroups = hasGroupChoice(groups)
+  // Ordinary customers never pick a group, so names like "default" stay hidden.
+  const isCustomer = useAuthStore((state) =>
+    isOrdinaryCustomer(state.auth.user?.role)
+  )
+  const showGroups = hasGroupChoice(groups) && !isCustomer
   const filteredModels = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
     if (!query) {
@@ -650,9 +658,10 @@ export const ModelGroupSelector: React.FC<ModelGroupSelectorProps> = ({
   const renderTrigger = () => (
     <Button
       aria-expanded={open}
+      aria-label={currentModel?.label || t('Model')}
       className={cn(
         'h-8 max-w-[15rem] justify-start gap-2 border px-2.5 font-medium shadow-none',
-        'bg-background/80 hover:bg-accent/70 text-foreground',
+        'bg-background/80 hover:bg-accent/70 text-foreground disabled:opacity-100 disabled:text-foreground',
         'focus:!ring-0 focus:!outline-none',
         className
       )}

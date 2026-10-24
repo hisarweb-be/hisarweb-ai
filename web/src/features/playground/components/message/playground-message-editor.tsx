@@ -163,7 +163,7 @@ export function PlaygroundMessageEditor({
         title={
           <span className='inline-flex items-center gap-2'>
             <span>{t('Edit')}</span>
-            <span className='text-muted-foreground/80 normal-case'>
+            <span className='text-muted-foreground normal-case'>
               {hasChanged ? t('Unsaved changes') : t('No changes')}
             </span>
           </span>

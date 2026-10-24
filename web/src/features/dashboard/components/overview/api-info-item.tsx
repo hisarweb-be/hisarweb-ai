@@ -56,7 +56,7 @@ export function ApiInfoItemComponent(props: ApiInfoItemProps) {
             <span className='font-mono text-sm font-semibold'>
               {item.route}
             </span>
-            <span className='text-muted-foreground/60 hidden truncate text-xs md:inline'>
+            <span className='text-muted-foreground hidden truncate text-xs md:inline'>
               {item.description}
             </span>
           </div>

@@ -55,7 +55,7 @@ it.each([
       failure_reason: 'invalid_parameters',
     },
     'Adjust user quota',
-    'Requested quota: $1 · Invalid adjustment parameters',
+    'Requested quota: $1.00 · Invalid adjustment parameters',
   ],
   [
     'user.quota_add',
@@ -68,7 +68,7 @@ it.each([
       to: 1000000,
     },
     'Increase quota for user “quota-owner”',
-    'Requested quota: $1 · $1 → $2',
+    'Requested quota: $1.00 · $1.00 → $2.00',
   ],
   [
     'user.quota_subtract',
@@ -81,7 +81,7 @@ it.each([
       to: 500000,
     },
     'Decrease quota for user “quota-owner”',
-    'Requested quota: $1 · $2 → $1',
+    'Requested quota: $1.00 · $2.00 → $1.00',
   ],
   [
     'user.quota_override',
@@ -93,7 +93,7 @@ it.each([
       to: 0,
     },
     'Override quota for user “quota-owner”',
-    'Requested quota: $0 · $1 → $0',
+    'Requested quota: $0.00 · $1.00 → $0.00',
   ],
   ['token.create', { id: 11, name: '1' }, 'Create API token “1”', ''],
   [
@@ -574,7 +574,7 @@ it('changing rows per page resets pagination and sends the selected page size', 
       params: expect.objectContaining({ p: 2 }),
     })
   )
-  await user.click(screen.getByRole('combobox', { name: '' }))
+  await user.click(screen.getByRole('combobox', { name: 'Rows per page' }))
   await user.click(await screen.findByRole('option', { name: '50' }))
   await waitFor(() =>
     expect(get).toHaveBeenLastCalledWith('/api/audit/self', {

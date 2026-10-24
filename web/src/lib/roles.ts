@@ -43,3 +43,12 @@ export function getRoleLabelKey(role?: number): string {
 export function getRoleLabel(role?: number): string {
   return t(getRoleLabelKey(role))
 }
+
+/**
+ * A signed-in customer without admin rights. These users get the beginner
+ * view: no billing internals (group, ratio, token counts) and no developer
+ * options.
+ */
+export function isOrdinaryCustomer(role?: number): boolean {
+  return role !== undefined && role >= ROLE.USER && role < ROLE.ADMIN
+}

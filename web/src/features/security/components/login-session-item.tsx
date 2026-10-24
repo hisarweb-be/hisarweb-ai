@@ -23,8 +23,8 @@ import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { toIntlLocale } from '@/i18n/languages'
-import dayjs from '@/lib/dayjs'
 import { formatTimestampRelative } from '@/lib/format'
+import { formatDateTimeObject } from '@/lib/time'
 import type { LoginSession } from '@/stores/auth-store'
 
 import { loginMethodLabel, sessionDevice } from './login-session-utils'
@@ -72,7 +72,10 @@ export function LoginSessionItem({ session, onRevoke }: LoginSessionItemProps) {
               'seconds',
               locale
             ),
-            expires: dayjs.unix(session.expires_at).format('YYYY-MM-DD HH:mm'),
+            expires: formatDateTimeObject(
+              new Date(session.expires_at * 1000),
+              false
+            ),
           })}
         </p>
       </div>

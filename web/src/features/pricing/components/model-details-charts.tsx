@@ -22,7 +22,9 @@ import { useTranslation } from 'react-i18next'
 
 import { useThemeCustomization } from '@/context/theme-customization-provider'
 import { getSuccessRateColor } from '@/features/performance-metrics/lib/format'
+import { formatDecimal } from '@/lib/format'
 import { useThemeRadiusPx } from '@/lib/theme-radius'
+import { formatDateObject, getIstanbulParts } from '@/lib/time'
 import { useChartTheme } from '@/lib/use-chart-theme'
 import { cn } from '@/lib/utils'
 import { VCHART_OPTION } from '@/lib/vchart'
@@ -31,23 +33,17 @@ import type { LatencyTimePoint, UptimeDayPoint } from '../lib/mock-stats'
 
 function formatHourLabel(iso: string): string {
   const date = new Date(iso)
-  const hours = date.getHours()
-  return `${String(hours).padStart(2, '0')}:00`
+  if (Number.isNaN(date.getTime())) return iso
+  return `${String(getIstanbulParts(date).hour).padStart(2, '0')}:00`
 }
 
 function formatDayLabel(date: string): string {
   const parsed = new Date(date)
+  if (Number.isNaN(parsed.getTime())) return date
   if (date.includes('T')) {
-    return parsed.toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-    })
+    return `${formatDateObject(parsed)} ${formatHourLabel(date)}`
   }
-  return parsed.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  })
+  return formatDateObject(parsed)
 }
 
 function getChartThemeTokens(resolvedTheme: string) {
@@ -244,7 +240,8 @@ export function UptimeTrendChart(props: {
           content: [
             {
               key: t('Uptime'),
-              value: (d: { uptime: number }) => `${d.uptime.toFixed(2)}%`,
+              value: (d: { uptime: number }) =>
+                `${formatDecimal(d.uptime, 2, 2)}%`,
             },
             {
               key: t('Incidents'),
@@ -379,7 +376,7 @@ export function ThroughputBarChart(props: {
             {
               key: t('Throughput'),
               value: (d: { throughput_tps: number }) =>
-                `${d.throughput_tps.toFixed(1)} t/s`,
+                `${formatDecimal(d.throughput_tps, 1, 1)} t/s`,
             },
           ],
         },

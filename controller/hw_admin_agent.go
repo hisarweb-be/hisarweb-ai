@@ -7,6 +7,7 @@ package controller
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -116,7 +117,9 @@ type hwAdminAgentEscalateRequest struct {
 	Page    string `json:"page"`
 }
 
-// HwAdminAgentEscalate creates a card on the Bureau V2 board.
+// HwAdminAgentEscalate stores the escalation and creates a card on the Bureau
+// V2 board. The server may not reach the board; the escalation then stays
+// queued for HwAdminAgentPendingEscalations and the caller is told so.
 func HwAdminAgentEscalate(c *gin.Context) {
 	if !hwRequireAdmin(c) {
 		return
@@ -126,12 +129,57 @@ func HwAdminAgentEscalate(c *gin.Context) {
 		common.ApiErrorMsg(c, "invalid request")
 		return
 	}
-	card, err := hwAdminAgentCreateCard(c.Request.Context(), service.HwBureauCardConfigFromEnv(), request.Title, request.Summary, request.Page)
+	row, err := model.HwCreateAdminEscalation(model.DB, request.Title, request.Summary, request.Page, c.GetInt("id"))
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	common.ApiSuccess(c, gin.H{"card": card})
+	card, err := hwAdminAgentCreateCard(c.Request.Context(), service.HwBureauCardConfigFromEnv(), request.Title, request.Summary, request.Page)
+	if err != nil {
+		common.SysLog("hw: escalation " + strconv.Itoa(row.ID) + " queued, board not reached: " + err.Error())
+		common.ApiSuccess(c, gin.H{"queued": true, "id": row.ID})
+		return
+	}
+	if err := model.HwSetAdminEscalationCard(model.DB, row.ID, card); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{"card": card, "id": row.ID})
+}
+
+// HwAdminAgentPendingEscalations lists escalations that have no board card yet.
+func HwAdminAgentPendingEscalations(c *gin.Context) {
+	if !hwRequireAdmin(c) {
+		return
+	}
+	rows, err := model.HwListPendingAdminEscalations(model.DB)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, rows)
+}
+
+type hwAdminAgentEscalationCardRequest struct {
+	ID   int    `json:"id"`
+	Card string `json:"card"`
+}
+
+// HwAdminAgentLinkEscalationCard records the card that a sync created.
+func HwAdminAgentLinkEscalationCard(c *gin.Context) {
+	if !hwRequireAdmin(c) {
+		return
+	}
+	var request hwAdminAgentEscalationCardRequest
+	if err := common.DecodeJson(c.Request.Body, &request); err != nil || request.ID <= 0 || strings.TrimSpace(request.Card) == "" {
+		common.ApiErrorMsg(c, "invalid request")
+		return
+	}
+	if err := model.HwSetAdminEscalationCard(model.DB, request.ID, strings.TrimSpace(request.Card)); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, nil)
 }
 
 // HwTextOverrides is the public read of one language's overrides.

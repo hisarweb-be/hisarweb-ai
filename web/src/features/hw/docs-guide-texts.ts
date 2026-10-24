@@ -62,7 +62,7 @@ const tr = {
 
   step4Title: 'Bakiye yükleyin (isteğe bağlı)',
   step4Body:
-    'Başlangıç bonusu bittiğinde soldaki menüden “Satın al” sayfasını açın. Ödeme {currencyName} ile yapılır. Token fiyatları her zaman resmî fiyatın yarısıdır; ilk alışverişte {firstCap} değerine kadar ayrıca %50 hoş geldin indirimi vardır. Yüklediğiniz bakiye 30 gün geçerlidir; aylık abonelik ücreti yoktur.',
+    'Başlangıç bonusu bittiğinde soldaki menüden “Satın al” sayfasını açın. Ödeme {currencyName} ile yapılır. Token fiyatları her zaman resmî fiyatın yarısıdır; ilk alışverişte {firstCap} değerine kadar ayrıca %50 hoş geldin indirimi vardır. Yüklediğiniz bakiye {validityDays} gün geçerlidir; aylık abonelik ücreti yoktur.',
   step4Link: 'Satın al sayfasına git',
 
   step5Title: 'Playground’da deneyin',
@@ -113,7 +113,7 @@ const en: typeof tr = {
 
   step4Title: 'Add credit (optional)',
   step4Body:
-    'When the start bonus is used up, open “Buy” in the left menu. You pay in {currencyLong}. Token prices are always half the official price, and your first purchase gets an extra 50% welcome discount on up to {firstCap}. Credit stays valid for 30 days; there is no monthly fee.',
+    'When the start bonus is used up, open “Buy” in the left menu. You pay in {currencyLong}. Token prices are always half the official price, and your first purchase gets an extra 50% welcome discount on up to {firstCap}. Credit stays valid for {validityDays} days; there is no monthly fee.',
   step4Link: 'Go to the buy page',
 
   step5Title: 'Try it in the Playground',

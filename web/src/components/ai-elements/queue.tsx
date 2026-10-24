@@ -96,7 +96,7 @@ export const QueueItemContent = ({
     className={cn(
       'line-clamp-1 grow break-words',
       completed
-        ? 'text-muted-foreground/50 line-through'
+        ? 'text-muted-foreground line-through'
         : 'text-muted-foreground',
       className
     )}

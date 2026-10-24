@@ -182,39 +182,24 @@ function stepItem(title: string) {
 // The shared Button renders as an anchor with `role="button"`, so every call to
 // action is found by that role and its destination is read from `href`.
 describe('start bonus card', () => {
-  it('offers the e-mail step while telegram verification is closed', async () => {
+  it('shows no card while telegram verification is closed', async () => {
     await renderCard()
 
-    const emailStep = await stepItem('E-posta adresinizi ekleyin ve onaylayın')
-    expect(emailStep.getByText('Henüz yapılmadı')).toBeVisible()
+    // Wait until both answers were read, so the card had every chance to appear.
+    await waitFor(() => {
+      expect(getCalls).toContain('/api/user/hw/packages')
+      expect(getCalls).toContain('/api/status')
+    })
+    await act(async () => {})
     expect(
-      emailStep.getByRole('button', { name: 'E-postayı ekle' })
-    ).toHaveAttribute('href', '/security')
-
-    const telegramStep = await stepItem('Telegram hesabınızı bağlayın')
-    expect(telegramStep.getByText('Henüz açık değil')).toBeVisible()
-    expect(
-      telegramStep.queryByRole('button', { name: 'Link Telegram' })
-    ).not.toBeInTheDocument()
-
-    const phoneStep = await stepItem(
-      'Telefon numaranızı Telegram botuyla paylaşın'
-    )
-    expect(phoneStep.getByText('Henüz açık değil')).toBeVisible()
-    expect(
-      phoneStep.queryByRole('button', { name: 'Telegram botunu aç' })
+      screen.queryByText('Telegram hesabınızı bağlayın')
     ).not.toBeInTheDocument()
     expect(
-      screen.getByText(/kötüye kullanılmasını önlemek için istiyoruz/)
-    ).toBeVisible()
-
-    // The headline action keeps pointing at the e-mail step, even though the
-    // Telegram part of the bonus cannot be done yet.
-    const actions = screen.getAllByRole('button', { name: 'E-postayı ekle' })
-    expect(actions).toHaveLength(2)
-    for (const action of actions) {
-      expect(action).toHaveAttribute('href', '/security')
-    }
+      screen.queryByText(/başlangıç bonusunuzu alın/)
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/bonus henüz tanımlanamıyor/)
+    ).not.toBeInTheDocument()
   })
 
   it('opens the bot dialog from the phone step once telegram verification is open', async () => {

@@ -24,7 +24,8 @@ import type {
   ProcessedChartData,
   ProcessedUserChartData,
 } from '@/features/dashboard/types'
-import { getCurrencyDisplay } from '@/lib/currency'
+import { getCurrencyDisplay, joinCurrencySymbol } from '@/lib/currency'
+import { formatDecimal } from '@/lib/format'
 import { formatChartTime, type TimeGranularity } from '@/lib/time'
 
 type TFunction = (key: string) => string
@@ -52,16 +53,37 @@ export function getDashboardChartColors(domainLength: number): string[] {
 
 function renderQuotaCompat(rawQuota: number, digits = 4): string {
   const { config, meta } = getCurrencyDisplay()
-  if (meta.kind === 'tokens') return rawQuota.toLocaleString()
+  if (meta.kind === 'tokens') return formatDecimal(rawQuota, 0)
   const usd = rawQuota / config.quotaPerUnit
   const rate = 'exchangeRate' in meta ? meta.exchangeRate : 1
   const symbol = 'symbol' in meta ? meta.symbol : '$'
   const value = usd * rate
-  const fixed = value.toFixed(digits)
-  if (Number.parseFloat(fixed) === 0 && rawQuota > 0 && value > 0) {
-    return symbol + Math.pow(10, -digits).toFixed(digits)
-  }
-  return symbol + fixed
+  const minimumDigits = Math.min(2, digits)
+  const isTiny =
+    Number.parseFloat(value.toFixed(digits)) === 0 && rawQuota > 0 && value > 0
+  const formatted = isTiny
+    ? formatDecimal(Math.pow(10, -digits), digits, digits)
+    : formatDecimal(value, digits, minimumDigits)
+  return joinCurrencySymbol(symbol, formatted)
+}
+
+/**
+ * Tick label for a value axis that plots USD amounts: shown in the display
+ * currency with Turkish notation, never with a float tail.
+ */
+function formatUsageAxisTick(usd: number): string {
+  const { meta } = getCurrencyDisplay()
+  if (meta.kind === 'tokens') return formatDecimal(usd, 4)
+  const rate = 'exchangeRate' in meta ? meta.exchangeRate : 1
+  const symbol = 'symbol' in meta ? meta.symbol : '$'
+  const value = usd * rate
+  const digits = Math.abs(value) >= 1 ? 2 : 4
+  return joinCurrencySymbol(symbol, formatDecimal(value, digits))
+}
+
+/** Tick label for a value axis that plots counts or other plain numbers. */
+function formatNumberAxisTick(value: number): string {
+  return formatDecimal(value, 2)
 }
 
 /**
@@ -76,8 +98,7 @@ export function processChartData(
   const tt: TFunction = t ?? ((x) => x)
   const otherLabel = tt('Other')
 
-  const formatInt = (value: number) =>
-    Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value)
+  const formatInt = (value: number) => formatDecimal(value, 0)
   const formatQuotaValue = (value: number) => renderQuotaCompat(value, 4)
   const formatQuotaTotal = (value: number) => renderQuotaCompat(value, 2)
 
@@ -500,6 +521,16 @@ export function processChartData(
       yField: 'Usage',
       seriesField: 'Model',
       stack: true,
+      axes: [
+        { orient: 'bottom', type: 'band' },
+        {
+          orient: 'left',
+          type: 'linear',
+          label: {
+            formatMethod: (value: number) => formatUsageAxisTick(value),
+          },
+        },
+      ],
       legends: { visible: true, selectMode: 'single' },
       color: modelColor,
       bar: {
@@ -538,6 +569,16 @@ export function processChartData(
       yField: 'Usage',
       seriesField: 'Model',
       stack: false,
+      axes: [
+        { orient: 'bottom', type: 'band' },
+        {
+          orient: 'left',
+          type: 'linear',
+          label: {
+            formatMethod: (value: number) => formatUsageAxisTick(value),
+          },
+        },
+      ],
       legends: { visible: true, selectMode: 'single' },
       color: modelColor,
       tooltip: {
@@ -586,6 +627,16 @@ export function processChartData(
       yField: 'Count',
       seriesField: 'Model',
       stack: false,
+      axes: [
+        { orient: 'bottom', type: 'band' },
+        {
+          orient: 'left',
+          type: 'linear',
+          label: {
+            formatMethod: (value: number) => formatNumberAxisTick(value),
+          },
+        },
+      ],
       legends: { visible: true, selectMode: 'single' },
       color: modelColor,
       title: {
@@ -663,6 +714,16 @@ export function processChartData(
       xField: 'Model',
       yField: 'Count',
       seriesField: 'Model',
+      axes: [
+        { orient: 'bottom', type: 'band' },
+        {
+          orient: 'left',
+          type: 'linear',
+          label: {
+            formatMethod: (value: number) => formatNumberAxisTick(value),
+          },
+        },
+      ],
       legends: { visible: true, selectMode: 'single' },
       color: modelColor,
       title: {

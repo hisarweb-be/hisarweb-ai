@@ -59,7 +59,7 @@ describe('log cost display', () => {
 
   test.each([
     { consumed: 12500, expected: '$0.025' },
-    { consumed: 0, expected: '$0' },
+    { consumed: 0, expected: '$0.00' },
     { consumed: 1, expected: '$0.000002' },
     { consumed: undefined, expected: '$0.01' },
   ])(
@@ -115,7 +115,9 @@ describe('log cost display', () => {
 
     expect(screen.getByText('$0.025')).toBeVisible()
     expect(screen.getByRole('img', { name: 'Subscription' })).toBeVisible()
-    expect(screen.queryByRole('img', { name: 'Wallet' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('img', { name: 'Wallet' })
+    ).not.toBeInTheDocument()
   })
 
   test('keeps legacy cost visible without inventing a funding source', () => {

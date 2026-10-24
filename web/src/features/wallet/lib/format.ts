@@ -18,6 +18,9 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { TFunction } from 'i18next'
 
+import { formatDecimal } from '@/lib/format'
+import { getFormatLocale } from '@/lib/format-locale'
+
 import { DEFAULT_DISCOUNT_RATE } from '../constants'
 
 // ============================================================================
@@ -32,7 +35,7 @@ export function formatCreemPrice(
   currency: 'USD' | 'EUR'
 ): string {
   const symbol = currency === 'EUR' ? '€' : '$'
-  return `${symbol}${price.toFixed(2)}`
+  return `${symbol}${formatDecimal(price, 2, 2)}`
 }
 
 /**
@@ -40,12 +43,12 @@ export function formatCreemPrice(
  */
 export function formatQuotaShort(quota: number): string {
   if (quota >= 1000000) {
-    return `${(quota / 1000000).toFixed(1)}M`
+    return `${formatDecimal(quota / 1000000, 1, 1)}M`
   }
   if (quota >= 1000) {
-    return `${(quota / 1000).toFixed(1)}K`
+    return `${formatDecimal(quota / 1000, 1, 1)}K`
   }
-  return quota.toString()
+  return formatDecimal(quota, 0)
 }
 
 /**
@@ -57,7 +60,7 @@ export function formatCurrency(amount: number | string): string {
     typeof amount === 'number' ? amount : Number.parseFloat(String(amount))
   if (!Number.isFinite(numeric)) return '-'
 
-  return new Intl.NumberFormat(undefined, {
+  return new Intl.NumberFormat(getFormatLocale(), {
     minimumFractionDigits: 0,
     maximumFractionDigits: Math.abs(numeric) >= 1 ? 2 : 4,
   }).format(numeric)

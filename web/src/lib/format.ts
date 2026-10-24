@@ -16,7 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import dayjs from '@/lib/dayjs'
+import { getFormatLocale } from '@/lib/format-locale'
+import {
+  formatDateObject,
+  formatDateTimeObject,
+  formatTimeObject,
+  getIstanbulParts,
+  istanbulWallClockToMs,
+} from '@/lib/time'
 
 import {
   formatCurrencyFromUSD,
@@ -29,14 +36,39 @@ import {
 // Number Formatting
 // ============================================================================
 
+/**
+ * Format a number in the notation of the interface language, Turkish by
+ * default: 1.234,56 (dot for thousands, comma for decimals). At most two
+ * decimals, so a float tail such as 0.09930800000000001 never shows up.
+ */
 export function formatNumber(
   value: number | null | undefined,
   locales?: Intl.LocalesArgument
 ): string {
   if (value == null || Number.isNaN(value as number)) return '-'
-  return Intl.NumberFormat(locales, { maximumFractionDigits: 2 }).format(
-    value as number
-  )
+  return Intl.NumberFormat(locales ?? getFormatLocale(), {
+    maximumFractionDigits: 2,
+  }).format(value as number)
+}
+
+/**
+ * Format a number with a fixed number of decimals in the notation of the
+ * interface language, e.g. `formatDecimal(1.5, 1, 1)` is `1,5` in Turkish.
+ */
+export function formatDecimal(
+  value: number | null | undefined,
+  maximumFractionDigits: number,
+  minimumFractionDigits = 0,
+  locales?: Intl.LocalesArgument
+): string {
+  if (value == null || !Number.isFinite(value as number)) return '-'
+  return Intl.NumberFormat(locales ?? getFormatLocale(), {
+    minimumFractionDigits: Math.min(
+      minimumFractionDigits,
+      maximumFractionDigits
+    ),
+    maximumFractionDigits,
+  }).format(value as number)
 }
 
 export function formatCompactNumber(
@@ -44,15 +76,18 @@ export function formatCompactNumber(
   locales?: Intl.LocalesArgument
 ): string {
   if (value == null || Number.isNaN(value as number)) return '-'
-  return Intl.NumberFormat(locales, {
+  return Intl.NumberFormat(locales ?? getFormatLocale(), {
     notation: 'compact',
     maximumFractionDigits: 1,
   }).format(value as number)
 }
 
-export function formatPercent(value: number | null | undefined): string {
+export function formatPercent(
+  value: number | null | undefined,
+  locales?: Intl.LocalesArgument
+): string {
   if (value == null || Number.isNaN(value as number)) return '-'
-  return Intl.NumberFormat(undefined, {
+  return Intl.NumberFormat(locales ?? getFormatLocale(), {
     style: 'percent',
     maximumFractionDigits: 2,
   }).format((value as number) / 100)
@@ -146,11 +181,11 @@ export function getEditableQuotaStep(): number {
 }
 
 // ============================================================================
-// Timestamp Formatting
+// Timestamp Formatting (dd.MM.yyyy, 24-hour clock, Istanbul time)
 // ============================================================================
 
 /**
- * Format Unix timestamp (seconds) to YYYY-MM-DD HH:mm:ss
+ * Format Unix timestamp (seconds) to dd.MM.yyyy HH:mm:ss in Istanbul time
  */
 export function formatTimestamp(timestamp: number): string {
   if (timestamp === -1) {
@@ -160,7 +195,7 @@ export function formatTimestamp(timestamp: number): string {
 }
 
 /**
- * Format timestamp to YYYY-MM-DD HH:mm:ss
+ * Format timestamp to dd.MM.yyyy HH:mm:ss in Istanbul time
  * @param timestamp - Timestamp in seconds or milliseconds
  * @param unit - Unit of the timestamp ('seconds' or 'milliseconds')
  */
@@ -172,7 +207,7 @@ export function formatTimestampToDate(
     return '-'
   }
   const ms = unit === 'seconds' ? timestamp * 1000 : timestamp
-  return dayjs(ms).format('YYYY-MM-DD HH:mm:ss')
+  return formatDateTimeObject(new Date(ms))
 }
 
 /**
@@ -193,7 +228,7 @@ export function formatTimestampRelative(
   const ms = unit === 'seconds' ? timestamp * 1000 : timestamp
   const diffSeconds = Math.round((ms - Date.now()) / 1000)
   const absSeconds = Math.abs(diffSeconds)
-  const formatter = new Intl.RelativeTimeFormat(locales, {
+  const formatter = new Intl.RelativeTimeFormat(locales ?? getFormatLocale(), {
     numeric: 'always',
   })
 
@@ -215,19 +250,19 @@ export function formatTimestampRelative(
   return formatter.format(Math.round(diffSeconds / 31536000), 'year')
 }
 
-/** Format a Date object to YYYY-MM-DD HH:mm:ss */
+/** Format a Date object to dd.MM.yyyy HH:mm:ss in Istanbul time */
 export function formatDateTimeStr(date: Date): string {
-  return dayjs(date).format('YYYY-MM-DD HH:mm:ss')
+  return formatDateTimeObject(date)
 }
 
-/** Format a Date object to YYYY-MM-DD */
+/** Format a Date object to dd.MM.yyyy in Istanbul time */
 export function formatDateStr(date: Date): string {
-  return dayjs(date).format('YYYY-MM-DD')
+  return formatDateObject(date)
 }
 
-/** Format a Date object to HH:mm:ss */
+/** Format a Date object to HH:mm:ss on the 24-hour clock in Istanbul time */
 export function formatTimeStr(date: Date): string {
-  return dayjs(date).format('HH:mm:ss')
+  return formatTimeObject(date)
 }
 
 /**
@@ -248,39 +283,57 @@ export function formatLogQuota(quota: number): string {
 export function formatTokens(tokens: number): string {
   if (tokens === 0) return '-'
   if (tokens < 1000) return tokens.toString()
-  if (tokens < 1000000) return `${(tokens / 1000).toFixed(1)}K`
-  return `${(tokens / 1000000).toFixed(2)}M`
+  if (tokens < 1000000) return `${formatDecimal(tokens / 1000, 1, 1)}K`
+  return `${formatDecimal(tokens / 1000000, 2, 2)}M`
 }
 
 /**
  * Format use time in seconds with appropriate unit
  */
 export function formatUseTime(seconds: number): string {
-  if (seconds < 60) return `${seconds.toFixed(1)}s`
+  if (seconds < 60) return `${formatDecimal(seconds, 1, 1)}s`
   const minutes = Math.floor(seconds / 60)
   const remainingSeconds = seconds % 60
-  return `${minutes}m ${remainingSeconds.toFixed(0)}s`
+  return `${minutes}m ${formatDecimal(remainingSeconds, 0)}s`
 }
 
 /**
- * Format timestamp to date input value (YYYY-MM-DDTHH:mm)
+ * Format timestamp to date input value (YYYY-MM-DDTHH:mm, Istanbul time).
+ * This is the value format of `<input type="datetime-local">`, not display text.
  */
 export function formatTimestampForInput(timestamp: number): string {
   if (timestamp === -1) {
     return ''
   }
-  return dayjs(timestamp * 1000).format('YYYY-MM-DDTHH:mm')
+  const p = getIstanbulParts(timestamp * 1000)
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`
 }
 
 /**
- * Parse datetime-local input to Unix timestamp
+ * Parse a datetime-local input value (Istanbul time) to a Unix timestamp
  */
 export function parseTimestampFromInput(value: string): number {
   if (!value) {
     return -1
   }
-  const date = new Date(value)
-  return Math.floor(date.getTime() / 1000)
+  const match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/.exec(
+    value
+  )
+  if (!match) {
+    return Math.floor(new Date(value).getTime() / 1000)
+  }
+  const [, year, month, day, hour, minute, second = '0'] = match
+  return Math.floor(
+    istanbulWallClockToMs(
+      Number(year),
+      Number(month),
+      Number(day),
+      Number(hour),
+      Number(minute),
+      Number(second)
+    ) / 1000
+  )
 }
 
 // ============================================================================

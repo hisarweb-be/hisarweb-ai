@@ -101,29 +101,30 @@ const cases = [
       to: 1000000,
     },
     english:
-      'Increase quota for user “quota-owner” (ID: 42) · Requested quota: $1 · $1 → $2',
-    chinese: '增加用户「quota-owner」的额度（ID: 42） · 请求数额：$1 · $1 → $2',
+      'Increase quota for user “quota-owner” (ID: 42) · Requested quota: $1.00 · $1.00 → $2.00',
+    chinese:
+      '增加用户「quota-owner」的额度（ID: 42） · 请求数额：$1.00 · $1.00 → $2.00',
   },
   {
     action: 'user.quota_add',
     params: { quota: 500000 },
     english:
-      'Increase user quota · Target not recorded · Requested quota: $1 · Not recorded → Not recorded',
-    chinese: '增加用户额度 · 目标未记录 · 请求数额：$1 · 未记录 → 未记录',
+      'Increase user quota · Target not recorded · Requested quota: $1.00 · Not recorded → Not recorded',
+    chinese: '增加用户额度 · 目标未记录 · 请求数额：$1.00 · 未记录 → 未记录',
   },
   {
     action: 'user.quota_subtract',
     params: { quota: 500000 },
     english:
-      'Decrease user quota · Target not recorded · Requested quota: $1 · Not recorded → Not recorded',
-    chinese: '减少用户额度 · 目标未记录 · 请求数额：$1 · 未记录 → 未记录',
+      'Decrease user quota · Target not recorded · Requested quota: $1.00 · Not recorded → Not recorded',
+    chinese: '减少用户额度 · 目标未记录 · 请求数额：$1.00 · 未记录 → 未记录',
   },
   {
     action: 'user.quota_override',
     params: { from: 500000, to: 0 },
     english:
-      'Override user quota · Target not recorded · Requested quota: $0 · $1 → $0',
-    chinese: '覆盖用户额度 · 目标未记录 · 请求数额：$0 · $1 → $0',
+      'Override user quota · Target not recorded · Requested quota: $0.00 · $1.00 → $0.00',
+    chinese: '覆盖用户额度 · 目标未记录 · 请求数额：$0.00 · $1.00 → $0.00',
   },
 ]
 

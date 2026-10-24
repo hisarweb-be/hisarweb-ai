@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/table'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { toIntlLocale } from '@/i18n/languages'
+import { getFormatLocale } from '@/lib/format-locale'
 import { cn } from '@/lib/utils'
 
 import '@/styles/hw-cinematic.css'
@@ -70,7 +71,7 @@ function formatMoney(
   currency: HwCurrency,
   locale: string | undefined
 ): string {
-  return new Intl.NumberFormat(locale, {
+  return new Intl.NumberFormat(locale ?? getFormatLocale(), {
     style: 'currency',
     currency,
     currencyDisplay: 'narrowSymbol',
@@ -80,7 +81,7 @@ function formatMoney(
 }
 
 function formatPercent(fraction: number, locale: string | undefined): string {
-  return new Intl.NumberFormat(locale, {
+  return new Intl.NumberFormat(locale ?? getFormatLocale(), {
     style: 'percent',
     maximumFractionDigits: 1,
   }).format(fraction)
@@ -510,7 +511,9 @@ export function PriceTable(props: PriceTableProps) {
             {secondary && (
               <li>
                 {t('noteFx', {
-                  rate: secondary.rate.toLocaleString(locale),
+                  rate: secondary.rate.toLocaleString(
+                    locale ?? getFormatLocale()
+                  ),
                   date: MODEL_PRICES_FX_DATE,
                   symbol: HW_CURRENCY_SYMBOLS[secondary.currency],
                 })}

@@ -22,6 +22,7 @@ import {
   CardStaggerItem,
 } from '@/components/page-transition'
 import { useStatus } from '@/hooks/use-status'
+import { isOrdinaryCustomer } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { CheckinCalendarCard } from './components/checkin-calendar-card'
@@ -41,7 +42,10 @@ export function Profile() {
     status?.turnstile_check && status?.turnstile_site_key
   )
   const turnstileSiteKey = status?.turnstile_site_key || ''
-  const canConfigureSidebar = permissions?.sidebar_settings !== false
+  const role = useAuthStore((s) => s.auth.user?.role)
+  // Customers get a fixed, simple menu, so the sidebar panel stays hidden.
+  const canConfigureSidebar =
+    permissions?.sidebar_settings !== false && !isOrdinaryCustomer(role)
   // Older cached status payloads lack these fields; the site default is on.
   const quotaRemindEnabled = status?.quota_remind_enabled !== false
   const quotaRemindThreshold = status?.quota_remind_threshold ?? 0

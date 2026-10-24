@@ -25,7 +25,7 @@ import { getLogCsvHeader, getLogCsvRow, toCsvLine } from '../export'
 const consumeLog: UsageLog = {
   id: 1,
   user_id: 7,
-  created_at: new Date(2026, 9, 12, 8, 30, 5).getTime() / 1000,
+  created_at: Date.UTC(2026, 9, 12, 5, 30, 5) / 1000,
   type: 2,
   content: '',
   username: 'alice',
@@ -97,7 +97,7 @@ describe('usage log CSV export', () => {
     const t = await chineseTranslator()
 
     expect(getLogCsvRow(consumeLog, false, t)).toEqual([
-      '2026-10-12 08:30:05',
+      '12.10.2026 08:30:05',
       '消费',
       'prod',
       'default',
@@ -107,7 +107,7 @@ describe('usage log CSV export', () => {
       '16',
       '1906',
       '15',
-      '$0.5',
+      '$0.50',
       '3s',
       '203.0.113.9',
       'req-1',
