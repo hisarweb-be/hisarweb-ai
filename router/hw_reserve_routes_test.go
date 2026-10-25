@@ -412,6 +412,38 @@ func TestHwReserveGateKeepsTheCeilingPerCustomer(t *testing.T) {
 	assert.Equal(t, http.StatusOK, secondRecorder.Code, secondRecorder.Body.String())
 }
 
+// TestHwReserveGateFollowsTheAccountGroupNotTheTokenGroup proves the gate reads
+// the group of the account, not the group the token asks for: a paid customer
+// whose token sits in another usable group stays inside its ceiling.
+func TestHwReserveGateFollowsTheAccountGroupNotTheTokenGroup(t *testing.T) {
+	env := hwReserveTestCase(t)
+	t.Setenv(model.HwReserveModeEnv, service.HwReserveModeThird)
+	hwReserveTestOption(t, model.HwWindowCapacityUSDOption, "90")
+	hwReserveTestOption(t, model.HwCustomerWindowCeilingUSDOption, "5")
+	user, token := env.customer(model.HwPaidGroupName)
+	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", token.Id).Update("group", "default").Error)
+	windowStart, _ := model.HwReserveWindow(time.Now().UTC())
+	env.insertUsage(model.HwPaidGroupName, user.Id, 5, windowStart)
+	reached := false
+	env.engine = gateEngine(&reached)
+
+	recorder := env.serve(http.MethodPost, "/v1/chat/completions", map[string]string{"Authorization": "Bearer " + token.Key})
+
+	require.Equal(t, http.StatusTooManyRequests, recorder.Code, recorder.Body.String())
+	assert.False(t, reached, "the gate must refuse before the handler runs")
+	assert.Equal(t, "window_limit_reached", hwReserveErrorCode(t, recorder.Body.Bytes()))
+
+	// A bureau account in the same setup is still served: only customers are
+	// limited here.
+	bureauUser, bureauToken := env.customer("default")
+	env.insertUsage("default", bureauUser.Id, 50, windowStart)
+	middleware.HwResetReserveGateCache()
+	reached = false
+	recorder = env.serve(http.MethodPost, "/v1/chat/completions", map[string]string{"Authorization": "Bearer " + bureauToken.Key})
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	assert.True(t, reached)
+}
+
 // TestHwReserveGateIsInstalledOnTheCustomerRoutes proves the gate sits on the
 // relay routes of the real router: with an unknown capacity each of them answers
 // service_busy before channel selection, in its own error shape.

@@ -102,8 +102,8 @@ func HwBureauReserveGate() gin.HandlerFunc {
 // which group its ceiling should follow. The user's own group wins over the
 // token group, so a token in the "auto" group cannot step around the gate.
 func hwReserveCustomerGroup(c *gin.Context) (string, bool) {
-	if userGroup := c.GetString("group"); model.HwIsCustomerGroup(userGroup) {
-		return userGroup, true
+	if accountGroup := hwUserGroup(c); model.HwIsCustomerGroup(accountGroup) {
+		return accountGroup, true
 	}
 	if usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup); model.HwIsCustomerGroup(usingGroup) {
 		return usingGroup, true
