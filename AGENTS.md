@@ -171,6 +171,12 @@ Tasks that touch none of these (for example unrelated frontend work, authenticat
 - **Number formatting and Intl locales (mandatory):** Reuse `@/lib/format` for ordinary number/compact-number display and `@/lib/currency` for monetary values; preserve each formatter's precision and unit semantics. Interface language codes such as `zhCN` / `zhTW` are NOT valid Intl locales. Any interface language passed to `Intl.*`, `toLocaleString` / `toLocaleDateString` / `toLocaleTimeString`, or a locale-aware formatting helper MUST first pass through `toIntlLocale` from `@/i18n/languages`. Do not duplicate language mappings or pass raw language codes through aliases. Follow `web/AGENTS.md` for the lint rule and regression requirements.
 - Follow `web/AGENTS.md` for detailed frontend conventions, including TypeScript, component structure, styling, accessibility, testing, and build checks.
 
+### Agent Runs on the HisarWeb Fork
+
+- A fresh worktree cannot build the root module: `main.go` embeds `web/dist`, which is gitignored. Build, vet, and test per package (for example `go test ./controller/ ./model/`), with `GOCACHE` set explicitly on Windows; do not spend turns on the root build.
+- One agent run handles one finding, or two that share a file: red test, smallest fix, green test, commit. Commit after every green finding, so a turn limit never leaves uncommitted work behind.
+- A change without database behavior (see the list under Database compatibility) needs no three-database matrix and goes to a pull request. A change with database behavior that cannot get the full matrix locally: run SQLite, commit the work on the branch, name the missing engines as the blocker in the handoff, and leave the pull request to the orchestrator. Never drop the work.
+
 ### Project Governance
 
 **Protected project information:** The following project-related information is strictly protected and MUST NOT be modified, deleted, replaced, or removed under any circumstances:
