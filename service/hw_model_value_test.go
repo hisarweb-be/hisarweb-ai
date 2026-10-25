@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/QuantumNous/new-api/model"
 
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -178,6 +180,55 @@ func TestHwDailyPriceListSkipsRetiredModels(t *testing.T) {
 	assert.Empty(t, hwOlderModelsNotCheaper(t, hwSoldModels, prices))
 	for retired := range hwRetiredModels {
 		assert.NotContains(t, prices, retired)
+	}
+}
+
+// TestHwPriceListRequiresEverySoldModel protects the bill against a price list
+// that silently lost one of our model keys: the extraction refuses instead of
+// returning a partial map, so the caller keeps the previous snapshot and the
+// ratios of that model are never left at yesterday's value.
+func TestHwPriceListRequiresEverySoldModel(t *testing.T) {
+	complete := map[string]hwPriceListEntry{}
+	for _, sold := range hwSoldModels {
+		complete[sold.PriceKey] = hwPriceListEntry{
+			InputCostPerToken:  []byte(decimal.New(sold.InputMicroUsd, -6).String()),
+			OutputCostPerToken: []byte(decimal.New(sold.OutputMicroUsd, -6).String()),
+			Mode:               "chat",
+		}
+	}
+	// A tenth of a micro-dollar per million tokens: the reference the list
+	// publishes for the cheapest model, so a real price is never zero.
+	_, err := hwExtractSoldModelPrices(complete)
+	require.NoError(t, err)
+
+	missing := hwSoldModels[0]
+	delete(complete, missing.PriceKey)
+	prices, err := hwExtractSoldModelPrices(complete)
+	require.Error(t, err, "a sold model missing from the list is an error, not a gap")
+	assert.Contains(t, err.Error(), missing.Name)
+	assert.Nil(t, prices, "no partial map may reach the snapshot")
+
+	for _, broken := range []struct {
+		name    string
+		field   string
+		rawText string
+	}{
+		{"zero input", "input", "0"},
+		{"null input", "input", "null"},
+		{"empty input", "input", ""},
+		{"negative input", "input", "-4e-06"},
+		{"zero output", "output", "0"},
+	} {
+		list := maps.Clone(complete)
+		entry := list[hwSoldModels[0].PriceKey]
+		if broken.field == "input" {
+			entry.InputCostPerToken = []byte(broken.rawText)
+		} else {
+			entry.OutputCostPerToken = []byte(broken.rawText)
+		}
+		list[hwSoldModels[0].PriceKey] = entry
+		_, err := hwExtractSoldModelPrices(list)
+		assert.Error(t, err, broken.name)
 	}
 }
 
