@@ -805,6 +805,7 @@ func TestHwProviderCheckoutNeverSendsANonLiraOrderToRevolut(t *testing.T) {
 func TestHwStripeLira500PaidEarnsBonusAndThirtyDays(t *testing.T) {
 	fake := hwStripeTestSetup(t)
 	hwBonusTestEnable(t)
+	require.NoError(t, model.DB.AutoMigrate(&model.HwCreditExtension{}))
 	now := time.Now()
 	buyer := hwOrderTestUser(t, 0)
 	hwOrderTestIdentify(t, buyer.Id, "stripe-500-buyer")
