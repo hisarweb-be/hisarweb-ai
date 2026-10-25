@@ -119,8 +119,17 @@ func HwFreeGroupModelAllowed(group, model string) bool {
 	if name == "" {
 		return false
 	}
-	if strings.Contains(name, "haiku") {
-		return true
+	// The reasoning modifier decorates the same model ("...@high"), so the class
+	// check runs on the base name.
+	name, _, _ = strings.Cut(name, "@")
+	// A name belongs to the class only when it is a Haiku family name followed
+	// by a version number. A model that merely mentions "haiku" somewhere, such
+	// as an alias priced like Sonnet, is not part of the trial class.
+	for _, family := range []string{"claude-haiku", "claude-3-haiku", "claude-3-5-haiku"} {
+		version, matched := strings.CutPrefix(name, family)
+		if matched && len(version) > 1 && version[0] == '-' && version[1] >= '0' && version[1] <= '9' {
+			return true
+		}
 	}
 	for allowed := range strings.SplitSeq(strings.ToLower(os.Getenv(hwFreeModelsEnv)), ",") {
 		if strings.TrimSpace(allowed) == name {
