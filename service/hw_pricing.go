@@ -98,6 +98,13 @@ var hwRetiredModels = map[string]string{
 	"gpt-6-astra": "claude-opus-5-5",
 	"gpt-6.1-sol": "claude-sonnet-5-5",
 	"gpt-6-luna":  "claude-haiku-5-5",
+	// gpt-5.6-luna was never sold under our own name: it left the catalog on
+	// 22 Oct 2026 because we billed it at $1/$6 while the open price list says
+	// $0.20/$1.20. The built-in billing tables still carry that ratio, so the
+	// name is listed here too and the startup step takes it out of the channels
+	// and the stored ratios. Without this row a channel that still lists the
+	// name would bill it five times the official price.
+	"gpt-5.6-luna": "claude-haiku-5-5",
 }
 
 // HwRetiredModelSuccessor returns the model that replaces a retired model name.
