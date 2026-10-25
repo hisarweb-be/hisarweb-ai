@@ -116,7 +116,7 @@ func TestHwUserValidityIgnoresRefundedPackages(t *testing.T) {
 	user := createHwTestUser(t, 0)
 	_, err := GrantCreditPackage(nil, user.Id, 100, HwSourcePurchase, "refunded", now)
 	require.NoError(t, err)
-	_, err = HwRevokeOrderCredit("refunded", now+hwValidityTestDay)
+	_, err = HwRevokeOrderCredit(nil, "refunded", now+hwValidityTestDay)
 	require.NoError(t, err)
 	summary, err := HwUserValidity(user.Id, now+2*hwValidityTestDay)
 	require.NoError(t, err)
