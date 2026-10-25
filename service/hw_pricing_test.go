@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,10 +11,12 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 // hwPricingTestSetup brings the pricing tables and options into the shared test
@@ -60,11 +63,16 @@ func hwSetOption(t *testing.T, key string, value string) {
 }
 
 // hwTestPriceListBody is a miniature of the open price list with the real
-// notation (prices per token in scientific notation).
+// notation (prices per token in scientific notation). It lists every sold model,
+// because the extraction refuses a list that lost one, plus a retired name and a
+// model outside the catalog that must not reach the snapshot.
 const hwTestPriceListBody = `{
+  "claude-opus-5-5": {"input_cost_per_token": 4e-06, "output_cost_per_token": 2e-05, "mode": "chat"},
   "claude-sonnet-5-5": {"input_cost_per_token": 2e-06, "output_cost_per_token": 1e-05, "mode": "chat"},
-  "claude-haiku-4-5": {"input_cost_per_token": 1e-06, "output_cost_per_token": 5e-06, "mode": "chat"},
   "claude-haiku-5-5": {"input_cost_per_token": 1e-07, "output_cost_per_token": 5e-07, "mode": "chat"},
+  "claude-fable-5-1": {"input_cost_per_token": 1e-05, "output_cost_per_token": 5e-05, "mode": "chat"},
+  "gemini-3.8-flash": {"input_cost_per_token": 7.5e-07, "output_cost_per_token": 3.75e-06, "mode": "chat"},
+  "claude-haiku-4-5": {"input_cost_per_token": 1e-06, "output_cost_per_token": 5e-06, "mode": "chat"},
   "some-other-model": {"input_cost_per_token": 3e-06, "output_cost_per_token": 1.5e-05, "mode": "chat"}
 }`
 
@@ -115,7 +123,7 @@ func TestHwPriceSnapshotFetchStoresSourceTimeAndRateDate(t *testing.T) {
 	assert.Equal(t, fetchedAt.Unix(), snapshot.FetchedAt)
 	assert.Equal(t, "2026-10-19", snapshot.FxDate)
 	assert.Equal(t, "49.5523", snapshot.TryPerUsd)
-	assert.Equal(t, 4, snapshot.ListedCount)
+	assert.Equal(t, 7, snapshot.ListedCount)
 	prices, err := snapshot.HwSnapshotModelPrices()
 	require.NoError(t, err)
 	assert.Equal(t, model.HwModelPrice{InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000}, prices["claude-sonnet-5-5"])
@@ -526,4 +534,58 @@ func TestHwCurrenciesDropsTryWithAStaleRate(t *testing.T) {
 	assert.NotContains(t, status.Currencies, "TRY")
 	assert.NotContains(t, status.Rates, "TRY")
 	assert.Empty(t, status.Currencies)
+}
+
+// TestHwApplySnapshotModelRatiosIsAtomic keeps the input ratio and the output
+// ratio of the catalog in step: both are published by one write, so a failing
+// write leaves the old input ratio next to the old output ratio instead of a mix
+// of today's input price and yesterday's output ratio.
+func TestHwApplySnapshotModelRatiosIsAtomic(t *testing.T) {
+	setupHwSeedDefaultsTest(t)
+	require.NoError(t, model.UpdateOption("ModelRatio", `{"claude-opus-5-5":1}`))
+	require.NoError(t, model.UpdateOption("CompletionRatio", `{"claude-opus-5-5":5}`))
+
+	// The snapshot prices Opus at three times the old input price and at another
+	// output ratio, so both ratios change and both writes are needed.
+	snapshot := &model.HwPriceSnapshot{
+		Models: `{"claude-opus-5-5":{"in":12000000,"out":24000000}}`,
+	}
+
+	// A database that refuses the write carrying the new output ratio, after the
+	// new input ratio was already accepted: the cycle must not leave the new
+	// input ratio next to the old output ratio.
+	require.NoError(t, model.DB.Callback().Update().Before("gorm:update").Register("hw_atomic_ratios", func(tx *gorm.DB) {
+		values, ok := tx.Statement.Dest.(map[string]any)
+		if !ok {
+			return
+		}
+		if text, ok := values["value"].(string); ok && strings.Contains(text, `"claude-opus-5-5":2`) {
+			tx.AddError(errors.New("injected ratio write failure"))
+		}
+	}))
+	err := HwApplySnapshotModelRatios(snapshot)
+	require.NoError(t, model.DB.Callback().Update().Remove("hw_atomic_ratios"))
+	require.Error(t, err, "the output ratio write fails")
+
+	inputRatio, ok, _ := ratio_setting.GetModelRatio("claude-opus-5-5")
+	require.True(t, ok)
+	assert.Equal(t, 1.0, inputRatio, "the input ratio stays as it was")
+	assert.Equal(t, 5.0, ratio_setting.GetCompletionRatio("claude-opus-5-5"), "the output ratio stays as it was")
+	assert.JSONEq(t, `{"claude-opus-5-5":1}`, hwStoredRatioOption(t, "ModelRatio"))
+	assert.JSONEq(t, `{"claude-opus-5-5":5}`, hwStoredRatioOption(t, "CompletionRatio"))
+
+	// Without an injected fault both ratios move together.
+	require.NoError(t, HwApplySnapshotModelRatios(snapshot))
+	inputRatio, ok, _ = ratio_setting.GetModelRatio("claude-opus-5-5")
+	require.True(t, ok)
+	assert.Equal(t, 3.0, inputRatio)
+	assert.Equal(t, 2.0, ratio_setting.GetCompletionRatio("claude-opus-5-5"))
+}
+
+// hwStoredRatioOption reads one ratio option back from the options table.
+func hwStoredRatioOption(t *testing.T, key string) string {
+	t.Helper()
+	var stored model.Option
+	require.NoError(t, model.DB.Where("key = ?", key).First(&stored).Error)
+	return stored.Value
 }

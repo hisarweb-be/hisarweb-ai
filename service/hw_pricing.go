@@ -186,15 +186,22 @@ func HwApplySnapshotModelRatios(snapshot *model.HwPriceSnapshot) error {
 			completionChanged = true
 		}
 	}
-	if modelChanged {
-		if err := hwWriteRatioOption("ModelRatio", modelRatios); err != nil {
-			return err
+	if modelChanged || completionChanged {
+		// Both ratio maps go out in one transaction: a failed write then leaves
+		// the old input ratio next to the old output ratio instead of billing a
+		// mix of today's input price and yesterday's output ratio.
+		updates := make(map[string]string, 2)
+		for key, values := range map[string]map[string]float64{
+			"ModelRatio":      modelRatios,
+			"CompletionRatio": completionRatios,
+		} {
+			encoded, err := common.Marshal(values)
+			if err != nil {
+				return err
+			}
+			updates[key] = string(encoded)
 		}
-	}
-	if completionChanged {
-		if err := hwWriteRatioOption("CompletionRatio", completionRatios); err != nil {
-			return err
-		}
+		return model.UpdateModelPricingOptions(updates)
 	}
 	return nil
 }
@@ -278,14 +285,16 @@ func hwMicroUsdPerMillion(raw []byte) (int64, error) {
 }
 
 // hwExtractSoldModelPrices picks our catalog models out of the parsed price
-// list. A model missing from the list is simply absent from the result; the
-// comparator then reports no price data for it instead of inventing one.
+// list. Every sold model must be there with a positive price; a missing key or
+// a zero price is an error, so a renamed or temporarily broken entry keeps the
+// previous snapshot and its ratios instead of leaving one model billed at
+// yesterday's ratio while the page shows today's price.
 func hwExtractSoldModelPrices(list map[string]hwPriceListEntry) (map[string]model.HwModelPrice, error) {
 	prices := make(map[string]model.HwModelPrice, len(hwSoldModels))
 	for _, sold := range hwSoldModels {
 		entry, ok := list[sold.PriceKey]
 		if !ok {
-			continue
+			return nil, fmt.Errorf("model %s is missing from the price list", sold.Name)
 		}
 		inMicro, err := hwMicroUsdPerMillion(entry.InputCostPerToken)
 		if err != nil {
@@ -294,6 +303,9 @@ func hwExtractSoldModelPrices(list map[string]hwPriceListEntry) (map[string]mode
 		outMicro, err := hwMicroUsdPerMillion(entry.OutputCostPerToken)
 		if err != nil {
 			return nil, fmt.Errorf("model %s: output price: %w", sold.Name, err)
+		}
+		if inMicro <= 0 || outMicro <= 0 {
+			return nil, fmt.Errorf("model %s: price must be positive (input %d, output %d micro-USD per million tokens)", sold.Name, inMicro, outMicro)
 		}
 		prices[sold.Name] = model.HwModelPrice{InputMicroUsd: inMicro, OutputMicroUsd: outMicro}
 	}

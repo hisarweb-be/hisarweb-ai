@@ -99,6 +99,12 @@ func HwSeedDefaultOptions() error {
 			errs = append(errs, stepErr)
 		}
 	}
+	// hwSeedRetiredModels takes names out of the channels and the abilities, so
+	// the channel cache must be rebuilt before any request is routed: a cache
+	// warmed before this seed keeps sending a retired model to a channel that no
+	// longer offers it and no longer has a ratio. The rebuild is unconditional
+	// because it is idempotent and also publishes whatever the other steps wrote.
+	model.InitChannelCache()
 	return errors.Join(errs...)
 }
 

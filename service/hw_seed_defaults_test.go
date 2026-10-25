@@ -368,6 +368,43 @@ func TestHwSeedRetiredModels(t *testing.T) {
 	}
 }
 
+// TestHwSeedRetiredModelsRefreshesTheChannelCache protects a running database
+// against the window between the seed and the next cache rebuild: the channel
+// cache that was built before the seed (startup builds it after the seed, but a
+// rolling node, a test or a future caller may not) must not route a request for
+// a retired name to a channel that no longer offers it.
+func TestHwSeedRetiredModelsRefreshesTheChannelCache(t *testing.T) {
+	setupHwSeedDefaultsTest(t)
+	originalMemoryCache := common.MemoryCacheEnabled
+	common.MemoryCacheEnabled = true
+	t.Cleanup(func() {
+		common.MemoryCacheEnabled = originalMemoryCache
+		model.InitChannelCache()
+	})
+
+	channel := model.Channel{
+		Name: "mixed", Key: "k1", Status: common.ChannelStatusEnabled, Group: model.HwPaidGroupName,
+		Models: "claude-sonnet-5,claude-sonnet-5-5",
+	}
+	require.NoError(t, channel.Insert())
+	// The cache is built while the retired name still exists, exactly like a
+	// process whose cache was warmed before the seed ran.
+	model.InitChannelCache()
+	found, err := model.GetRandomSatisfiedChannel(model.HwPaidGroupName, "claude-sonnet-5", 0, nil)
+	require.NoError(t, err)
+	require.NotNil(t, found, "the retired name is routable before the seed")
+
+	require.NoError(t, HwSeedDefaultOptions())
+
+	found, err = model.GetRandomSatisfiedChannel(model.HwPaidGroupName, "claude-sonnet-5", 0, nil)
+	require.NoError(t, err)
+	assert.Nil(t, found, "a retired model finds no channel after the seed")
+	found, err = model.GetRandomSatisfiedChannel(model.HwPaidGroupName, "claude-sonnet-5-5", 0, nil)
+	require.NoError(t, err)
+	require.NotNil(t, found, "the sold successor stays routable")
+	assert.Equal(t, channel.Id, found.Id)
+}
+
 // TestHwSyncDisplayCurrencyRate protects the TL display against a stale rate:
 // the first successful price fetch fills in the rate.
 func TestHwSyncDisplayCurrencyRate(t *testing.T) {
