@@ -191,66 +191,103 @@ func hwUserIDsOnSharedDevice(bulkUsers int) ([]int, error) {
 		Pluck("hash", &hashes).Error; err != nil {
 		return nil, err
 	}
-	var userIDs []int
+	if len(hashes) == 0 {
+		return nil, nil
+	}
+	// The accounts of every shared token come back in one query: fetching them
+	// per token costs one round trip per copied token, and a signup wave is
+	// exactly the case in which many tokens exist at once.
+	var deviceSignals []HwUserSignal
+	if err := DB.Where("kind = ? AND hash IN ?", HwSignalKindDevice, hashes).
+		Find(&deviceSignals).Error; err != nil {
+		return nil, err
+	}
+	groups := make(map[string][]int, len(hashes))
+	for _, signal := range deviceSignals {
+		groups[signal.Hash] = append(groups[signal.Hash], signal.UserId)
+	}
+	marked := make(map[int]struct{}, len(deviceSignals))
+	var smallGroups [][]int
+	var smallMembers []int
 	for _, hash := range hashes {
-		var group []int
-		if err := DB.Model(&HwUserSignal{}).
-			Where("kind = ? AND hash = ?", HwSignalKindDevice, hash).
-			Distinct().
-			Pluck("user_id", &group).Error; err != nil {
-			return nil, err
-		}
+		group := groups[hash]
 		if len(group) < 2 {
 			continue
 		}
 		if len(group) >= bulkUsers {
-			userIDs = append(userIDs, group...)
+			for _, userID := range group {
+				marked[userID] = struct{}{}
+			}
 			continue
 		}
-		second, err := hwUsersSharingSecondSignal(group)
-		if err != nil {
+		smallGroups = append(smallGroups, group)
+		smallMembers = append(smallMembers, group...)
+	}
+	if len(smallGroups) > 0 {
+		// The second signals of all small groups in one query as well.
+		var signals []HwUserSignal
+		if err := DB.Where("user_id IN ? AND kind IN ? AND hash <> ?", smallMembers,
+			[]string{HwSignalKindPhone, HwSignalKindIp, HwSignalKindCard}, "").
+			Find(&signals).Error; err != nil {
 			return nil, err
 		}
-		userIDs = append(userIDs, second...)
+		usersBySignal := make(map[string]map[int]struct{}, len(signals))
+		for _, signal := range signals {
+			key := signal.Kind + "\x00" + signal.Hash
+			if usersBySignal[key] == nil {
+				usersBySignal[key] = make(map[int]struct{}, 2)
+			}
+			usersBySignal[key][signal.UserId] = struct{}{}
+		}
+		for _, group := range smallGroups {
+			for _, userID := range hwUsersSharingSecondSignal(group, usersBySignal) {
+				marked[userID] = struct{}{}
+			}
+		}
+	}
+	userIDs := make([]int, 0, len(marked))
+	for _, signal := range deviceSignals {
+		if _, ok := marked[signal.UserId]; ok {
+			userIDs = append(userIDs, signal.UserId)
+			delete(marked, signal.UserId)
+		}
 	}
 	return userIDs, nil
 }
 
 // hwUsersSharingSecondSignal returns the users of one device group that also
 // share a phone number, address hash or card fingerprint with another user of
-// that same group. A second signal held by only one account of the group proves
-// nothing about the group.
-func hwUsersSharingSecondSignal(group []int) ([]int, error) {
-	var signals []HwUserSignal
-	if err := DB.Where("user_id IN ? AND kind IN ? AND hash <> ?", group,
-		[]string{HwSignalKindPhone, HwSignalKindIp, HwSignalKindCard}, "").
-		Find(&signals).Error; err != nil {
-		return nil, err
-	}
-	usersBySignal := make(map[string]map[int]struct{}, len(signals))
-	for _, signal := range signals {
-		key := signal.Kind + "\x00" + signal.Hash
-		if usersBySignal[key] == nil {
-			usersBySignal[key] = make(map[int]struct{}, 2)
-		}
-		usersBySignal[key][signal.UserId] = struct{}{}
+// that same group. usersBySignal holds the second signals of every small group
+// of one pass, keyed by kind and hash, so the caller needs one query for all of
+// them. A second signal held by only one account of the group proves nothing
+// about the group.
+func hwUsersSharingSecondSignal(group []int, usersBySignal map[string]map[int]struct{}) []int {
+	inGroup := make(map[int]struct{}, len(group))
+	for _, userID := range group {
+		inGroup[userID] = struct{}{}
 	}
 	qualifying := make(map[int]struct{}, len(group))
 	for _, users := range usersBySignal {
-		if len(users) < 2 {
+		inGroupUsers := make(map[int]struct{}, 2)
+		for userID := range users {
+			if _, ok := inGroup[userID]; ok {
+				inGroupUsers[userID] = struct{}{}
+			}
+		}
+		if len(inGroupUsers) < 2 {
 			continue
 		}
-		for userID := range users {
+		for userID := range inGroupUsers {
 			qualifying[userID] = struct{}{}
 		}
 	}
-	shared := make([]int, 0, len(qualifying))
+	shared := make([]int, 0, len(group))
 	for _, userID := range group {
 		if _, ok := qualifying[userID]; ok {
 			shared = append(shared, userID)
 		}
 	}
-	return shared, nil
+	return shared
 }
 
 // hwSignupWaveUserIDs finds the users created in a registration hour that

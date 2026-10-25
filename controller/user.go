@@ -292,8 +292,11 @@ func Register(c *gin.Context) {
 	// exposing this endpoint publicly.
 	if allowed, err := model.HwReserveSignupSlot(c.ClientIP(), common.GetTimestamp(), model.HwSignupIpDailyLimit); err != nil {
 		// Without a signal salt the counter cannot be written: keep the endpoint
-		// available and log the outage (amounts and errors only, never the IP).
-		common.SysError(common.LogText("hw: per-IP signup limit unavailable, registration continues: %v", err))
+		// available. The missing key is reported once per process by the model, an
+		// unexpected failure here is reported every time (never the IP).
+		if !errors.Is(err, model.ErrHwSignalSaltMissing) && !errors.Is(err, model.ErrHwSignalSaltTooShort) {
+			common.SysError(common.LogText("hw: per-IP signup limit unavailable, registration continues: %v", err))
+		}
 	} else if !allowed {
 		common.ApiErrorT(c, "Too many accounts registered from this network today, please try again tomorrow")
 		return

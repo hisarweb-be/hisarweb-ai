@@ -118,6 +118,30 @@ func TestHwReserveSignupSlot(t *testing.T) {
 	})
 }
 
+// A missing salt turns the per-IP signup limit off, and that gap must be visible
+// without flooding the log: one line for the whole process, however many
+// registrations follow.
+func TestHwReserveSignupSlotReportsAMissingSaltOnce(t *testing.T) {
+	hwSignupIpTestSetup(t)
+	capture := hwCaptureServerLog(t)
+	hwSignupLimitWarned.Store(false)
+	t.Cleanup(func() { hwSignupLimitWarned.Store(false) })
+	t.Setenv(hwSignalSaltEnv, "")
+	now := int64(1_700_000_000)
+
+	for range 3 {
+		allowed, err := HwReserveSignupSlot("203.0.113.9", now, HwSignupIpDailyLimit)
+		require.ErrorIs(t, err, ErrHwSignalSaltMissing)
+		assert.False(t, allowed, "the caller continues without the counter")
+	}
+
+	logged := capture.Out.String() + capture.Err.String()
+	assert.Equal(t, 1, strings.Count(logged, "per-IP signup limit disabled for this process"),
+		"one outage line per process, not one per registration")
+	assert.Contains(t, logged, "HW_SIGNAL_SALT is missing", "the line names the variable, never a value")
+	assert.NotContains(t, logged, "203.0.113.9", "no address in the log")
+}
+
 func TestHwDeleteOldSignupIpRows(t *testing.T) {
 	hwSignupIpTestSetup(t)
 	now := int64(1_700_000_000)
