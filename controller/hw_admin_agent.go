@@ -15,16 +15,12 @@ import (
 	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // Replaceable in tests; production calls the gateway and the bureau board.
 var (
 	hwAdminAgentAsk        = service.HwAdminAgentAsk
 	hwAdminAgentCreateCard = service.HwBureauCreateCard
-	// hwAdminAgentCardUpdate is the database handle that writes a created card
-	// back to its escalation row.
-	hwAdminAgentCardUpdate = func() *gorm.DB { return model.DB }
 )
 
 func hwRequireAdmin(c *gin.Context) bool {
@@ -146,7 +142,7 @@ func HwAdminAgentEscalate(c *gin.Context) {
 		common.ApiSuccess(c, gin.H{"queued": true, "id": row.ID})
 		return
 	}
-	if err := model.HwSetAdminEscalationCard(hwAdminAgentCardUpdate(), row.ID, card); err != nil {
+	if err := model.HwSetAdminEscalationCard(model.DB, row.ID, card); err != nil {
 		// The card exists on the board and cannot be removed; answering with a
 		// failure would make the operator create a second card for the same
 		// problem, so the caller gets the card it already has.

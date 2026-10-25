@@ -99,10 +99,8 @@ func TestHwAdminUnfreeze(t *testing.T) {
 func TestHwAdminAgentEscalate(t *testing.T) {
 	_, admin := hwAdminTestSetup(t)
 	previousCreateCard := hwAdminAgentCreateCard
-	previousResolver := hwAdminAgentCardUpdate
 	t.Cleanup(func() {
 		hwAdminAgentCreateCard = previousCreateCard
-		hwAdminAgentCardUpdate = previousResolver
 	})
 
 	boardFail, dropRow, cards := false, false, 0
@@ -118,9 +116,6 @@ func TestHwAdminAgentEscalate(t *testing.T) {
 		}
 		return "CARD-" + strconv.Itoa(cards), nil
 	}
-	// Each escalation writes through the database handle live at request time,
-	// as production writes through the one model.DB the process started with.
-	hwAdminAgentCardUpdate = func() *gorm.DB { return model.DB }
 	escalate := func(body string) *httptest.ResponseRecorder {
 		recorder := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(recorder)
