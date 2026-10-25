@@ -30,7 +30,7 @@ import { pickHwLanguage, useHwCurrencyText, type HwTextVars } from './texts'
 const tr = {
   whatTitle: 'HisarWeb AI nedir?',
   whatBody:
-    'HisarWeb AI, Claude ve GPT gibi yapay zekâ modellerini tek bir yerden, {currencyName} ile ve kredi kartı olmadan kullanmanızı sağlar. Bir hesap açarsınız, bir anahtar oluşturursunuz ve modeli kendi araçlarınızda, örneğin Claude Code’da, kullanırsınız. Kod bilmeniz gerekmez.',
+    'HisarWeb AI, Claude ve Gemini gibi yapay zekâ modellerini tek bir yerden, {currencyName} ile ve kredi kartı olmadan kullanmanızı sağlar. Bir hesap açarsınız, bir anahtar oluşturursunuz ve modeli kendi araçlarınızda, örneğin Claude Code’da, kullanırsınız. Kod bilmeniz gerekmez.',
   whatFree:
     'Yeni hesaplar {bonus} başlangıç bonusu alır; bonus 14 gün geçerlidir. Aşağıdaki adımlarla ilk yanıtınızı birkaç dakikada görürsünüz.',
 
@@ -81,7 +81,7 @@ const tr = {
 const en: typeof tr = {
   whatTitle: 'What is HisarWeb AI?',
   whatBody:
-    'HisarWeb AI lets you use AI models such as Claude and GPT from one place, paying in {currencyLong} and without a credit card. You open an account, create a key and use the model in your own tools, for example Claude Code. You do not need to know how to code.',
+    'HisarWeb AI lets you use AI models such as Claude and Gemini from one place, paying in {currencyLong} and without a credit card. You open an account, create a key and use the model in your own tools, for example Claude Code. You do not need to know how to code.',
   whatFree:
     'New accounts receive a {bonus} start bonus, valid for 14 days. The steps below take you to your first answer in a few minutes.',
 

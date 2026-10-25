@@ -25,7 +25,6 @@ import {
   LISTED_MODELS,
   MODEL_CODEX,
   MODEL_DEFAULT,
-  MODEL_GPT_SMALL,
   MODEL_GEMINI,
   MODEL_HAIKU,
   MODEL_OPUS,
@@ -739,8 +738,8 @@ const codex: ToolGuide = {
   ],
   works: [
     {
-      tr: 'codex --version bir sürüm numarası yazar ve /status ekranı modelin gpt-6.1-sol olduğunu gösterir.',
-      en: 'codex --version prints a version number and the /status screen shows the model gpt-6.1-sol.',
+      tr: 'codex --version bir sürüm numarası yazar ve /status ekranı yapılandırdığınız modeli gösterir.',
+      en: 'codex --version prints a version number and the /status screen shows the model you configured.',
     },
     {
       tr: 'Bir soru yazdığınızda yanıt gelir ve kullanım HisarWeb AI bakiyenizden düşer.',
@@ -821,10 +820,7 @@ const codex: ToolGuide = {
 const OPENCODE_V1_MODELS = LISTED_MODELS.map(
   (model) => `        "${model.id}": { "name": "${model.name}" }`
 )
-OPENCODE_V1_MODELS.push(
-  `        "${MODEL_GPT_SMALL}": { "name": "GPT 6 Luna" }`,
-  `        "${MODEL_GEMINI}": { "name": "Gemini 3.8 Flash" }`
-)
+OPENCODE_V1_MODELS.push(`        "${MODEL_GEMINI}": { "name": "Gemini 3.8 Flash" }`)
 
 const OPENCODE_V1_CONFIG = `{
   "provider": {

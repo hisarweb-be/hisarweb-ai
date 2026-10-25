@@ -122,11 +122,17 @@ func TestHwSoldModelsOnlyKeepOlderModelsThatAreCheaper(t *testing.T) {
 
 // TestHwRetiredModelsAreNotSoldAndPointAtASoldModel keeps the retirement list
 // consistent with the catalog: a retired name is never sold, its successor is,
-// and both belong to the same family.
+// and both belong to the same family. A family that is no longer sold at all
+// (the gpt family left the catalog on 24 Oct 2026) has no newer namesake, so
+// its successor only has to be a sold model of the same price tier.
 func TestHwRetiredModelsAreNotSoldAndPointAtASoldModel(t *testing.T) {
 	sold := map[string]bool{}
+	soldFamily := map[string]bool{}
 	for _, entry := range hwSoldModels {
 		sold[entry.Name] = true
+		family, _, err := hwValueFamily(entry.Name)
+		require.NoError(t, err)
+		soldFamily[family] = true
 	}
 	for retired, successor := range hwRetiredModels {
 		assert.False(t, sold[retired], "%s is retired but still sold", retired)
@@ -135,8 +141,16 @@ func TestHwRetiredModelsAreNotSoldAndPointAtASoldModel(t *testing.T) {
 		require.NoError(t, err)
 		successorFamily, _, err := hwValueFamily(successor)
 		require.NoError(t, err)
+		if !soldFamily[retiredFamily] {
+			assert.NotEqual(t, retiredFamily, successorFamily, retired)
+			continue
+		}
 		assert.Equal(t, retiredFamily, successorFamily, retired)
 	}
+	// The three gpt names are the case this exception exists for.
+	assert.False(t, soldFamily["gpt-astra"])
+	assert.False(t, soldFamily["gpt-sol"])
+	assert.False(t, soldFamily["gpt-luna"])
 }
 
 // TestHwDailyPriceListSkipsRetiredModels checks the daily refresh path: the open

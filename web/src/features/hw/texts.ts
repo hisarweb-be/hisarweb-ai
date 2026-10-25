@@ -48,18 +48,18 @@ const tr = {
   landingBadgeForeign: 'Fiyatlar {currencyName} cinsinden',
   landingBadge: 'Türkiye için: TL fiyatlar, KDV dahil',
   landingTitle:
-    'Claude, GPT ve Gemini API’si resmî fiyatın yarısına, {currencyName} ile ödeyin',
+    'Claude ve Gemini API’si resmî fiyatın yarısına, {currencyName} ile ödeyin',
   landingLead:
     'HisarWeb AI, yapay zekâ uygulamanız için tek bir API anahtarı sunar. Her model resmî liste fiyatının %50 altında ve diğer API aracılarından ucuz. Aylık abonelik yok; yalnızca kullandığınız kadar ödersiniz.',
   landingCtaPrimary: 'Ücretsiz hesap aç',
   landingCtaSecondary: 'Fiyatları karşılaştır',
   landingTitleAccent: 'resmî fiyatın yarısına',
   landingCatalogNote:
-    'Claude, GPT ve Gemini ailelerinden seçilmiş modeller tek katalogda; her modelin güncel fiyatı karşılaştırma sayfasında yazar.',
+    'Claude ve Gemini ailelerinden seçilmiş modeller tek katalogda; her modelin güncel fiyatı karşılaştırma sayfasında yazar.',
 
   filmTitle: 'HisarWeb AI’yı 54 saniyede izleyin',
   filmBody:
-    'Claude, GPT ve Gemini resmî API liste fiyatının yarısına, Türk lirasıyla ve KDV dahil: beş saatlik veya haftalık limit yok, yalnızca kullandığınız kadar ödersiniz. Film Türkçe seslendirmeli ve Türkçe altyazılıdır; görseller yapay zekâ ile üretilmiştir.',
+    'Claude ve Gemini resmî API liste fiyatının yarısına, Türk lirasıyla ve KDV dahil: beş saatlik veya haftalık limit yok, yalnızca kullandığınız kadar ödersiniz. Film Türkçe seslendirmeli ve Türkçe altyazılıdır; görseller yapay zekâ ile üretilmiştir.',
   filmLabel: 'HisarWeb AI tanıtım filmi',
 
   benefitTitle: 'Neden HisarWeb AI?',
@@ -444,18 +444,18 @@ const en: Record<HwTextKey, string> = {
   landingBadgeForeign: 'Prices in {currencyName}',
   landingBadge: 'For Turkey: prices in TRY, VAT included',
   landingTitle:
-    'Claude, GPT and Gemini APIs at half the official price, paid in {currencyName}',
+    'Claude and Gemini APIs at half the official price, paid in {currencyName}',
   landingLead:
     'HisarWeb AI gives your application one API key. Every model is 50% below the official list price and cheaper than other API routers. No monthly subscription; you only pay for what you use.',
   landingCtaPrimary: 'Create a free account',
   landingCtaSecondary: 'Compare prices',
   landingTitleAccent: 'half the official price',
   landingCatalogNote:
-    'Selected models from the Claude, GPT and Gemini families in one catalog; every current price is on the comparison page.',
+    'Selected models from the Claude and Gemini families in one catalog; every current price is on the comparison page.',
 
   filmTitle: 'Watch HisarWeb AI in 54 seconds',
   filmBody:
-    'Claude, GPT and Gemini at half the official API list price, in Turkish lira and VAT (KDV) included: no five-hour or weekly limits, you pay only for what you use. The film has a Turkish voice-over with Turkish subtitles; the images are AI-generated.',
+    'Claude and Gemini at half the official API list price, in Turkish lira and VAT (KDV) included: no five-hour or weekly limits, you pay only for what you use. The film has a Turkish voice-over with Turkish subtitles; the images are AI-generated.',
   filmLabel: 'HisarWeb AI launch film',
 
   benefitTitle: 'Why HisarWeb AI?',
