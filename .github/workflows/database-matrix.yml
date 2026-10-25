@@ -2,8 +2,8 @@ name: Database matrix
 
 # AGENTS.md requires SQLite, MySQL, and PostgreSQL. The main CI runs SQLite
 # only, so the tests that read TEST_MYSQL_DSN or TEST_POSTGRES_DSN skip there.
-# This job runs exactly those tests against real MySQL 5.7 and PostgreSQL 16,
-# and only when database code can have changed.
+# This job runs the model and controller packages with real MySQL 5.7 and
+# PostgreSQL 16 configured, and only when database code can have changed.
 on:
   pull_request:
     types: [opened, synchronize]
@@ -68,21 +68,14 @@ jobs:
           mkdir -p web/dist
           touch web/dist/index.html
 
-      # The test list is read from the files that use the DSNs, so a new
-      # database test joins without editing this workflow. -p 1 keeps the
-      # packages from sharing a database at the same time. A skip for a missing
-      # DSN fails the job: it would mean the engines were never reached.
-      - name: Run the database tests on MySQL and PostgreSQL
+      # The whole packages run, as in the main CI: some tests rely on state that
+      # other tests of the package set up and fail when run alone. -p 1 keeps
+      # the packages from sharing a database at the same time. A skip for a
+      # missing DSN fails the job: it would mean the engines were never reached.
+      - name: Run the model and controller tests on MySQL and PostgreSQL
         run: |
           set -o pipefail
-          for pkg in model controller; do
-            files=$(grep -l 'TEST_MYSQL_DSN\|TEST_POSTGRES_DSN' "$pkg"/*_test.go || true)
-            [ -n "$files" ] || continue
-            names=$(grep -h -o '^func Test[A-Za-z0-9_]*' $files | sed 's/^func //' | paste -sd'|')
-            echo "::group::$pkg: $names"
-            go test -p 1 -count=1 -v "./$pkg/" -run "^($names)\$" | tee "/tmp/$pkg.log"
-            echo "::endgroup::"
-            if grep -E 'DSN (is )?not configured|: set TEST_(MYSQL|POSTGRES)_DSN' "/tmp/$pkg.log"; then
-              echo "::error::$pkg database tests skipped for a missing DSN"; exit 1
-            fi
-          done
+          go test -p 1 -count=1 -v ./model/ ./controller/ | tee /tmp/matrix.log
+          if grep -E 'DSN (is )?not configured|: set TEST_(MYSQL|POSTGRES)_DSN' /tmp/matrix.log; then
+            echo "::error::database tests skipped for a missing DSN"; exit 1
+          fi
