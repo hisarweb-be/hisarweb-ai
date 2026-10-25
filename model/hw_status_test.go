@@ -7,11 +7,13 @@
 package model
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 // hwStatusTestSetup starts from an empty meter: samples, incidents and
@@ -176,6 +178,60 @@ func TestHwStatusIncidentOverThresholdExtendsPaidOnlyOnce(t *testing.T) {
 	assert.Equal(t, free.ExpiresAt, freeView.ExpiresAt)
 }
 
+// The extension of an outage over many packages must not hold the incident row
+// lock for one statement per package: the rows are written in bounded batches,
+// every package is extended exactly once, and a repeated run adds nothing.
+func TestHwStatusExtensionOfManyPackagesWritesInBatches(t *testing.T) {
+	hwStatusTestSetup(t)
+	hwCreditTestSetup(t)
+	now := int64(1_800_000_000)
+	user := createHwTestUser(t, 0)
+
+	const packageCount = 1500
+	packages := make([]HwCreditPackage, 0, packageCount)
+	for i := range packageCount {
+		packages = append(packages, HwCreditPackage{
+			UserId:       user.Id,
+			Source:       HwSourcePurchase,
+			GrantedQuota: 100,
+			CreatedAt:    now - 3600,
+			ExpiresAt:    now + 24*3600,
+			OrderRef:     fmt.Sprintf("status-bulk-%04d", i),
+		})
+	}
+	require.NoError(t, DB.CreateInBatches(packages, 500).Error)
+
+	inserts := 0
+	callbackName := "test:hw_status_extension_inserts"
+	require.NoError(t, DB.Callback().Create().Before("gorm:create").Register(callbackName, func(tx *gorm.DB) {
+		if tx.Statement != nil && tx.Statement.Table == (HwCreditExtension{}).TableName() {
+			inserts++
+		}
+	}))
+	t.Cleanup(func() { _ = DB.Callback().Create().Remove(callbackName) })
+
+	incident := hwStatusTestIncident(t, now, 16*60)
+	extended, err := HwExtendCreditPackagesAfterIncident(incident.Id, now+16*60)
+	require.NoError(t, err)
+	assert.Equal(t, packageCount, extended, "every running package is extended")
+	assert.LessOrEqual(t, inserts, 10, "the extensions are written in bounded batches, not one statement per package")
+
+	var rows int64
+	require.NoError(t, DB.Model(&HwCreditExtension{}).Where("incident_id = ?", incident.Id).Count(&rows).Error)
+	assert.EqualValues(t, packageCount, rows)
+	var minutes []int64
+	require.NoError(t, DB.Model(&HwCreditExtension{}).Where("incident_id = ?", incident.Id).Distinct().Pluck("minutes", &minutes).Error)
+	assert.Equal(t, []int64{16}, minutes, "sixteen minutes of outage extend every package by sixteen")
+
+	// A second run adds nothing: the incident is handled and the unique index
+	// refuses a duplicate row.
+	extended, err = HwExtendCreditPackagesAfterIncident(incident.Id, now+3600)
+	require.NoError(t, err)
+	assert.Zero(t, extended)
+	require.NoError(t, DB.Model(&HwCreditExtension{}).Where("incident_id = ?", incident.Id).Count(&rows).Error)
+	assert.EqualValues(t, packageCount, rows)
+}
+
 func TestHwStatusExtensionKeepsExtendedPackageFromRetirement(t *testing.T) {
 	hwStatusTestSetup(t)
 	hwCreditTestSetup(t)
@@ -301,12 +357,14 @@ func TestHwStatusOneBrokenModelStaysAlone(t *testing.T) {
 
 	base := int64(1_800_000_000)
 	at := base + 60
-	for i := 0; i < 3; i++ {
-		require.NoError(t, LOG_DB.Create(&Log{Type: LogTypeError, CreatedAt: base + 5, Group: HwPaidGroupName, ModelName: "claude-broken"}).Error)
+	for i := range 3 {
+		// Three failed attempts of three different customer requests, as the relay
+		// writes them: each attempt carries its own request id.
+		require.NoError(t, LOG_DB.Create(&Log{Type: LogTypeError, CreatedAt: base + 5, Group: HwPaidGroupName, ModelName: "claude-broken", RequestId: fmt.Sprintf("broken-%d", i)}).Error)
 	}
-	require.NoError(t, LOG_DB.Create(&Log{Type: LogTypeConsume, CreatedAt: base + 5, Group: HwPaidGroupName, ModelName: "claude-busy"}).Error)
+	require.NoError(t, LOG_DB.Create(&Log{Type: LogTypeConsume, CreatedAt: base + 5, Group: HwPaidGroupName, ModelName: "claude-busy", RequestId: "busy-served"}).Error)
 	// Another group's failure does not count for the paid status.
-	require.NoError(t, LOG_DB.Create(&Log{Type: LogTypeError, CreatedAt: base + 5, Group: "free", ModelName: "claude-busy"}).Error)
+	require.NoError(t, LOG_DB.Create(&Log{Type: LogTypeError, CreatedAt: base + 5, Group: "free", ModelName: "claude-busy", RequestId: "busy-free"}).Error)
 
 	require.NoError(t, HwMeasureStatusOnce(time.Unix(at, 0), []string{"claude-broken", "claude-busy", "claude-quiet"}))
 	var samples []HwStatusSample
@@ -316,4 +374,37 @@ func TestHwStatusOneBrokenModelStaysAlone(t *testing.T) {
 	assert.Equal(t, HwStatusReasonRelayFailures, samples[0].Reason)
 	assert.True(t, samples[1].Ok, "a served model stays good")
 	assert.True(t, samples[2].Ok, "a quiet routed model stays good")
+}
+
+// The relay writes one error row per failed attempt under the request id of the
+// inbound request, so retries of one broken request must count as one failure:
+// five customers whose request was retried three times are five failures, not
+// fifteen (the quality meter already counts distinct request ids).
+func TestHwStatusFailedAttemptsOfOneRequestCountOnce(t *testing.T) {
+	hwStatusTestSetup(t)
+	require.NoError(t, LOG_DB.Exec("DELETE FROM logs").Error)
+	t.Cleanup(func() { LOG_DB.Exec("DELETE FROM logs") })
+
+	base := int64(1_800_000_000)
+	for customer := range 5 {
+		for range 3 {
+			require.NoError(t, LOG_DB.Create(&Log{
+				Type: LogTypeError, CreatedAt: base + 5, Group: HwPaidGroupName,
+				ModelName: "claude-broken", RequestId: fmt.Sprintf("customer-%d", customer),
+			}).Error)
+		}
+		// One served request of the same model, so the minute is not all failed.
+		require.NoError(t, LOG_DB.Create(&Log{
+			Type: LogTypeConsume, CreatedAt: base + 5, Group: HwPaidGroupName,
+			ModelName: "claude-broken", RequestId: fmt.Sprintf("served-%d", customer),
+		}).Error)
+	}
+	// An error row without a request id cannot be attributed to a request; the
+	// relay always writes one, so it is left out like the quality meter does.
+	require.NoError(t, LOG_DB.Create(&Log{Type: LogTypeError, CreatedAt: base + 5, Group: HwPaidGroupName, ModelName: "claude-broken"}).Error)
+
+	counts, err := HwCountPaidRequests(base, base+60)
+	require.NoError(t, err)
+	assert.Equal(t, int64(5), counts["claude-broken"].Failed, "retries of one request are one failure")
+	assert.Equal(t, int64(5), counts["claude-broken"].Measured)
 }
