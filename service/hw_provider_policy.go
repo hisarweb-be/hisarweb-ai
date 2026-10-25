@@ -278,10 +278,19 @@ func (s *HwRouteState) hasNext() bool {
 	if next := s.peekLumia(); next != nil {
 		return true
 	}
-	if s.outage && !s.lumiaRetried && s.lastChannel != nil {
+	if s.outageRetryPending() {
 		return true
 	}
 	return s.peekOpenRouter() != nil
+}
+
+// outageRetryPending reports whether the single extra Lumia attempt after an
+// outage still remains. next is the only consumer that can deliver it, so
+// hasNext asks the same question: a route whose last attempt failed on another
+// supplier has no retry left and must end with that attempt's own error.
+func (s *HwRouteState) outageRetryPending() bool {
+	return s.outage && !s.lumiaRetried && s.lastChannel != nil &&
+		HwChannelProvider(s.lastChannel) == HwProviderLumia
 }
 
 func (s *HwRouteState) peekLumia() *model.Channel {
@@ -317,7 +326,7 @@ func (s *HwRouteState) next() *model.Channel {
 		s.recordAttempt(channel, HwProviderLumia)
 		return channel
 	}
-	if s.outage && !s.lumiaRetried && s.lastChannel != nil && HwChannelProvider(s.lastChannel) == HwProviderLumia {
+	if s.outageRetryPending() {
 		s.lumiaRetried = true
 		hwPauseBeforeLumiaRetry()
 		s.recordAttempt(s.lastChannel, HwProviderLumia)

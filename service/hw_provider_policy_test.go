@@ -3,6 +3,7 @@ package service
 import (
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 
@@ -65,6 +66,79 @@ func TestHwEmergencyChannelBlockedForFreeGroup(t *testing.T) {
 		assert.False(t, HwChannelAllowedForGroup(channel, "paid", "free"))
 		assert.True(t, HwChannelAllowedForGroup(channel, "paid", "paid"))
 	}
+}
+
+// TestHwRouteHasNextAgreesWithNext proves that an exhausted route never
+// promises a retry it cannot deliver. hasNext only promises the extra outage
+// attempt on a Lumia channel, which is the single condition next accepts, so a
+// failed emergency attempt ends the loop with its own upstream error instead of
+// being replaced by a service-busy error from a next() that returned nil.
+func TestHwRouteHasNextAgreesWithNext(t *testing.T) {
+	lumia := &model.Channel{Id: 11, Type: constant.ChannelTypeOpenAI}
+	lumia.SetTag(HwProviderLumia)
+	openRouter := &model.Channel{Id: 12, Type: constant.ChannelTypeOpenAI}
+	openRouter.SetTag(HwProviderOpenRouter)
+
+	testCases := []struct {
+		name        string
+		lastChannel *model.Channel
+		openRouter  []*model.Channel
+		wantNext    bool
+	}{
+		{
+			// The reported case: the emergency supplier just failed, so there is
+			// no attempt left and the last upstream error must survive.
+			name:        "failed emergency attempt",
+			lastChannel: openRouter,
+		},
+		{
+			name:        "failed emergency attempt with an unused emergency channel",
+			lastChannel: openRouter,
+			openRouter:  []*model.Channel{{Id: 13, Type: constant.ChannelTypeOpenRouter}},
+			wantNext:    true,
+		},
+		{
+			// The outage retry still exists for the primary supplier.
+			name:        "failed primary attempt",
+			lastChannel: lumia,
+			wantNext:    true,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			previousPause := common.HwLumiaRetryPauseMs
+			common.HwLumiaRetryPauseMs = 0
+			t.Cleanup(func() { common.HwLumiaRetryPauseMs = previousPause })
+
+			state := &HwRouteState{
+				active:      true,
+				group:       HwPaidGroup,
+				userGroup:   HwPaidGroup,
+				model:       "claude-sonnet-4-5",
+				family:      HwModelFamily("claude-sonnet-4-5"),
+				openRouter:  testCase.openRouter,
+				tried:       map[int]bool{testCase.lastChannel.Id: true},
+				outage:      true,
+				lastChannel: testCase.lastChannel,
+			}
+			state.recordAttempt(testCase.lastChannel, HwChannelProvider(testCase.lastChannel))
+
+			require.Equal(t, testCase.wantNext, state.hasNext())
+
+			channel := state.next()
+			if !testCase.wantNext {
+				require.Nil(t, channel, "hasNext promised a retry that next cannot deliver")
+				return
+			}
+			require.NotNil(t, channel)
+		})
+	}
+
+	// A nil last channel has no outage retry either: the route is exhausted.
+	state := &HwRouteState{active: true, tried: map[int]bool{}, outage: true}
+	assert.False(t, state.hasNext())
+	assert.Nil(t, state.next())
 }
 
 // The task settlement log keeps the supplier-side alias out of the customer
