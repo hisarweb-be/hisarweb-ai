@@ -29,20 +29,20 @@ passen, geen dubbele of nutteloze opties, alles in Turks en in TRY.
 | `legal.privacy_policy`, `legal.user_agreement` | Turks | Juist. |
 | `AutomaticRetryStatusCodes` | upstream-standaard | Zie punt voor Altuner hieronder. |
 
-## Voor Altuner of de CTO-wachtrij (niet blind veranderd)
+## Nagekeken op 25 okt 2026
 
-1. `RetryTimes = 0`: een mislukt verzoek wordt niet naar een tweede leverancier
-   herhaald. Zodra er meerdere leveranciers per model zijn is 1 of 2 beter.
-   Eigenaar: CTO-wachtrij, eerst meten welke modellen een tweede leverancier hebben.
-2. `Price = 7.3` en `StripeUnitPrice = 8`: Chinese yuan-resten uit het
-   upstream-project. HisarWeb rekent met de eigen TRY-prijzen (`Hw*`-opties);
-   deze twee worden door de eigen betaalstroom niet gebruikt. Pas weghalen na
-   controle in de code, daarom nu niet aangeraakt.
-3. `perf_metrics_setting.retention_days = 0`: betekent waarschijnlijk "voor altijd
-   bewaren". Een grens van 30 dagen houdt de database klein; eerst nagaan wat 0
-   precies doet.
-4. `payment_setting.amount_options = [10,20,50,100,200,500]`: dollarbedragen uit
-   upstream. De klantpagina gebruikt de eigen pakketten, dus geen invloed.
+1. `RetryTimes = 0` blijft zo. Verzoeken via de eigen leveranciersroute
+   (`service/hw_provider_policy.go`, `HwRetryLoopExtends`) proberen de volgende
+   leverancier los van `RetryTimes`; een hogere waarde zou daar algemene
+   herhalingen bovenop zetten.
+2. `Price = 7.3`, `StripeUnitPrice = 8` en `payment_setting.amount_options` zijn
+   yuan- en dollarresten uit upstream. Ze worden alleen gelezen door de upstream-
+   betaalroutes, en die staan uit zolang `HW_UPSTREAM_PAYMENTS_ENABLED` niet aan
+   staat (`router/api-router.go`). Geen invloed op klanten, dus niet aangeraakt.
+3. `perf_metrics_setting.retention_days`: 0 betekende "nooit opruimen"
+   (`pkg/perf_metrics/flush.go`). De standaard is nu 90 dagen. Staat er in de
+   database al een eigen waarde, dan wint die; zet hem dan in het beheerpaneel
+   op 90.
 
 ## Beheerassistent
 
