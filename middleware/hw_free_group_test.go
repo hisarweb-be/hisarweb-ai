@@ -173,6 +173,7 @@ func TestHwFreeGroupModelAllowed(t *testing.T) {
 		{name: "free may call haiku in another spelling", group: "free", model: "Claude-Haiku-4-5-Latest", want: true},
 		{name: "free may call the older haiku family", group: "free", model: "claude-3-5-haiku-20241022", want: true},
 		{name: "free may call haiku with a reasoning modifier", group: "free", model: "claude-haiku-5-5@high", want: true},
+		{name: "free may call a namespaced haiku", group: "free", model: "vendor/anthropic/claude-haiku-4-5", want: true},
 		{name: "free may not call a model that only mentions haiku", group: "free", model: "claude-haiku-pro", want: false},
 		{name: "free may not call a sonnet alias with haiku in the name", group: "free", model: "sonnet-haiku-blend", want: false},
 		{name: "free may not call the bare family name", group: "free", model: "claude-haiku", want: false},

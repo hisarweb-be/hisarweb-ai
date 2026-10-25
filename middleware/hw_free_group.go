@@ -122,6 +122,11 @@ func HwFreeGroupModelAllowed(group, model string) bool {
 	// The reasoning modifier decorates the same model ("...@high"), so the class
 	// check runs on the base name.
 	name, _, _ = strings.Cut(name, "@")
+	// A vendor prefix decorates the same model too ("vendor/claude-haiku-4-5"),
+	// so only the last path segment decides.
+	if idx := strings.LastIndexByte(name, '/'); idx >= 0 {
+		name = name[idx+1:]
+	}
 	// A name belongs to the class only when it is a Haiku family name followed
 	// by a version number. A model that merely mentions "haiku" somewhere, such
 	// as an alias priced like Sonnet, is not part of the trial class.
