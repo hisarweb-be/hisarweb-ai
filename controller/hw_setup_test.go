@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 const (
@@ -136,4 +138,32 @@ func TestHwProductionSetupRunsOnceWithToken(t *testing.T) {
 	var roots int64
 	require.NoError(t, model.DB.Model(&model.User{}).Where("role = ?", common.RoleRootUser).Count(&roots).Error)
 	assert.Equal(t, int64(1), roots, "the second setup must not create a second administrator")
+}
+
+// TestHwSetupStaysOpenUntilTheSetupRowIsWritten fails the write of the setup row
+// and proves the system does not report itself initialized: the failed call
+// leaves the setup open, and once the write succeeds the next call finishes the
+// setup instead of answering "already initialized" with no row behind it.
+func TestHwSetupStaysOpenUntilTheSetupRowIsWritten(t *testing.T) {
+	hwSetupFixture(t)
+	t.Setenv("APP_ENV", common.HwAppEnvDevelopment)
+	t.Setenv(HwSetupTokenEnv, "")
+
+	require.NoError(t, model.DB.Callback().Create().Before("gorm:create").Register("hw_setup_fail_row", func(tx *gorm.DB) {
+		if tx.Statement.Table == "setups" {
+			_ = tx.AddError(errors.New("disk full"))
+		}
+	}))
+	failed := hwSetupPost("")
+	assert.Contains(t, failed.Body.String(), `"success":false`)
+	assert.False(t, constant.Setup, "a failed setup row leaves the setup open")
+	assert.False(t, model.GetSetup() != nil, "no setup row was written")
+	require.NoError(t, model.DB.Callback().Create().Remove("hw_setup_fail_row"))
+
+	retried := hwSetupPost("")
+	require.Contains(t, retried.Body.String(), `"success":true`, retried.Body.String())
+	assert.True(t, constant.Setup)
+	var setups int64
+	require.NoError(t, model.DB.Model(&model.Setup{}).Count(&setups).Error)
+	assert.Equal(t, int64(1), setups, "the retry writes the setup row")
 }

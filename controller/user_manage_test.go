@@ -735,17 +735,22 @@ func TestUpdateSelfStoresThePreferredTopUpCurrency(t *testing.T) {
 	user := model.User{Username: "currency-owner", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AffCode: "currency-owner-aff", Setting: string(setting)}
 	require.NoError(t, db.Create(&user).Error)
 
-	update := func(body string) {
+	update := func(body string) *httptest.ResponseRecorder {
 		recorder := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(recorder)
 		c.Request = httptest.NewRequest(http.MethodPut, "/api/user/self", strings.NewReader(body))
 		c.Request.Header.Set("Content-Type", "application/json")
 		c.Set("id", user.Id)
 		UpdateSelf(c)
+		return recorder
 	}
-	stored := func() dto.UserSetting {
+	storedUser := func() model.User {
 		var current model.User
 		require.NoError(t, db.First(&current, user.Id).Error)
+		return current
+	}
+	stored := func() dto.UserSetting {
+		current := storedUser()
 		return current.GetSetting()
 	}
 
@@ -762,4 +767,18 @@ func TestUpdateSelfStoresThePreferredTopUpCurrency(t *testing.T) {
 		assert.Equal(t, step.want, stored().HwCurrency, step.body)
 		assert.Equal(t, "tr", stored().Language, "other settings stay")
 	}
+
+	// A request that carries the currency and a profile field applies both:
+	// answering success while only storing the currency would report a name
+	// change that never happened.
+	response := update(`{"hw_currency":"eur","display_name":"Merged Update"}`)
+	assert.Contains(t, response.Body.String(), `"success":true`)
+	assert.Equal(t, "EUR", stored().HwCurrency)
+	assert.Equal(t, "Merged Update", storedUser().DisplayName)
+
+	// The reverse order of the same fields reaches the same result.
+	response = update(`{"display_name":"Second Update","hw_currency":"usd"}`)
+	assert.Contains(t, response.Body.String(), `"success":true`)
+	assert.Equal(t, "USD", stored().HwCurrency)
+	assert.Equal(t, "Second Update", storedUser().DisplayName)
 }

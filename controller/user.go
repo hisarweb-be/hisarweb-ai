@@ -910,27 +910,19 @@ func UpdateSelf(c *gin.Context) {
 		return
 	}
 
-	// HisarWeb AI: preferred top-up currency (TRY, EUR, USD, or empty to clear)
-	if hwCurrency, exists := requestData["hw_currency"]; exists && !passwordRequested {
-		currencyStr, ok := hwCurrency.(string)
-		currencyStr = strings.ToUpper(strings.TrimSpace(currencyStr))
-		if !ok || (currencyStr != "" && !model.HwOrderCurrencyAllowed(currencyStr)) {
+	// HisarWeb AI: preferred top-up currency (TRY, EUR, USD, or empty to clear).
+	// It is stored in the user setting next to the profile fields of the same
+	// request, so a merged request changes everything it names.
+	hwCurrency, hwCurrencyRequested := "", false
+	if value, exists := requestData["hw_currency"]; exists && !passwordRequested {
+		currency, isString := value.(string)
+		hwCurrency = strings.ToUpper(strings.TrimSpace(currency))
+		if !isString || (hwCurrency != "" && !model.HwOrderCurrencyAllowed(hwCurrency)) {
 			common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid request"))
 			return
 		}
-		user, err := model.GetUserById(c.GetInt("id"), false)
-		if err != nil {
-			common.ApiError(c, err)
-			return
-		}
-		currentSetting := user.GetSetting()
-		currentSetting.HwCurrency = currencyStr
-		if err := model.UpdateUserSetting(user.Id, currentSetting); err != nil {
-			common.ApiErrorT(c, "Update failed")
-			return
-		}
-		common.ApiSuccessT(c, "Update successful", nil)
-		return
+		hwCurrencyRequested = true
+		delete(requestData, "hw_currency")
 	}
 
 	// 原有的用户信息更新逻辑
@@ -1000,6 +992,21 @@ func UpdateSelf(c *gin.Context) {
 			"data":    data,
 		})
 		return
+	}
+	if hwCurrencyRequested {
+		current, err := model.GetUserById(cleanUser.Id, false)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		setting := current.GetSetting()
+		setting.HwCurrency = hwCurrency
+		settingBytes, err := common.Marshal(setting)
+		if err != nil {
+			common.ApiErrorT(c, "Update failed")
+			return
+		}
+		cleanUser.Setting = string(settingBytes)
 	}
 	if err := cleanUser.Update(false); err != nil {
 		common.ApiError(c, err)

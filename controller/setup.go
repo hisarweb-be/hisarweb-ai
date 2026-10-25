@@ -133,9 +133,6 @@ func PostSetup(c *gin.Context) {
 		return
 	}
 
-	// Update setup status
-	constant.Setup = true
-
 	setup := model.Setup{
 		Version:       common.Version,
 		InitializedAt: time.Now().Unix(),
@@ -145,6 +142,11 @@ func PostSetup(c *gin.Context) {
 		common.ApiErrorT(c, "Failed to initialize the system: {{error}}", map[string]any{"error": err.Error()})
 		return
 	}
+
+	// Update setup status only once the setup row exists: a failed write leaves
+	// the endpoint open, so the next call finishes the setup instead of
+	// answering "already initialized" without a row behind it.
+	constant.Setup = true
 
 	common.ApiSuccessT(c, "System initialized successfully", nil)
 }
