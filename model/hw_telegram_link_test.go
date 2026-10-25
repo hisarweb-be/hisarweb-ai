@@ -41,11 +41,11 @@ func TestHwTelegramLinkToken(t *testing.T) {
 		raw, _, err := HwCreateTelegramLinkToken(42, now)
 		require.NoError(t, err)
 
-		userID, err := HwConsumeTelegramLinkToken(raw, now)
+		userID, _, err := HwClaimTelegramLinkToken(raw, now)
 		require.NoError(t, err)
 		assert.Equal(t, 42, userID)
 
-		_, err = HwConsumeTelegramLinkToken(raw, now)
+		_, _, err = HwClaimTelegramLinkToken(raw, now)
 		assert.ErrorIs(t, err, ErrHwTelegramLinkInvalid)
 	})
 
@@ -53,13 +53,13 @@ func TestHwTelegramLinkToken(t *testing.T) {
 		raw, expiresAt, err := HwCreateTelegramLinkToken(43, now)
 		require.NoError(t, err)
 
-		_, err = HwConsumeTelegramLinkToken(raw, expiresAt)
+		_, _, err = HwClaimTelegramLinkToken(raw, expiresAt)
 		assert.ErrorIs(t, err, ErrHwTelegramLinkInvalid)
 	})
 
 	t.Run("a malformed token is refused without a lookup", func(t *testing.T) {
 		for _, raw := range []string{"", "  ", "kort maar met spaties", "abc/def", "abc+def=="} {
-			_, err := HwConsumeTelegramLinkToken(raw, now)
+			_, _, err := HwClaimTelegramLinkToken(raw, now)
 			assert.ErrorIs(t, err, ErrHwTelegramLinkInvalid, raw)
 		}
 	})
@@ -70,15 +70,55 @@ func TestHwTelegramLinkToken(t *testing.T) {
 		second, _, err := HwCreateTelegramLinkToken(44, now)
 		require.NoError(t, err)
 
-		_, err = HwConsumeTelegramLinkToken(first, now)
+		_, _, err = HwClaimTelegramLinkToken(first, now)
 		assert.ErrorIs(t, err, ErrHwTelegramLinkInvalid, "the older link stops working")
 
-		userID, err := HwConsumeTelegramLinkToken(second, now)
+		userID, _, err := HwClaimTelegramLinkToken(second, now)
 		require.NoError(t, err)
 		assert.Equal(t, 44, userID)
 
 		var tokens int64
 		require.NoError(t, DB.Model(&HwTelegramLinkToken{}).Where("user_id = ?", 44).Count(&tokens).Error)
 		assert.Zero(t, tokens, "no link row survives its use")
+	})
+
+	t.Run("a spent token can be given back while the link did not happen", func(t *testing.T) {
+		raw, expiresAt, err := HwCreateTelegramLinkToken(45, now)
+		require.NoError(t, err)
+
+		userID, token, err := HwClaimTelegramLinkToken(raw, now)
+		require.NoError(t, err)
+		assert.Equal(t, 45, userID)
+		assert.Equal(t, HwTelegramLinkToken{TokenHash: hwTelegramLinkTokenHash(raw), UserId: 45, ExpiresAt: expiresAt, CreatedAt: now}, token)
+		_, _, err = HwClaimTelegramLinkToken(raw, now)
+		assert.ErrorIs(t, err, ErrHwTelegramLinkInvalid, "a claimed token cannot be claimed twice")
+
+		require.NoError(t, HwRestoreTelegramLinkToken(token, now))
+		userID, _, err = HwClaimTelegramLinkToken(raw, now)
+		require.NoError(t, err)
+		assert.Equal(t, 45, userID)
+	})
+
+	t.Run("a given back token does not replace a newer link or outlive its expiry", func(t *testing.T) {
+		raw, expiresAt, err := HwCreateTelegramLinkToken(46, now)
+		require.NoError(t, err)
+		_, token, err := HwClaimTelegramLinkToken(raw, now)
+		require.NoError(t, err)
+
+		newer, _, err := HwCreateTelegramLinkToken(46, now+60)
+		require.NoError(t, err)
+		require.NoError(t, HwRestoreTelegramLinkToken(token, now+60))
+		_, _, err = HwClaimTelegramLinkToken(raw, now+60)
+		assert.ErrorIs(t, err, ErrHwTelegramLinkInvalid, "the dashboard replaced this link, so giving it back revives nothing")
+		_, _, err = HwClaimTelegramLinkToken(newer, now+60)
+		require.NoError(t, err)
+
+		// A token that expired while the attempt ran stays dead when it is given
+		// back: a link nobody can use is not worth restoring.
+		raw, _, err = HwCreateTelegramLinkToken(47, now)
+		require.NoError(t, err)
+		_, token, err = HwClaimTelegramLinkToken(raw, now)
+		require.NoError(t, err)
+		assert.ErrorIs(t, HwRestoreTelegramLinkToken(token, expiresAt), ErrHwTelegramLinkInvalid)
 	})
 }

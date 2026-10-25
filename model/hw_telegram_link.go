@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ErrHwTelegramLinkInvalid refuses a link token that is empty, malformed,
@@ -79,18 +80,19 @@ func HwCreateTelegramLinkToken(userID int, now int64) (string, int64, error) {
 	return raw, expiresAt, nil
 }
 
-// HwConsumeTelegramLinkToken spends a link token and answers the user it was
-// made for. The row is deleted with the same condition it was read with, and a
-// delete that did not remove exactly one row fails: two deliveries of the same
-// start command cannot both link an account.
-func HwConsumeTelegramLinkToken(raw string, now int64) (int, error) {
+// HwClaimTelegramLinkToken spends a link token and answers the user it was made
+// for, together with the row that was deleted so the caller can give it back
+// with HwRestoreTelegramLinkToken when the link did not happen. The row is
+// deleted with the same condition it was read with, and a delete that did not
+// remove exactly one row fails: two deliveries of the same start command cannot
+// both link an account.
+func HwClaimTelegramLinkToken(raw string, now int64) (int, HwTelegramLinkToken, error) {
 	if !hwTelegramLinkTokenWellFormed(raw) {
-		return 0, ErrHwTelegramLinkInvalid
+		return 0, HwTelegramLinkToken{}, ErrHwTelegramLinkInvalid
 	}
 	hash := hwTelegramLinkTokenHash(raw)
-	var userID int
+	var token HwTelegramLinkToken
 	err := DB.Transaction(func(tx *gorm.DB) error {
-		var token HwTelegramLinkToken
 		if err := tx.Where("token_hash = ? AND expires_at > ?", hash, now).First(&token).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return ErrHwTelegramLinkInvalid
@@ -104,13 +106,35 @@ func HwConsumeTelegramLinkToken(raw string, now int64) (int, error) {
 		if result.RowsAffected != 1 {
 			return ErrHwTelegramLinkInvalid
 		}
-		userID = token.UserId
 		return nil
 	})
 	if err != nil {
-		return 0, err
+		return 0, HwTelegramLinkToken{}, err
 	}
-	return userID, nil
+	return token.UserId, token, nil
+}
+
+// HwRestoreTelegramLinkToken puts back a token whose link did not happen, so the
+// retry Telegram sends for a 503 still finds it. A link only comes back when it
+// has not expired and the user has no newer link, so giving one back can never
+// revive a link that a fresh dashboard visit already replaced.
+func HwRestoreTelegramLinkToken(token HwTelegramLinkToken, now int64) error {
+	if token.TokenHash == "" || token.UserId <= 0 {
+		return ErrHwTelegramLinkInvalid
+	}
+	if token.ExpiresAt <= now {
+		return ErrHwTelegramLinkInvalid
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var newer int64
+		if err := tx.Model(&HwTelegramLinkToken{}).Where("user_id = ?", token.UserId).Count(&newer).Error; err != nil {
+			return err
+		}
+		if newer > 0 {
+			return nil
+		}
+		return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&token).Error
+	})
 }
 
 // hwTelegramLinkTokenWellFormed accepts only the alphabet and length Telegram
