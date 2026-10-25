@@ -76,12 +76,14 @@ func ProcessChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		})
 	}
 
-	if constant.ErrorLogEnabled && types.IsRecordErrorLog(err) {
+	userGroup := c.GetString("group")
+	// The HisarWeb status meter counts failed customer requests from these error
+	// rows, so customer groups always write one, also without ERROR_LOG_ENABLED.
+	if (constant.ErrorLogEnabled || model.HwIsCustomerGroup(userGroup)) && types.IsRecordErrorLog(err) {
 		userId := c.GetInt("id")
 		tokenName := c.GetString("token_name")
 		modelName := c.GetString("original_model")
 		tokenId := c.GetInt("token_id")
-		userGroup := c.GetString("group")
 		other := model.NewLogOther()
 		if c.Request != nil && c.Request.URL != nil {
 			other.SetPublic("request_path", c.Request.URL.Path)
