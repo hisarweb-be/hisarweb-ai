@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +20,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 // hwPhoneStepTestSalt keys the signal hashes during these tests. It is a test
@@ -722,9 +724,48 @@ func TestHwTelegramWebhookPhoneStep(t *testing.T) {
 		assert.Len(t, hwPhoneStepSignals(t, user.Id, "phone"), 1)
 		assert.Len(t, hwPhoneStepFreePackages(t, user.Id), 1)
 		assert.Len(t, api.messages(), 1, "the repeated delivery sends no second answer")
-		var claimed int64
-		require.NoError(t, model.DB.Model(&model.HwTelegramUpdate{}).Count(&claimed).Error)
-		assert.Equal(t, int64(1), claimed)
+		var claims []model.HwTelegramUpdate
+		require.NoError(t, model.DB.Find(&claims).Error)
+		require.Len(t, claims, 1)
+		assert.NotZero(t, claims[0].FinishedAt, "a handled delivery is recorded as finished")
+	})
+
+	// Telegram delivers the same update again when our answer is slow, and a
+	// 200 on that second delivery would tell it to stop: if the first one then
+	// fails, the customer's contact message is gone with nothing written.
+	t.Run("a delivery that is still running asks Telegram to retry", func(t *testing.T) {
+		api, secret := hwTelegramTestSetup(t)
+		user := hwPhoneStepTestTelegramUser(t, "running@example.com", "700020")
+		require.NoError(t, model.DB.Create(&model.HwTelegramUpdate{UpdateId: 20, CreatedAt: time.Now().Unix()}).Error)
+		body := hwTelegramContactUpdate(t, 20, 700020, "tr", hwInt64Ptr(700020), "+90 555 000 20 20")
+
+		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+
+		assert.Equal(t, http.StatusServiceUnavailable, outcome.HTTPStatus(), "the running delivery may still fail, so the repeat must not be acknowledged")
+		assert.Empty(t, hwPhoneStepSignals(t, user.Id, "phone"))
+		assert.Empty(t, api.messages())
+	})
+
+	t.Run("a claim of a delivery that never finished is taken over by the retry", func(t *testing.T) {
+		api, secret := hwTelegramTestSetup(t)
+		user := hwPhoneStepTestTelegramUser(t, "abandoned@example.com", "700021")
+		// A killed request leaves its claim behind without an answer. Once that
+		// claim is older than the longest life of a webhook request, nothing can
+		// still be running for it, so the retry does the work rather than answer
+		// 503 forever.
+		abandoned := time.Now().Unix() - model.HwTelegramUpdateClaimStaleSeconds - 60
+		require.NoError(t, model.DB.Create(&model.HwTelegramUpdate{UpdateId: 31, CreatedAt: abandoned}).Error)
+		body := hwTelegramContactUpdate(t, 31, 700021, "tr", hwInt64Ptr(700021), "+90 555 000 31 31")
+
+		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+
+		assert.Equal(t, http.StatusOK, outcome.HTTPStatus())
+		assert.Len(t, hwPhoneStepSignals(t, user.Id, "phone"), 1)
+		assert.Len(t, hwPhoneStepFreePackages(t, user.Id), 1)
+		assert.Len(t, api.messages(), 1)
+		var claim model.HwTelegramUpdate
+		require.NoError(t, model.DB.Where("update_id = ?", 31).First(&claim).Error)
+		assert.NotZero(t, claim.FinishedAt)
 	})
 
 	t.Run("a start command answers with the share-contact button", func(t *testing.T) {
@@ -879,6 +920,76 @@ func TestHwTelegramWebhookLinksAnAccount(t *testing.T) {
 		var linked int64
 		require.NoError(t, model.DB.Model(&model.User{}).Where("telegram_id <> ''").Count(&linked).Error)
 		assert.Zero(t, linked)
+	})
+
+	// A token that a temporary database failure spent would send the customer
+	// back to the dashboard while nothing was linked. The retry Telegram sends
+	// for the 503 must still find the token.
+	t.Run("a link token survives a failure before the account is linked", func(t *testing.T) {
+		api, secret := hwTelegramTestSetup(t)
+		user := hwPhoneStepTestUser(t, "retry-link@example.com")
+		raw := hwTelegramLinkTokenFor(t, user.Id)
+		body := hwTelegramTextUpdate(t, 28, 900028, "tr", "/start "+raw)
+
+		require.NoError(t, model.DB.Callback().Query().Before("gorm:query").Register("hwTestLinkLookupFails", func(tx *gorm.DB) {
+			if tx.Statement.Table == "users" {
+				tx.AddError(errors.New("user store unavailable"))
+			}
+		}))
+		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+		model.DB.Callback().Query().Remove("hwTestLinkLookupFails")
+		require.Equal(t, http.StatusServiceUnavailable, outcome.HTTPStatus())
+		assert.Empty(t, hwPhoneStepUserTelegramID(t, user.Id))
+
+		outcome = HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+		assert.Equal(t, http.StatusOK, outcome.HTTPStatus(), "the retry of a failed link still links")
+		assert.Equal(t, "900028", hwPhoneStepUserTelegramID(t, user.Id))
+		sent := api.messages()
+		require.Len(t, sent, 1)
+		assert.Equal(t, hwTelegramTextsFor("tr").Prompt, sent[0].Text)
+	})
+
+	// The same, for a failure after the token was read and before the write: the
+	// customer keeps the link they were given.
+	t.Run("a link token survives a failure while linking", func(t *testing.T) {
+		api, secret := hwTelegramTestSetup(t)
+		user := hwPhoneStepTestUser(t, "retry-write@example.com")
+		raw := hwTelegramLinkTokenFor(t, user.Id)
+		body := hwTelegramTextUpdate(t, 29, 900029, "tr", "/start "+raw)
+
+		require.NoError(t, model.DB.Callback().Update().Before("gorm:update").Register("hwTestLinkWriteFails", func(tx *gorm.DB) {
+			if tx.Statement.Table == "users" {
+				tx.AddError(errors.New("user store unavailable"))
+			}
+		}))
+		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+		model.DB.Callback().Update().Remove("hwTestLinkWriteFails")
+		require.Equal(t, http.StatusServiceUnavailable, outcome.HTTPStatus())
+		assert.Empty(t, hwPhoneStepUserTelegramID(t, user.Id))
+
+		outcome = HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+		assert.Equal(t, http.StatusOK, outcome.HTTPStatus(), "the retry of a failed link still links")
+		assert.Equal(t, "900029", hwPhoneStepUserTelegramID(t, user.Id))
+		assert.Len(t, api.messages(), 1)
+	})
+
+	// The token is only spent when the conversation actually reached the prompt:
+	// a relay that sees an already linked account get the button leaves the
+	// dashboard link usable for the account it was made for.
+	t.Run("an already linked account does not spend the token of another user", func(t *testing.T) {
+		_, secret := hwTelegramTestSetup(t)
+		hwPhoneStepTestTelegramUser(t, "linked-elsewhere@example.com", "900030")
+		user := hwPhoneStepTestUser(t, "not-linked@example.com")
+		raw := hwTelegramLinkTokenFor(t, user.Id)
+		body := hwTelegramTextUpdate(t, 30, 900030, "tr", "/start "+raw)
+
+		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+		require.Equal(t, http.StatusOK, outcome.HTTPStatus())
+		assert.Empty(t, hwPhoneStepUserTelegramID(t, user.Id))
+
+		var tokens int64
+		require.NoError(t, model.DB.Model(&model.HwTelegramLinkToken{}).Where("user_id = ?", user.Id).Count(&tokens).Error)
+		assert.Equal(t, int64(1), tokens, "the link of the other user is not spent by this sender")
 	})
 }
 

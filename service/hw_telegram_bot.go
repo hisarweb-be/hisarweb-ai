@@ -135,8 +135,9 @@ type hwTelegramMessage struct {
 //
 // Only a message that shares the sender's own number is processed: a forwarded
 // contact carries another user_id or none, and the linked account of the sender
-// must exist. The handler is idempotent on update_id, so a repeated delivery is
-// acknowledged without doing the work twice.
+// must exist. The handler is idempotent on update_id, so a repeat of a finished
+// delivery is acknowledged without doing the work twice, while a repeat of a
+// delivery that is still running is answered with 503 so Telegram keeps trying.
 func HwHandleTelegramWebhook(ctx context.Context, rawBody []byte, secretHeader string, now time.Time) HwWebhookOutcome {
 	secret := hwTelegramWebhookSecret()
 	if secret == "" {
@@ -152,7 +153,7 @@ func HwHandleTelegramWebhook(ctx context.Context, rawBody []byte, secretHeader s
 		common.SysLog(common.LogText("telegram webhook rejected: the body is not an update"))
 		return HwWebhookBadRequest
 	}
-	claimed, err := model.HwClaimTelegramUpdate(update.UpdateId, now.Unix())
+	claim, err := model.HwClaimTelegramUpdate(update.UpdateId, now.Unix())
 	if err != nil {
 		if errors.Is(err, model.ErrHwInvalidTelegramUpdate) {
 			common.SysLog(common.LogText("telegram webhook rejected: the update has no usable id"))
@@ -161,16 +162,29 @@ func HwHandleTelegramWebhook(ctx context.Context, rawBody []byte, secretHeader s
 		common.SysError(common.LogText("telegram webhook could not claim its update"))
 		return HwWebhookUnavailable
 	}
-	if !claimed {
+	switch claim {
+	case model.HwTelegramUpdateFinished:
 		// Telegram repeated a delivery we already handled.
 		return HwWebhookAccepted
+	case model.HwTelegramUpdateRunning:
+		// Another delivery of this update is still working. Answering 200 would
+		// stop Telegram from retrying, and that delivery may yet fail without
+		// having written anything, so the repeat asks for a retry instead.
+		common.SysLog(common.LogText("telegram webhook deferred a delivery that is still running"))
+		return HwWebhookUnavailable
 	}
 	outcome := hwProcessTelegramUpdate(ctx, update, now.Unix())
 	if outcome == HwWebhookUnavailable {
 		// Give the claim back so the retry of a failed delivery can do the work.
-		if err := model.HwReleaseTelegramUpdate(update.UpdateId); err != nil {
+		if err := model.HwReleaseTelegramUpdate(update.UpdateId, now.Unix()); err != nil {
 			common.SysError(common.LogText("telegram webhook could not release its failed update"))
 		}
+		return outcome
+	}
+	if err := model.HwFinishTelegramUpdate(update.UpdateId, now.Unix(), now.Unix()); err != nil {
+		// The work is done and must not run again: a claim left unfinished only
+		// makes a later delivery of this update wait for its stale time first.
+		common.SysError(common.LogText("telegram webhook could not finish its update"))
 	}
 	return outcome
 }
@@ -261,15 +275,19 @@ func hwTelegramLinkPayload(text string) (string, bool) {
 	return fields[1], true
 }
 
-// hwLinkTelegramAccount spends a link token and ties the sender's Telegram
+// hwLinkTelegramAccount claims a link token and ties the sender's Telegram
 // account to the user the token was made for, then asks for the number in the
 // same chat so the second and third start-bonus step happen in one conversation.
-// The token is single use; a failed attempt always ends the link, so the
-// customer asks the dashboard for a new one instead of retrying an old URL.
+//
+// The token is single use, and only a linked account spends it: every way out
+// that links nothing gives the token back before the webhook answers, so a
+// temporary failure cannot cost the customer a link they were handed for a
+// conversation that never happened. A retry of that failed delivery finds the
+// same token, and the dashboard link works until it expires or is replaced.
 func hwLinkTelegramAccount(ctx context.Context, message *hwTelegramMessage, payload string, texts hwTelegramTexts, now int64) HwWebhookOutcome {
 	chatID := strconv.FormatInt(message.Chat.Id, 10)
 	telegramID := strconv.FormatInt(message.From.Id, 10)
-	userID, err := model.HwConsumeTelegramLinkToken(payload, now)
+	userID, token, err := model.HwClaimTelegramLinkToken(payload, now)
 	if err != nil {
 		if errors.Is(err, model.ErrHwTelegramLinkInvalid) {
 			// A customer who is already linked and opens the bot again through an
@@ -282,14 +300,24 @@ func hwLinkTelegramAccount(ctx context.Context, message *hwTelegramMessage, payl
 			hwAnswerTelegramChat(ctx, chatID, texts.LinkInvalid, "")
 			return HwWebhookAccepted
 		}
-		common.SysError(common.LogText("telegram webhook could not spend its link token"))
+		common.SysError(common.LogText("telegram webhook could not claim its link token"))
 		return HwWebhookUnavailable
 	}
+	linked := false
+	defer func() {
+		if linked {
+			return
+		}
+		if err := model.HwRestoreTelegramLinkToken(token, now); err != nil {
+			common.SysError(common.LogText("telegram webhook could not give back its unused link token"))
+		}
+	}()
 	// An account that already belongs to this user is linked: answer with the
 	// prompt, not with an error.
-	linked, lookupErr := model.GetUserByTelegramID(telegramID)
+	owner, lookupErr := model.GetUserByTelegramID(telegramID)
 	switch {
-	case lookupErr == nil && linked.Id == userID:
+	case lookupErr == nil && owner.Id == userID:
+		linked = true
 		hwAnswerTelegramChat(ctx, chatID, texts.Prompt, texts.Button)
 		return HwWebhookAccepted
 	case lookupErr != nil && !errors.Is(lookupErr, gorm.ErrRecordNotFound):
@@ -315,6 +343,7 @@ func hwLinkTelegramAccount(ctx context.Context, message *hwTelegramMessage, payl
 		common.SysError(common.LogText("telegram webhook could not link a Telegram account to user %d", userID))
 		return HwWebhookUnavailable
 	}
+	linked = true
 	common.SysLog(common.LogText("telegram webhook linked a Telegram account to user %d", userID))
 	hwAnswerTelegramChat(ctx, chatID, texts.Prompt, texts.Button)
 	return HwWebhookAccepted
