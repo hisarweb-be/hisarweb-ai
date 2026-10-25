@@ -797,3 +797,41 @@ func TestHwProviderCheckoutNeverSendsANonLiraOrderToRevolut(t *testing.T) {
 		assert.ErrorIs(t, err, ErrHwPaymentProviderUnavailable, currency)
 	}
 }
+
+// TestHwStripeLira500PaidEarnsBonusAndThirtyDays replays a real 500 TL card
+// payment end to end without money: checkout session, Stripe's paid report,
+// the signed webhook, the 50 TL bonus and the 30-day validity, and a second
+// top-up later that restarts the 30 days for the whole balance.
+func TestHwStripeLira500PaidEarnsBonusAndThirtyDays(t *testing.T) {
+	fake := hwStripeTestSetup(t)
+	hwBonusTestEnable(t)
+	require.NoError(t, model.DB.AutoMigrate(&model.HwCreditExtension{}))
+	now := time.Now()
+	buyer := hwOrderTestUser(t, 0)
+	hwOrderTestIdentify(t, buyer.Id, "stripe-500-buyer")
+
+	order := hwOrderTestCreate(t, buyer.Id, 500)
+	session := fake.session(order.MerchantRef)
+	assert.Equal(t, "try", session.currency)
+	stored := hwBonusTestOrder(t, order.MerchantRef)
+	assert.EqualValues(t, 5000, stored.BonusMinor, "500 TL earns 50 TL bonus")
+
+	fake.pay(order.MerchantRef)
+	require.Equal(t, HwWebhookAccepted, hwStripeTestWebhook(t, "checkout.session.completed", session, now))
+	assert.Equal(t, hwOrderTestListQuota(t, 500)+stored.BonusQuota, hwOrderTestQuota(t, buyer.Id), "500 TL is booked as 550 TL")
+
+	validity, err := model.HwUserValidity(buyer.Id, now.Unix())
+	require.NoError(t, err)
+	assert.Equal(t, "active", validity.Status)
+	assert.Equal(t, 30, validity.DaysRemaining)
+
+	// Twenty days later the customer tops up again: the whole balance is valid 30 days from then.
+	later := now.Add(20 * 24 * time.Hour)
+	second := hwOrderTestCreate(t, buyer.Id, 500)
+	secondSession := fake.session(second.MerchantRef)
+	fake.pay(second.MerchantRef)
+	require.Equal(t, HwWebhookAccepted, hwStripeTestWebhook(t, "checkout.session.completed", secondSession, later))
+	validity, err = model.HwUserValidity(buyer.Id, later.Unix())
+	require.NoError(t, err)
+	assert.Equal(t, 30, validity.DaysRemaining, "a top-up restarts the 30 days")
+}
