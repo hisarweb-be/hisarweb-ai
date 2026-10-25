@@ -30,6 +30,8 @@ jobs:
       GOWORK: 'off'
       TEST_MYSQL_DSN: 'root:matrix@tcp(127.0.0.1:3306)/new_api_test?parseTime=true'
       TEST_POSTGRES_DSN: 'postgres://postgres:matrix@127.0.0.1:5432/new_api_test?sslmode=disable'
+      AUDIT_MYSQL_DSN: 'root:matrix@tcp(127.0.0.1:3306)/new_api_test?parseTime=true'
+      AUDIT_POSTGRES_DSN: 'postgres://postgres:matrix@127.0.0.1:5432/new_api_test?sslmode=disable'
 
     services:
       mysql:
@@ -76,6 +78,6 @@ jobs:
         run: |
           set -o pipefail
           go test -p 1 -count=1 -v ./model/ ./controller/ | tee /tmp/matrix.log
-          if grep -E 'DSN (is )?not configured|: set TEST_(MYSQL|POSTGRES)_DSN' /tmp/matrix.log; then
+          if grep -E '(MYSQL|POSTGRES)_DSN (is )?not configured|test database DSN is not configured|: set TEST_(MYSQL|POSTGRES)_DSN' /tmp/matrix.log; then
             echo "::error::database tests skipped for a missing DSN"; exit 1
           fi
