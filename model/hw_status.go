@@ -63,6 +63,11 @@ const (
 	hwStatusMinAllFailedRequests = 3
 
 	hwStatusMinuteSeconds = 60
+
+	// hwStatusExtensionBatchSize bounds the extension rows of one insert, so the
+	// extension of an outage stays a handful of statements whatever the number of
+	// running packages and whatever the parameter limit of the log database.
+	hwStatusExtensionBatchSize = 200
 )
 
 // Reason classes of a bad minute. They are stored, so they stay stable and name
@@ -320,20 +325,29 @@ func HwExtendCreditPackagesAfterIncident(incidentID int, now int64) (int, error)
 			if err := hwAttachCreditExtensions(tx, packages); err != nil {
 				return err
 			}
+			extensions := make([]HwCreditExtension, 0, len(packages))
 			for i := range packages {
 				pkg := packages[i]
 				if pkg.Source == HwSourceFree || pkg.HwEffectiveExpiresAt() <= incident.StartedAt {
 					continue
 				}
-				result := tx.Clauses(clause.OnConflict{
-					Columns:   []clause.Column{{Name: "package_id"}, {Name: "incident_id"}},
-					DoNothing: true,
-				}).Create(&HwCreditExtension{
+				extensions = append(extensions, HwCreditExtension{
 					PackageId:  pkg.Id,
 					IncidentId: incident.Id,
 					Minutes:    minutes,
 					CreatedAt:  now,
 				})
+			}
+			// The extensions go in bounded batches: one insert per package would keep
+			// the locked incident row and the transaction open for as many
+			// round-trips as the estate has packages. ON CONFLICT DO NOTHING keeps
+			// the batches as idempotent as the single insert was.
+			for start := 0; start < len(extensions); start += hwStatusExtensionBatchSize {
+				batch := extensions[start:min(start+hwStatusExtensionBatchSize, len(extensions))]
+				result := tx.Clauses(clause.OnConflict{
+					Columns:   []clause.Column{{Name: "package_id"}, {Name: "incident_id"}},
+					DoNothing: true,
+				}).Create(&batch)
 				if result.Error != nil {
 					return result.Error
 				}
@@ -408,6 +422,12 @@ type hwPaidCountRow struct {
 // claude-haiku-4-5 marked all ten models bad). The window is bounded in plain
 // comparisons instead of dialect-specific time functions, because the log table
 // can live on any of the supported databases.
+//
+// A failure counts once per request, not once per attempt: the relay writes one
+// error row per failed attempt and retries under the request id of the inbound
+// request, so COUNT(*) would turn a retried request into several failures and
+// describe an outage that a handful of customers alone can produce. The quality
+// meter counts the same way (HwReadQualityTraffic).
 func HwCountPaidRequests(from int64, to int64) (map[string]HwPaidCounts, error) {
 	if from <= 0 || to <= from {
 		return nil, errors.New("invalid status measurement window")
@@ -415,14 +435,18 @@ func HwCountPaidRequests(from int64, to int64) (map[string]HwPaidCounts, error) 
 	counts := make(map[string]HwPaidCounts)
 	for _, logType := range []int{LogTypeConsume, LogTypeError} {
 		var rows []hwPaidCountRow
-		err := LOG_DB.Model(&Log{}).
-			Select("model_name, COUNT(*) AS total").
+		counted := "model_name, COUNT(*) AS total"
+		query := LOG_DB.Model(&Log{}).
 			Where("type = ?", logType).
 			Where("created_at >= ? AND created_at < ?", from, to).
-			Where(logGroupCol+" = ?", HwPaidGroupName).
-			Group("model_name").
-			Scan(&rows).Error
-		if err != nil {
+			Where(logGroupCol+" = ?", HwPaidGroupName)
+		if logType == LogTypeError {
+			// An empty id cannot be told apart from another empty one, so it is
+			// left out here as well; the relay always writes a request id.
+			counted = "model_name, COUNT(DISTINCT request_id) AS total"
+			query = query.Where("request_id IS NOT NULL AND request_id <> ''")
+		}
+		if err := query.Select(counted).Group("model_name").Scan(&rows).Error; err != nil {
 			return nil, err
 		}
 		for _, row := range rows {
