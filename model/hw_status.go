@@ -443,8 +443,16 @@ func HwCountPaidRequests(from int64, to int64) (map[string]HwPaidCounts, error) 
 		if logType == LogTypeError {
 			// An empty id cannot be told apart from another empty one, so it is
 			// left out here as well; the relay always writes a request id.
+			// A request that a later attempt served is no failure either, the same
+			// rule as the quality meter.
+			served := LOG_DB.Model(&Log{}).
+				Select("request_id").
+				Where("type = ?", LogTypeConsume).
+				Where("created_at >= ? AND created_at < ?", from, to).
+				Where("request_id IS NOT NULL AND request_id <> ''")
 			counted = "model_name, COUNT(DISTINCT request_id) AS total"
-			query = query.Where("request_id IS NOT NULL AND request_id <> ''")
+			query = query.Where("request_id IS NOT NULL AND request_id <> ''").
+				Where("request_id NOT IN (?)", served)
 		}
 		if err := query.Select(counted).Group("model_name").Scan(&rows).Error; err != nil {
 			return nil, err

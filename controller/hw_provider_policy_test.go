@@ -571,16 +571,25 @@ func TestHwProviderFactsAreAdminOnly(t *testing.T) {
 
 		customerLogs := hwCallHandler(t, env, GetUserLogs, http.MethodGet, "/api/log/self", common.RoleCommonUser)
 		require.Equal(t, http.StatusOK, customerLogs.Code, customerLogs.Body.String())
+		// Customer groups always write an error row per failed attempt (the
+		// status meter counts them), so the customer sees the usage row plus the
+		// failed attempts; none of those rows may carry a supplier fact.
 		customerItems := hwDecodeLogItems(t, customerLogs.Body.String())
-		require.Len(t, customerItems, 1, "the customer must still see the usage log itself")
-		assert.Equal(t, hwTestModel, customerItems[0]["model_name"])
-		assert.Empty(t, customerItems[0]["channel_name"], "the channel name is not customer information")
-		customerOther := hwDecodeLogOther(t, customerItems[0])
-		assert.NotContains(t, customerOther, "admin_info", "/api/log/self must not carry the admin block")
-		assert.NotContains(t, customerOther, "provider")
+		usage := 0
+		for _, item := range customerItems {
+			if item["type"] == float64(model.LogTypeConsume) {
+				usage++
+				assert.Equal(t, hwTestModel, item["model_name"])
+			}
+			assert.Empty(t, item["channel_name"], "the channel name is not customer information")
+			customerOther := hwDecodeLogOther(t, item)
+			assert.NotContains(t, customerOther, "admin_info", "/api/log/self must not carry the admin block")
+			assert.NotContains(t, customerOther, "provider")
+		}
+		require.Equal(t, 1, usage, "the customer must still see the usage log itself")
 		hwAssertNoSupplierWords(t, "/api/log/self", customerLogs.Body.String())
 
-		adminLogs := hwCallHandler(t, env, GetAllLogs, http.MethodGet, "/api/log", common.RoleAdminUser)
+		adminLogs := hwCallHandler(t, env, GetAllLogs, http.MethodGet, "/api/log?type=2", common.RoleAdminUser)
 		require.Equal(t, http.StatusOK, adminLogs.Code, adminLogs.Body.String())
 		adminItems := hwDecodeLogItems(t, adminLogs.Body.String())
 		require.Len(t, adminItems, 1)

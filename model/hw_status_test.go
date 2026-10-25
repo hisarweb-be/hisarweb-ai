@@ -408,3 +408,27 @@ func TestHwStatusFailedAttemptsOfOneRequestCountOnce(t *testing.T) {
 	assert.Equal(t, int64(5), counts["claude-broken"].Failed, "retries of one request are one failure")
 	assert.Equal(t, int64(5), counts["claude-broken"].Measured)
 }
+
+// Customer groups always write an error row per failed attempt, also when a
+// later attempt of the same request is served (a fallback). Such a request
+// reached the customer, so it is no failure of the status meter.
+func TestHwStatusServedFallbackIsNoFailure(t *testing.T) {
+	hwStatusTestSetup(t)
+	require.NoError(t, LOG_DB.Exec("DELETE FROM logs").Error)
+	t.Cleanup(func() { LOG_DB.Exec("DELETE FROM logs") })
+
+	base := int64(1_800_000_000)
+	rows := []Log{
+		{Type: LogTypeError, CreatedAt: base + 5, Group: HwPaidGroupName, ModelName: "claude-x", RequestId: "recovered"},
+		{Type: LogTypeConsume, CreatedAt: base + 6, Group: HwPaidGroupName, ModelName: "claude-x", RequestId: "recovered"},
+		{Type: LogTypeError, CreatedAt: base + 7, Group: HwPaidGroupName, ModelName: "claude-x", RequestId: "lost"},
+	}
+	for i := range rows {
+		require.NoError(t, LOG_DB.Create(&rows[i]).Error)
+	}
+
+	counts, err := HwCountPaidRequests(base, base+60)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), counts["claude-x"].Failed, "only the request no attempt served is a failure")
+	assert.Equal(t, int64(1), counts["claude-x"].Measured)
+}
