@@ -504,7 +504,10 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 	// limit, so one address cannot bypass the cap through a provider. Telegram
 	// has no signup path here (it only logs into already-bound accounts).
 	if allowed, err := model.HwReserveSignupSlot(c.ClientIP(), common.GetTimestamp(), model.HwSignupIpDailyLimit); err != nil {
-		common.SysError(common.LogText("hw: per-IP signup limit unavailable, oauth registration continues: %v", err))
+		// The missing key is reported once per process by the model.
+		if !errors.Is(err, model.ErrHwSignalSaltMissing) && !errors.Is(err, model.ErrHwSignalSaltTooShort) {
+			common.SysError(common.LogText("hw: per-IP signup limit unavailable, oauth registration continues: %v", err))
+		}
 	} else if !allowed {
 		return nil, nil, &OAuthSignupLimitReachedError{}
 	}

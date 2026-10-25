@@ -1,7 +1,11 @@
 package model
 
 import (
+	"errors"
+	"sync/atomic"
 	"time"
+
+	"github.com/QuantumNous/new-api/common"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -38,6 +42,26 @@ func hwSignupIpDayKey(now int64) int {
 	return utc.Year()*10000 + int(utc.Month())*100 + utc.Day()
 }
 
+// hwSignupLimitWarned records that this process already reported the disabled
+// per-IP signup limit.
+var hwSignupLimitWarned atomic.Bool
+
+// hwWarnSignupLimitDisabledOnce reports, once per process, that the per-IP
+// signup limit is off because its hash key is missing or too short. The limit
+// fails open by design: registration continues without it, which is only
+// acceptable when the gap is visible. One line per registration would drown it
+// in a signup wave, so the first failure speaks and the rest stay silent.
+func hwWarnSignupLimitDisabledOnce(err error) {
+	if !hwSignupLimitWarned.CompareAndSwap(false, true) {
+		return
+	}
+	if errors.Is(err, ErrHwSignalSaltTooShort) {
+		common.SysError(common.LogText("hw: per-IP signup limit disabled for this process: HW_SIGNAL_SALT is shorter than %d bytes", hwSignalSaltMinBytes))
+		return
+	}
+	common.SysError(common.LogText("hw: per-IP signup limit disabled for this process: HW_SIGNAL_SALT is missing"))
+}
+
 // HwReserveSignupSlot reserves one new-account slot for an IP address on its
 // UTC day and reports whether the reservation fits the limit. The counter is
 // incremented atomically: the conditional update only raises a counter that is
@@ -62,6 +86,7 @@ func HwReserveSignupSlot(clientIP string, now int64, limit int) (bool, error) {
 	}
 	ipHash, err := hwHashRawSignal(HwSignalKindIp, clientIP)
 	if err != nil {
+		hwWarnSignupLimitDisabledOnce(err)
 		return false, err
 	}
 	if ipHash == "" {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 // hwAbuseSweepTestSetup starts from empty abuse tables and empty signals. The
@@ -111,6 +112,37 @@ func TestHwDailyAbuseSweepSharedSignals(t *testing.T) {
 
 func TestHwDailyAbuseSweepSharedDevice(t *testing.T) {
 	now := int64(1_700_000_000)
+
+	// The nightly pass must not spend one query per shared device token: a
+	// signup wave is exactly the case in which many of them exist at once.
+	t.Run("three shared tokens cost two queries", func(t *testing.T) {
+		hwAbuseSweepTestSetup(t)
+		want := make([]int, 0, 6)
+		for token := range 3 {
+			for slot := range 2 {
+				user := hwSweepTestUser(t, now-3600)
+				require.NoError(t, UpsertHwUserSignals(user.Id, HwUserSignals{
+					DeviceToken: fmt.Sprintf("device-n1-%d", token),
+					Ip:          fmt.Sprintf("198.51.100.%d", 20+token),
+					Phone:       fmt.Sprintf("+9055522%03d%02d", token, slot),
+				}))
+				want = append(want, user.Id)
+			}
+		}
+
+		queries := 0
+		require.NoError(t, DB.Callback().Query().After("gorm:query").Register("hw_shared_device_query_count", func(tx *gorm.DB) {
+			if !tx.DryRun {
+				queries++
+			}
+		}))
+		t.Cleanup(func() { _ = DB.Callback().Query().Remove("hw_shared_device_query_count") })
+
+		got, err := hwUserIDsOnSharedDevice(hwSweepDefaultDeviceUsers)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, want, got, "every account of every shared device group is reported")
+		assert.Equal(t, 3, queries, "shared tokens, their accounts and their second signals: three queries whatever the number of tokens")
+	})
 
 	t.Run("a device token shared by two accounts freezes neither", func(t *testing.T) {
 		hwAbuseSweepTestSetup(t)
