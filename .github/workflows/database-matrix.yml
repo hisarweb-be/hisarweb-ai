@@ -1,0 +1,83 @@
+name: Database matrix
+
+# AGENTS.md requires SQLite, MySQL, and PostgreSQL. The main CI runs SQLite
+# only, so the tests that read TEST_MYSQL_DSN or TEST_POSTGRES_DSN skip there.
+# This job runs the model and controller packages with real MySQL 5.7 and
+# PostgreSQL 16 configured, and only when database code can have changed.
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'model/**'
+      - 'controller/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/database-matrix.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  matrix:
+    name: MySQL and PostgreSQL tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GOWORK: 'off'
+      TEST_MYSQL_DSN: 'root:matrix@tcp(127.0.0.1:3306)/new_api_test?parseTime=true'
+      TEST_POSTGRES_DSN: 'postgres://postgres:matrix@127.0.0.1:5432/new_api_test?sslmode=disable'
+      AUDIT_MYSQL_DSN: 'root:matrix@tcp(127.0.0.1:3306)/new_api_test?parseTime=true'
+      AUDIT_POSTGRES_DSN: 'postgres://postgres:matrix@127.0.0.1:5432/new_api_test?sslmode=disable'
+
+    services:
+      mysql:
+        image: mysql:5.7
+        env:
+          MYSQL_ROOT_PASSWORD: matrix
+          MYSQL_DATABASE: new_api_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pmatrix"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: matrix
+          POSTGRES_DB: new_api_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Create frontend embed placeholder
+        run: |
+          mkdir -p web/dist
+          touch web/dist/index.html
+
+      # The whole packages run, as in the main CI: some tests rely on state that
+      # other tests of the package set up and fail when run alone. -p 1 keeps
+      # the packages from sharing a database at the same time. A skip for a
+      # missing DSN fails the job: it would mean the engines were never reached.
+      - name: Run the model and controller tests on MySQL and PostgreSQL
+        run: |
+          set -o pipefail
+          go test -p 1 -count=1 -v ./model/ ./controller/ | tee /tmp/matrix.log
+          if grep -E '(MYSQL|POSTGRES)_DSN (is )?not configured|test database DSN is not configured|: set TEST_(MYSQL|POSTGRES)_DSN' /tmp/matrix.log; then
+            echo "::error::database tests skipped for a missing DSN"; exit 1
+          fi
