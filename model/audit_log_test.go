@@ -3,7 +3,6 @@ package model
 import (
 	"fmt"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -96,27 +95,22 @@ func TestAuditLogSortIndexDatabaseMatrix(t *testing.T) {
 					}
 					index, ok := byName["idx_audit_time_event"]
 					require.True(t, ok, "migration must create the audit ordering index")
-					indexColumns := index.Columns()
+					var columns []string
 					if dialect == "postgres" {
-						// The pgx index query has no key-ordinality ORDER BY, so the
-						// driver reports the members in attribute order and cannot
-						// show the ordering this index exists for. Read it from the
-						// catalog instead.
-						var keyOrder string
+						// GORM's PostgreSQL GetIndexes does not preserve index key order.
 						require.NoError(t, db.Raw(`
-SELECT string_agg(attribute_meta.attname, ',' ORDER BY key_member.ordinality)
+SELECT attribute.attname
 FROM pg_catalog.pg_index AS index_meta
-JOIN pg_catalog.pg_class AS index_relation ON index_relation.oid = index_meta.indexrelid
-CROSS JOIN LATERAL unnest(index_meta.indkey) WITH ORDINALITY AS key_member(attnum, ordinality)
-JOIN pg_catalog.pg_attribute AS attribute_meta
-  ON attribute_meta.attrelid = index_meta.indrelid
- AND attribute_meta.attnum = key_member.attnum
-WHERE index_relation.relname = ?
-  AND index_relation.relnamespace = current_schema()::regnamespace`, "idx_audit_time_event").Scan(&keyOrder).Error)
-						require.NotEmpty(t, keyOrder, "index must exist in the catalog")
-						indexColumns = strings.Split(keyOrder, ",")
+CROSS JOIN LATERAL unnest(index_meta.indkey) WITH ORDINALITY AS index_column(attnum, ordinal_position)
+JOIN pg_catalog.pg_attribute AS attribute
+  ON attribute.attrelid = index_meta.indrelid AND attribute.attnum = index_column.attnum
+WHERE index_meta.indexrelid = to_regclass(?)
+ORDER BY index_column.ordinal_position
+`, index.Name()).Scan(&columns).Error)
+					} else {
+						columns = index.Columns()
 					}
-					assert.Equal(t, []string{"created_at", "event_id"}, indexColumns)
+					assert.Equal(t, []string{"created_at", "event_id"}, columns)
 					for _, original := range originalIndexes {
 						preserved, ok := byName[original.Name()]
 						require.True(t, ok, "existing index %s must remain", original.Name())
