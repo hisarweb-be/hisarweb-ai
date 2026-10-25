@@ -161,9 +161,11 @@ export const MODEL_OPUS = 'claude-opus-5-5'
  */
 export const MODEL_HAIKU = 'claude-haiku-5-5'
 export const FREE_TRIAL_MODELS = [MODEL_HAIKU] as const
-/** Default model of OpenAI Codex. */
-export const MODEL_CODEX = 'gpt-6.1-sol'
-export const MODEL_GPT_SMALL = 'gpt-6-luna'
+/**
+ * Default model of the Codex guide: a model we sell, so the sample config never
+ * points at a name the gateway does not serve.
+ */
+export const MODEL_CODEX = MODEL_DEFAULT
 export const MODEL_GEMINI = 'gemini-3.8-flash'
 
 /** Models listed in the config files of the programs that need a list. */

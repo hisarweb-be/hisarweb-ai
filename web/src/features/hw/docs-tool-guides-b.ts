@@ -235,16 +235,16 @@ const cline: ToolGuide = {
     },
     {
       message: {
-        tr: 'GPT-6 modellerinde max_tokens hatası',
-        en: 'max_tokens error with GPT-6 models',
+        tr: 'max_tokens hatası',
+        en: 'max_tokens error',
       },
       cause: {
-        tr: 'GPT-6 modelleri bu alanı farklı bir adla bekler.',
-        en: 'GPT-6 models expect this field under a different name.',
+        tr: 'Araç eski bir model adı ya da eski bir alan adı kullanıyor.',
+        en: 'The tool uses an old model name or an old field name.',
       },
       fix: {
-        tr: 'Başlangıçta bir Claude modeli seçin; GPT modelleri için Cline’ı güncelleyin.',
-        en: 'Start with a Claude model; for GPT models update Cline.',
+        tr: 'Listedeki bir modeli seçin ve aracınızı güncelleyin.',
+        en: 'Pick a model from the list and update your tool.',
       },
     },
   ],
@@ -977,16 +977,16 @@ notepad "$env:USERPROFILE\.continue\config.yaml"`
     },
     {
       message: {
-        tr: 'GPT modelleriyle istek hatası (/responses)',
-        en: 'Request error with GPT models (/responses)',
+        tr: 'İstek hatası (/responses)',
+        en: 'Request error (/responses)',
       },
       cause: {
-        tr: 'Continue bazı yeni OpenAI modellerinde /responses ucunu kullanabilir.',
-        en: 'Continue may use the /responses endpoint for some new OpenAI models.',
+        tr: 'Continue bazı modellerde /responses ucunu kullanabilir; listedeki modeller bu ucu beklemez.',
+        en: 'Continue may use the /responses endpoint for some models; the models in our list do not expect it.',
       },
       fix: {
-        tr: 'Model bloğuna useResponsesApi: false satırını ekleyin ya da bir Claude modeli kullanın.',
-        en: 'Add the line useResponsesApi: false to the model block, or use a Claude model.',
+        tr: 'Model bloğuna useResponsesApi: false satırını ekleyin.',
+        en: 'Add the line useResponsesApi: false to the model block.',
       },
     },
   ],

@@ -124,9 +124,6 @@ func TestHwSeedDefaultOptions(t *testing.T) {
 			"claude-sonnet-5-5": 0.5,
 			"claude-haiku-5-5":  0.025,
 			"claude-fable-5-1":  2.5,
-			"gpt-6-astra":       2.5,
-			"gpt-6.1-sol":       0.5,
-			"gpt-6-luna":        0.025,
 			"gemini-3.8-flash":  0.1875,
 		}
 		for name, expected := range expectedModelRatios {
@@ -137,6 +134,11 @@ func TestHwSeedDefaultOptions(t *testing.T) {
 		// The completion ratio is the output price in units of the input price.
 		for name := range expectedModelRatios {
 			assert.Equal(t, 5.0, ratio_setting.GetCompletionRatio(name), "completion ratio of %s", name)
+		}
+		// The three gpt names left the catalog, so the seed prices no gpt model.
+		for name := range hwRetiredModels {
+			_, ok, _ := ratio_setting.GetModelRatio(name)
+			assert.False(t, ok, "model ratio of the retired %s", name)
 		}
 
 		// The thinking adapter would rewrite the model alias on its way to the
@@ -175,7 +177,7 @@ func TestHwSeedDefaultOptions(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, 3.5, ratio, "an operator price is never replaced")
 		assert.Equal(t, 4.0, ratio_setting.GetCompletionRatio("claude-opus-5-5"))
-		ratio, ok, _ = ratio_setting.GetModelRatio("gpt-6-astra")
+		ratio, ok, _ = ratio_setting.GetModelRatio("claude-fable-5-1")
 		require.True(t, ok, "a missing sold model is filled in")
 		assert.Equal(t, 2.5, ratio)
 		ratio, ok, _ = ratio_setting.GetModelRatio("gpt-4o")
@@ -283,6 +285,7 @@ func TestHwApplySnapshotModelRatios(t *testing.T) {
 
 	snapshot := &model.HwPriceSnapshot{
 		Models: `{"claude-opus-5-5":{"in":6000000,"out":30000000},` +
+			`"claude-sonnet-5-5":{"in":2000000,"out":10000000},` +
 			`"gpt-6.1-sol":{"in":2000000,"out":10000000},` +
 			`"gemini-3.8-flash":{"in":0,"out":9000000}}`,
 	}
@@ -294,10 +297,14 @@ func TestHwApplySnapshotModelRatios(t *testing.T) {
 	assert.Equal(t, 1.5, ratio)
 	assert.Equal(t, 5.0, ratio_setting.GetCompletionRatio("claude-opus-5-5"))
 	// A sold model the snapshot prices for the first time gets both ratios.
-	ratio, ok, _ = ratio_setting.GetModelRatio("gpt-6.1-sol")
+	ratio, ok, _ = ratio_setting.GetModelRatio("claude-sonnet-5-5")
 	require.True(t, ok)
 	assert.Equal(t, 0.5, ratio)
-	assert.Equal(t, 5.0, ratio_setting.GetCompletionRatio("gpt-6.1-sol"))
+	assert.Equal(t, 5.0, ratio_setting.GetCompletionRatio("claude-sonnet-5-5"))
+	// A retired name in the snapshot is never priced again: the daily list may
+	// still carry it, but the bill does not.
+	_, ok, _ = ratio_setting.GetModelRatio("gpt-6.1-sol")
+	assert.False(t, ok, "a retired model is not priced by the snapshot")
 	// A model outside the catalog keeps its operator ratio.
 	ratio, ok, _ = ratio_setting.GetModelRatio("gpt-4o")
 	require.True(t, ok)
@@ -322,7 +329,7 @@ func TestHwSeedRetiredModels(t *testing.T) {
 	channels := []model.Channel{
 		{Name: "mixed", Key: "k1", Status: common.ChannelStatusEnabled, Group: "free,paid", Models: "claude-haiku-4-5,claude-haiku-5-5,claude-sonnet-5,claude-sonnet-5-5"},
 		{Name: "only-retired", Key: "k2", Status: common.ChannelStatusEnabled, Group: "paid", Models: "claude-sonnet-5"},
-		{Name: "untouched", Key: "k3", Status: common.ChannelStatusEnabled, Group: "paid", Models: "gpt-6-luna,claude-haiku-5-5"},
+		{Name: "untouched", Key: "k3", Status: common.ChannelStatusEnabled, Group: "paid", Models: "gpt-4o,claude-haiku-5-5"},
 	}
 	for i := range channels {
 		require.NoError(t, channels[i].Insert())
@@ -342,12 +349,12 @@ func TestHwSeedRetiredModels(t *testing.T) {
 		assert.Equal(t, map[string]string{
 			"mixed":        "claude-haiku-5-5,claude-sonnet-5-5",
 			"only-retired": "",
-			"untouched":    "gpt-6-luna,claude-haiku-5-5",
+			"untouched":    "gpt-4o,claude-haiku-5-5",
 		}, models)
 
 		var abilityModels []string
 		require.NoError(t, model.DB.Model(&model.Ability{}).Distinct("model").Order("model").Pluck("model", &abilityModels).Error)
-		assert.Equal(t, []string{"claude-haiku-5-5", "claude-sonnet-5-5", "gpt-6-luna"}, abilityModels)
+		assert.Equal(t, []string{"claude-haiku-5-5", "claude-sonnet-5-5", "gpt-4o"}, abilityModels)
 
 		for retired := range hwRetiredModels {
 			_, ok := ratio_setting.GetModelRatioCopy()[retired]

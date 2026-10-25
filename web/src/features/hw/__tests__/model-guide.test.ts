@@ -29,7 +29,7 @@ import { MODEL_PRICES } from '../data/model-prices'
 
 describe('model guide', () => {
   it('describes every recommended model in Turkish and English', () => {
-    expect(RECOMMENDED_ORDER).toHaveLength(8)
+    expect(RECOMMENDED_ORDER).toHaveLength(5)
     for (const name of RECOMMENDED_ORDER) {
       const guide = modelGuide(name)
       expect(guide, name).toBeDefined()
@@ -58,7 +58,7 @@ describe('model guide', () => {
   it('puts Fable first and Opus second, and unknown models last', () => {
     expect(recommendedRank('claude-fable-5-1')).toBe(0)
     expect(recommendedRank('claude-opus-5-5')).toBe(1)
-    expect(recommendedRank('gemini-3.8-flash')).toBe(7)
+    expect(recommendedRank('gemini-3.8-flash')).toBe(4)
     expect(recommendedRank('something-else')).toBe(RECOMMENDED_ORDER.length)
     expect(recommendedRank(undefined)).toBe(RECOMMENDED_ORDER.length)
   })

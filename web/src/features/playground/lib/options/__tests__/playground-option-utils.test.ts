@@ -73,8 +73,8 @@ describe('getModelFallback', () => {
 
   it('uses the first model when no preferred model is offered', () => {
     expect(
-      getModelFallback(options('gpt-6-luna', 'gemini-3.8-flash'), 'gpt-4o')
-    ).toBe('gpt-6-luna')
+      getModelFallback(options('claude-haiku-5-5', 'gemini-3.8-flash'), 'gpt-4o')
+    ).toBe('claude-haiku-5-5')
     expect(getModelFallback([], 'gpt-4o')).toBeNull()
   })
 })
