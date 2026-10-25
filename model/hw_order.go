@@ -487,6 +487,11 @@ func HwRevokeOrderCredit(merchantRef string, now int64) (HwOrderRevocation, erro
 		if err := tx.Where("user_id = ? AND retired_at = 0", pkg.UserId).Find(&active).Error; err != nil {
 			return err
 		}
+		// The outage extensions move a package in the fill order, so the amount
+		// taken back here has to be the one the package list shows.
+		if err := hwAttachCreditExtensions(tx, active); err != nil {
+			return err
+		}
 		remaining, bonusRemaining, bonusID := 0, 0, 0
 		for _, view := range HwPackageRemaining(pkg.UserId, user.Quota, active) {
 			switch {

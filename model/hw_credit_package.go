@@ -295,6 +295,11 @@ func hwForfeitFreePackagesForFrozenAccount(tx *gorm.DB, userID int, now int64) (
 	if err := tx.Where("user_id = ? AND retired_at = 0", userID).Find(&pkgs).Error; err != nil {
 		return 0, err
 	}
+	// The outage extensions move a package in the fill order, so the amount
+	// forfeited here has to be the one the package list shows.
+	if err := hwAttachCreditExtensions(tx, pkgs); err != nil {
+		return 0, err
+	}
 	remaining := make(map[int]int, len(pkgs))
 	for _, view := range HwPackageRemaining(userID, user.Quota, pkgs) {
 		remaining[view.Id] = view.RemainingQuota

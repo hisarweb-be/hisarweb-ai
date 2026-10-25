@@ -546,3 +546,88 @@ func TestHwFreezeAfterPurchaseForfeitsTheFreeCredit(t *testing.T) {
 		assert.Equal(t, int64(0), hwTestPackageByOrderRef(t, freeRef).RetiredAt)
 	})
 }
+
+// An outage extension moves a package's expiry, and with it the place that
+// package takes in the derived fill. A refund and a forfeit must subtract the
+// same amount the customer sees in the package list, so both have to read the
+// extensions before they derive the fill.
+func TestHwRefundAndForfeitCountTheOutageExtension(t *testing.T) {
+	hwStatusTestSetup(t)
+	hwCreditTestSetup(t)
+	require.NoError(t, DB.AutoMigrate(&HwAccountFlag{}))
+	require.NoError(t, DB.Exec("DELETE FROM hw_account_flags").Error)
+	t.Cleanup(func() {
+		DB.Exec("DELETE FROM hw_account_flags")
+	})
+	now := int64(1_700_000_000)
+	// An outage extension of thirty days moves the package behind the one that
+	// expires later, so the derived fill reaches it last instead of first.
+	extend := func(t *testing.T, orderRef string) {
+		t.Helper()
+		pkg := hwTestPackageByOrderRef(t, orderRef)
+		incident := hwStatusTestIncident(t, now-3600, 16*60)
+		require.NoError(t, DB.Create(&HwCreditExtension{
+			PackageId: pkg.Id, IncidentId: incident.Id, Minutes: 30 * 24 * 60, CreatedAt: now,
+		}).Error)
+	}
+	// Three packages of 50 in order of expiry: paid, free, paid. Spending the
+	// balance from 150 down to 60 drains the first package to 0 and leaves the
+	// free package 10, unless the extension of the first package pushes it
+	// behind the free one — then it holds 50 and the free package 0. The order
+	// references carry a suffix, because the unique (source, order_ref) index
+	// spans the whole test database.
+	setup := func(t *testing.T, suffix string) (User, string, string) {
+		t.Helper()
+		user := createHwTestUser(t, 0)
+		first := "order-ext-" + suffix
+		free := "free:" + suffix
+		_, err := GrantCreditPackage(nil, user.Id, 50, HwSourcePurchase, first, now)
+		require.NoError(t, err)
+		_, err = GrantCreditPackage(nil, user.Id, 50, HwSourceFree, free, now+1)
+		require.NoError(t, err)
+		_, err = GrantCreditPackage(nil, user.Id, 50, HwSourcePurchase, "order-later-"+suffix, now+2)
+		require.NoError(t, err)
+		require.NoError(t, DecreaseUserQuota(user.Id, 90, true))
+		require.Equal(t, 60, getUserQuotaFromDB(t, user.Id))
+		return user, first, free
+	}
+	remainingOf := func(t *testing.T, userID int, orderRef string) int {
+		t.Helper()
+		views, err := ListUserCreditPackages(userID)
+		require.NoError(t, err)
+		id := hwTestPackageByOrderRef(t, orderRef).Id
+		for _, view := range views {
+			if view.Id == id {
+				return view.RemainingQuota
+			}
+		}
+		t.Fatalf("package %s missing from the package list", orderRef)
+		return 0
+	}
+
+	t.Run("refund subtracts what the package list shows", func(t *testing.T) {
+		user, orderRef, _ := setup(t, "refund")
+		extend(t, orderRef)
+		want := remainingOf(t, user.Id, orderRef)
+		require.Equal(t, 50, want, "the extended package keeps the quota the customer sees")
+
+		revocation, err := HwRevokeOrderCredit(orderRef, now+3)
+		require.NoError(t, err)
+		assert.True(t, revocation.Retired)
+		assert.Equal(t, want, revocation.RemainingQuota)
+		assert.Equal(t, 60-want, getUserQuotaFromDB(t, user.Id), "the balance drops by what the package still held")
+	})
+
+	t.Run("forfeit subtracts what the package list shows", func(t *testing.T) {
+		user, orderRef, freeRef := setup(t, "forfeit")
+		extend(t, orderRef)
+		require.NoError(t, DB.Create(&HwAccountFlag{UserId: user.Id, Frozen: true, Reason: HwFreezeReasonSharedPhone, FrozenAt: now + 3}).Error)
+		want := remainingOf(t, user.Id, freeRef)
+		require.Equal(t, 0, want, "the extended package holds what the customer sees; the free package is empty")
+
+		_, err := hwForfeitFreePackagesForFrozenAccount(DB, user.Id, now+4)
+		require.NoError(t, err)
+		assert.Equal(t, want, hwTestPackageByOrderRef(t, freeRef).RetiredRemaining)
+		assert.Equal(t, 60-want, getUserQuotaFromDB(t, user.Id), "the balance drops by what the free package still held")
+	})
+}
