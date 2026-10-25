@@ -278,3 +278,39 @@ func TestRequestPolicyEventsReachLogAdminInfo(t *testing.T) {
 	AppendRelayLogAdminInfo(untouched, nil, other)
 	assert.NotContains(t, other.Snapshot()["admin_info"], "request_policy", "requests without decisions do not carry an empty record")
 }
+
+// TestProcessChannelErrorRecordsCustomerFailuresForTheStatusMeter proves the
+// status meter sees failed customer requests without ERROR_LOG_ENABLED: its
+// failure count reads the error rows, so a customer group always writes one,
+// while other groups and errors marked not-to-record stay out of the log.
+func TestProcessChannelErrorRecordsCustomerFailuresForTheStatusMeter(t *testing.T) {
+	database, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, database.AutoMigrate(&model.User{}, &model.Log{}))
+	oldDB, oldLogDB, oldEnabled := model.DB, model.LOG_DB, constant.ErrorLogEnabled
+	model.DB, model.LOG_DB, constant.ErrorLogEnabled = database, database, false
+	t.Cleanup(func() { model.DB, model.LOG_DB, constant.ErrorLogEnabled = oldDB, oldLogDB, oldEnabled })
+
+	for _, test := range []struct {
+		name  string
+		group string
+		err   *types.NewAPIError
+		rows  int64
+	}{
+		{name: "paid customer failure is recorded", group: model.HwPaidGroupName, err: types.NewError(errors.New("upstream failed"), types.ErrorCodeBadResponse), rows: 1},
+		{name: "free customer failure is recorded", group: model.HwFreeGroupName, err: types.NewError(errors.New("upstream failed"), types.ErrorCodeBadResponse), rows: 1},
+		{name: "other group stays out of the log", group: "default", err: types.NewError(errors.New("upstream failed"), types.ErrorCodeBadResponse), rows: 0},
+		{name: "error marked not to record stays out", group: model.HwPaidGroupName, err: types.NewError(errors.New("client gone"), types.ErrorCodeBadResponse, types.ErrOptionWithNoRecordErrorLog()), rows: 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			require.NoError(t, database.Exec("DELETE FROM logs").Error)
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Set("group", test.group)
+			c.Set(common.RequestIdKey, "req-"+test.group)
+			ProcessChannelError(c, types.ChannelError{ChannelId: 7}, test.err, nil)
+			var rows int64
+			require.NoError(t, database.Model(&model.Log{}).Where("type = ?", model.LogTypeError).Count(&rows).Error)
+			assert.Equal(t, test.rows, rows)
+		})
+	}
+}
