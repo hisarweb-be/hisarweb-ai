@@ -125,68 +125,82 @@ func HwGrantAffiliateReward(buyerID int, purchaseListQuota int, orderRef string,
 // below zero); the package is retired with that remainder so it cannot be
 // revoked twice. A reference without an affiliate package is not an error, and a
 // second call changes nothing.
-func HwRevokeAffiliateReward(orderRef string, now int64) error {
+//
+// With a nil tx the function owns the transaction. A caller that passes its own
+// tx must lower the inviter's cached balance after commit by the remaining quota
+// the returned revocation reports, the same way the cache follows any other
+// balance change of the ledger.
+func HwRevokeAffiliateReward(tx *gorm.DB, orderRef string, now int64) (HwOrderRevocation, error) {
 	if orderRef == "" || now <= 0 {
-		return ErrHwInvalidCreditGrant
+		return HwOrderRevocation{}, ErrHwInvalidCreditGrant
 	}
-	var pkg HwCreditPackage
-	err := DB.Where("source = ? AND order_ref = ?", HwSourceAffiliate, "aff:"+orderRef).First(&pkg).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil
+	if tx != nil {
+		return hwRevokeAffiliateRewardInTx(tx, orderRef, now)
 	}
-	if err != nil {
+	var revocation HwOrderRevocation
+	err := DB.Transaction(func(inner *gorm.DB) error {
+		var err error
+		revocation, err = hwRevokeAffiliateRewardInTx(inner, orderRef, now)
 		return err
-	}
-	if pkg.RetiredAt != 0 {
-		return nil
-	}
-	decrease := 0
-	revoked := false
-	err = DB.Transaction(func(tx *gorm.DB) error {
-		var user User
-		if err := lockForUpdate(tx).Select("id", "quota").Where("id = ?", pkg.UserId).First(&user).Error; err != nil {
-			return err
-		}
-		var active []HwCreditPackage
-		if err := tx.Where("user_id = ? AND retired_at = 0", pkg.UserId).Find(&active).Error; err != nil {
-			return err
-		}
-		remaining := 0
-		for _, view := range HwPackageRemaining(pkg.UserId, user.Quota, active) {
-			if view.Id == pkg.Id {
-				remaining = view.RemainingQuota
-				break
-			}
-		}
-		result := tx.Model(&HwCreditPackage{}).
-			Where("id = ? AND retired_at = 0", pkg.Id).
-			UpdateColumns(map[string]any{"retired_at": now, "retired_remaining": remaining})
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected == 0 {
-			// Another call revoked it between the read and this transaction.
-			return nil
-		}
-		decrease = min(remaining, max(user.Quota, 0))
-		if decrease == 0 {
-			return nil
-		}
-		if err := hwDecreaseUserQuota(tx, pkg.UserId, decrease); err != nil {
-			return err
-		}
-		revoked = true
-		return nil
 	})
 	if err != nil {
-		return err
+		return HwOrderRevocation{}, err
 	}
-	if revoked {
-		if err := cacheDecrUserQuota(pkg.UserId, int64(decrease)); err != nil {
+	if revocation.RemainingQuota > 0 {
+		if err := cacheDecrUserQuota(revocation.UserId, int64(revocation.RemainingQuota)); err != nil {
 			common.SysError(common.LogText("failed to decrease user quota cache after affiliate revocation: %s", err.Error()))
 		}
 	}
-	return nil
+	return revocation, nil
+}
+
+// hwRevokeAffiliateRewardInTx runs the revocation on the caller's transaction.
+// The reported RemainingQuota is what was subtracted from the inviter's balance,
+// and UserId names the inviter so the cache can follow the commit.
+func hwRevokeAffiliateRewardInTx(tx *gorm.DB, orderRef string, now int64) (HwOrderRevocation, error) {
+	var pkg HwCreditPackage
+	err := tx.Where("source = ? AND order_ref = ?", HwSourceAffiliate, "aff:"+orderRef).First(&pkg).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return HwOrderRevocation{}, nil
+	}
+	if err != nil {
+		return HwOrderRevocation{}, err
+	}
+	if pkg.RetiredAt != 0 {
+		return HwOrderRevocation{}, nil
+	}
+	var user User
+	if err := lockForUpdate(tx).Select("id", "quota").Where("id = ?", pkg.UserId).First(&user).Error; err != nil {
+		return HwOrderRevocation{}, err
+	}
+	var active []HwCreditPackage
+	if err := tx.Where("user_id = ? AND retired_at = 0", pkg.UserId).Find(&active).Error; err != nil {
+		return HwOrderRevocation{}, err
+	}
+	remaining := 0
+	for _, view := range HwPackageRemaining(pkg.UserId, user.Quota, active) {
+		if view.Id == pkg.Id {
+			remaining = view.RemainingQuota
+			break
+		}
+	}
+	result := tx.Model(&HwCreditPackage{}).
+		Where("id = ? AND retired_at = 0", pkg.Id).
+		UpdateColumns(map[string]any{"retired_at": now, "retired_remaining": remaining})
+	if result.Error != nil {
+		return HwOrderRevocation{}, result.Error
+	}
+	if result.RowsAffected == 0 {
+		// Another call revoked it between the read and this transaction.
+		return HwOrderRevocation{}, nil
+	}
+	decrease := min(remaining, max(user.Quota, 0))
+	if decrease > 0 {
+		if err := hwDecreaseUserQuota(tx, pkg.UserId, decrease); err != nil {
+			return HwOrderRevocation{}, err
+		}
+	}
+	return HwOrderRevocation{UserId: pkg.UserId, GrantedQuota: pkg.GrantedQuota, RemainingQuota: decrease, Retired: true}, nil
 }
 
 // hwAffiliateRetryMaxAttempts bounds how often the retry queue re-attempts one

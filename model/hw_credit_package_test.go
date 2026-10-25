@@ -611,7 +611,7 @@ func TestHwRefundAndForfeitCountTheOutageExtension(t *testing.T) {
 		want := remainingOf(t, user.Id, orderRef)
 		require.Equal(t, 50, want, "the extended package keeps the quota the customer sees")
 
-		revocation, err := HwRevokeOrderCredit(orderRef, now+3)
+		revocation, err := HwRevokeOrderCredit(nil, orderRef, now+3)
 		require.NoError(t, err)
 		assert.True(t, revocation.Retired)
 		assert.Equal(t, want, revocation.RemainingQuota)

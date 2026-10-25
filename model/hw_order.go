@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -438,7 +439,9 @@ func HwNoteOrder(merchantRef, note string) error {
 
 // HwOrderRevocation reports what taking back an order's credit did.
 type HwOrderRevocation struct {
-	// Retired is true when this call retired the purchase package.
+	// UserId is the account whose balance was lowered.
+	UserId int
+	// Retired is true when this call retired the package.
 	Retired bool
 	// GrantedQuota is what the purchase package originally issued.
 	GrantedQuota int
@@ -458,85 +461,98 @@ type HwOrderRevocation struct {
 // a second call changes nothing and reports Retired false. Balance the customer
 // already spent is not recovered from other packages; the caller records it as
 // the owed part of the refund.
-func HwRevokeOrderCredit(merchantRef string, now int64) (HwOrderRevocation, error) {
+//
+// With a nil tx the function owns the transaction. A caller that passes its own
+// tx must lower the user's cached balance after commit by the remaining quota
+// the returned revocation reports.
+func HwRevokeOrderCredit(tx *gorm.DB, merchantRef string, now int64) (HwOrderRevocation, error) {
 	merchantRef = strings.TrimSpace(merchantRef)
 	if merchantRef == "" || now <= 0 {
 		return HwOrderRevocation{}, ErrHwInvalidOrder
 	}
+	if tx != nil {
+		return hwRevokeOrderCreditInTx(tx, merchantRef, now)
+	}
+	var revocation HwOrderRevocation
+	err := DB.Transaction(func(inner *gorm.DB) error {
+		var err error
+		revocation, err = hwRevokeOrderCreditInTx(inner, merchantRef, now)
+		return err
+	})
+	if err != nil {
+		return HwOrderRevocation{}, err
+	}
+	if decrease := revocation.RemainingQuota + revocation.BonusReturnedQuota; decrease > 0 {
+		if err := cacheDecrUserQuota(revocation.UserId, int64(decrease)); err != nil {
+			common.SysError(common.LogText("failed to decrease user quota cache after order revocation: %s", err.Error()))
+		}
+	}
+	return revocation, nil
+}
+
+// hwRevokeOrderCreditInTx runs the revocation on the caller's transaction. The
+// reported RemainingQuota and BonusReturnedQuota are what was subtracted from the
+// balance, and UserId names the account so the cache can follow the commit.
+func hwRevokeOrderCreditInTx(tx *gorm.DB, merchantRef string, now int64) (HwOrderRevocation, error) {
 	var pkg HwCreditPackage
-	err := DB.Where("source = ? AND order_ref = ?", HwSourcePurchase, merchantRef).First(&pkg).Error
+	err := tx.Where("source = ? AND order_ref = ?", HwSourcePurchase, merchantRef).First(&pkg).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return HwOrderRevocation{}, nil
 	}
 	if err != nil {
 		return HwOrderRevocation{}, err
 	}
-	revocation := HwOrderRevocation{GrantedQuota: pkg.GrantedQuota}
+	revocation := HwOrderRevocation{UserId: pkg.UserId, GrantedQuota: pkg.GrantedQuota}
 	if pkg.RetiredAt != 0 {
 		revocation.RemainingQuota = pkg.RetiredRemaining
 		return revocation, nil
 	}
-	decrease := 0
-	revoked := false
-	err = DB.Transaction(func(tx *gorm.DB) error {
-		var user User
-		if err := lockForUpdate(tx).Select("id", "quota").Where("id = ?", pkg.UserId).First(&user).Error; err != nil {
-			return err
-		}
-		var active []HwCreditPackage
-		if err := tx.Where("user_id = ? AND retired_at = 0", pkg.UserId).Find(&active).Error; err != nil {
-			return err
-		}
-		// The outage extensions move a package in the fill order, so the amount
-		// taken back here has to be the one the package list shows.
-		if err := hwAttachCreditExtensions(tx, active); err != nil {
-			return err
-		}
-		remaining, bonusRemaining, bonusID := 0, 0, 0
-		for _, view := range HwPackageRemaining(pkg.UserId, user.Quota, active) {
-			switch {
-			case view.Id == pkg.Id:
-				remaining = view.RemainingQuota
-			case view.Source == HwSourceBonus && hwPackageOrderRef(active, view.Id) == merchantRef:
-				bonusRemaining, bonusID = view.RemainingQuota, view.Id
-			}
-		}
-		result := tx.Model(&HwCreditPackage{}).
-			Where("id = ? AND retired_at = 0", pkg.Id).
-			UpdateColumns(map[string]any{"retired_at": now, "retired_remaining": remaining})
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected == 0 {
-			return nil
-		}
-		if bonusID != 0 {
-			// The bonus of the order goes with it, in the same transaction.
-			if err := tx.Model(&HwCreditPackage{}).
-				Where("id = ? AND retired_at = 0", bonusID).
-				UpdateColumns(map[string]any{"retired_at": now, "retired_remaining": bonusRemaining}).Error; err != nil {
-				return err
-			}
-			revocation.BonusReturnedQuota = bonusRemaining
-		}
-		revocation.Retired = true
-		revocation.RemainingQuota = remaining
-		decrease = min(remaining+bonusRemaining, max(user.Quota, 0))
-		if decrease == 0 {
-			return nil
-		}
-		if err := hwDecreaseUserQuota(tx, pkg.UserId, decrease); err != nil {
-			return err
-		}
-		revoked = true
-		return nil
-	})
-	if err != nil {
+	var user User
+	if err := lockForUpdate(tx).Select("id", "quota").Where("id = ?", pkg.UserId).First(&user).Error; err != nil {
 		return HwOrderRevocation{}, err
 	}
-	if revoked {
-		if err := cacheDecrUserQuota(pkg.UserId, int64(decrease)); err != nil {
-			common.SysError(common.LogText("failed to decrease user quota cache after order revocation: %s", err.Error()))
+	var active []HwCreditPackage
+	if err := tx.Where("user_id = ? AND retired_at = 0", pkg.UserId).Find(&active).Error; err != nil {
+		return HwOrderRevocation{}, err
+	}
+	// The outage extensions move a package in the fill order, so the amount
+	// taken back here has to be the one the package list shows.
+	if err := hwAttachCreditExtensions(tx, active); err != nil {
+		return HwOrderRevocation{}, err
+	}
+	remaining, bonusRemaining, bonusID := 0, 0, 0
+	for _, view := range HwPackageRemaining(pkg.UserId, user.Quota, active) {
+		switch {
+		case view.Id == pkg.Id:
+			remaining = view.RemainingQuota
+		case view.Source == HwSourceBonus && hwPackageOrderRef(active, view.Id) == merchantRef:
+			bonusRemaining, bonusID = view.RemainingQuota, view.Id
+		}
+	}
+	result := tx.Model(&HwCreditPackage{}).
+		Where("id = ? AND retired_at = 0", pkg.Id).
+		UpdateColumns(map[string]any{"retired_at": now, "retired_remaining": remaining})
+	if result.Error != nil {
+		return HwOrderRevocation{}, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return HwOrderRevocation{}, nil
+	}
+	if bonusID != 0 {
+		// The bonus of the order goes with it, in the same transaction.
+		if err := tx.Model(&HwCreditPackage{}).
+			Where("id = ? AND retired_at = 0", bonusID).
+			UpdateColumns(map[string]any{"retired_at": now, "retired_remaining": bonusRemaining}).Error; err != nil {
+			return HwOrderRevocation{}, err
+		}
+		revocation.BonusReturnedQuota = bonusRemaining
+	}
+	revocation.Retired = true
+	revocation.RemainingQuota = remaining
+	decrease := min(remaining+bonusRemaining, max(user.Quota, 0))
+	if decrease > 0 {
+		if err := hwDecreaseUserQuota(tx, pkg.UserId, decrease); err != nil {
+			return HwOrderRevocation{}, err
 		}
 	}
 	return revocation, nil
@@ -551,13 +567,25 @@ func hwPackageOrderRef(pkgs []HwCreditPackage, id int) string {
 	return ""
 }
 
-// HwMarkOrderRefunded moves a paid order to refunded and stores the admin note of
-// the refund. Only a paid order can be refunded; a second call changes nothing.
-func HwMarkOrderRefunded(merchantRef, note string, now int64) (bool, error) {
+// HwRefundOrder takes back everything one paid order gave and moves it to
+// refunded, all in one transaction: the purchase package and the bonus of the
+// order, the affiliate reward the purchase earned, and the status with its admin
+// note. A failure anywhere commits nothing, so an interrupted refund never leaves
+// an order paid with its credit already gone. A second call changes nothing and
+// reports changed false.
+//
+// extraNote carries what the caller did about the money and is appended to the
+// note built here, because only the transaction knows what the packages still
+// held. The caches of the affected accounts are lowered after commit by the
+// amounts the returned revocation reports.
+func HwRefundOrder(merchantRef, extraNote string, now int64) (HwOrderRevocation, string, bool, error) {
 	merchantRef = strings.TrimSpace(merchantRef)
 	if merchantRef == "" || now <= 0 {
-		return false, ErrHwInvalidOrder
+		return HwOrderRevocation{}, "", false, ErrHwInvalidOrder
 	}
+	var revocation HwOrderRevocation
+	var affiliate HwOrderRevocation
+	note := ""
 	changed := false
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		var order HwOrder
@@ -569,8 +597,25 @@ func HwMarkOrderRefunded(merchantRef, note string, now int64) (bool, error) {
 			return err
 		}
 		if order.Status != HwOrderStatusPaid {
+			// Checked under the lock before anything is taken back, so an order a
+			// concurrent call already moved keeps its credit as it is.
 			return nil
 		}
+		revocation, err = hwRevokeOrderCreditInTx(tx, merchantRef, now)
+		if err != nil {
+			return err
+		}
+		affiliate, err = hwRevokeAffiliateRewardInTx(tx, merchantRef, now)
+		if err != nil {
+			return err
+		}
+		spent := max(revocation.GrantedQuota-revocation.RemainingQuota, 0)
+		note = fmt.Sprintf("refund: granted %d quota, returned %d quota, %d quota already spent stays owed",
+			revocation.GrantedQuota, revocation.RemainingQuota, spent)
+		if revocation.BonusReturnedQuota > 0 {
+			note += fmt.Sprintf("; bonus: %d quota taken back with it", revocation.BonusReturnedQuota)
+		}
+		note += extraNote
 		if err := tx.Model(&HwOrder{}).Where("id = ?", order.Id).
 			UpdateColumns(map[string]any{"status": HwOrderStatusRefunded, "admin_note": note, "paid_at": order.PaidAt}).Error; err != nil {
 			return err
@@ -578,7 +623,20 @@ func HwMarkOrderRefunded(merchantRef, note string, now int64) (bool, error) {
 		changed = true
 		return nil
 	})
-	return changed, err
+	if err != nil {
+		return HwOrderRevocation{}, "", false, err
+	}
+	if decrease := revocation.RemainingQuota + revocation.BonusReturnedQuota; decrease > 0 {
+		if err := cacheDecrUserQuota(revocation.UserId, int64(decrease)); err != nil {
+			common.SysError(common.LogText("failed to decrease user quota cache after order revocation: %s", err.Error()))
+		}
+	}
+	if affiliate.RemainingQuota > 0 {
+		if err := cacheDecrUserQuota(affiliate.UserId, int64(affiliate.RemainingQuota)); err != nil {
+			common.SysError(common.LogText("failed to decrease user quota cache after affiliate revocation: %s", err.Error()))
+		}
+	}
+	return revocation, note, changed, nil
 }
 
 // The expiry job itself lives in the service layer (service.StartHwOrderExpiryJob):
