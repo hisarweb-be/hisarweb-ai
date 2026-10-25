@@ -255,7 +255,8 @@ func TestHwRevokeAffiliateReward(t *testing.T) {
 		require.NoError(t, DecreaseUserQuota(inviter.Id, 20, true))
 		require.Equal(t, 30, getUserQuotaFromDB(t, inviter.Id))
 
-		require.NoError(t, HwRevokeAffiliateReward("ord-1", now))
+		_, err = HwRevokeAffiliateReward(nil, "ord-1", now)
+		require.NoError(t, err)
 		assert.Equal(t, 0, getUserQuotaFromDB(t, inviter.Id), "only the unspent 30 is taken back")
 
 		var pkg HwCreditPackage
@@ -263,10 +264,12 @@ func TestHwRevokeAffiliateReward(t *testing.T) {
 		assert.Equal(t, now, pkg.RetiredAt)
 		assert.Equal(t, 30, pkg.RetiredRemaining)
 
-		require.NoError(t, HwRevokeAffiliateReward("ord-1", now))
+		_, err = HwRevokeAffiliateReward(nil, "ord-1", now)
+		require.NoError(t, err)
 		assert.Equal(t, 0, getUserQuotaFromDB(t, inviter.Id), "a second revocation changes nothing")
 
-		require.NoError(t, HwRevokeAffiliateReward("ord-unknown", now), "an unknown reference is not an error")
+		_, err = HwRevokeAffiliateReward(nil, "ord-unknown", now)
+		require.NoError(t, err, "an unknown reference is not an error")
 	})
 
 	t.Run("leaves quota that belongs to another package alone", func(t *testing.T) {
@@ -282,7 +285,8 @@ func TestHwRevokeAffiliateReward(t *testing.T) {
 		require.NoError(t, DecreaseUserQuota(inviter.Id, 50, true))
 		require.Equal(t, 100, getUserQuotaFromDB(t, inviter.Id))
 
-		require.NoError(t, HwRevokeAffiliateReward("ord-2", now))
+		_, err = HwRevokeAffiliateReward(nil, "ord-2", now)
+		require.NoError(t, err)
 		assert.Equal(t, 100, getUserQuotaFromDB(t, inviter.Id), "the package held nothing, so nothing is taken back")
 
 		var pkg HwCreditPackage

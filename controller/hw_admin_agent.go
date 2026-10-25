@@ -119,7 +119,9 @@ type hwAdminAgentEscalateRequest struct {
 
 // HwAdminAgentEscalate stores the escalation and creates a card on the Bureau
 // V2 board. The server may not reach the board; the escalation then stays
-// queued for HwAdminAgentPendingEscalations and the caller is told so.
+// queued for HwAdminAgentPendingEscalations and the caller is told so. Once the
+// board has answered, the card exists and the caller always gets it, even when
+// the row could not be updated.
 func HwAdminAgentEscalate(c *gin.Context) {
 	if !hwRequireAdmin(c) {
 		return
@@ -141,8 +143,10 @@ func HwAdminAgentEscalate(c *gin.Context) {
 		return
 	}
 	if err := model.HwSetAdminEscalationCard(model.DB, row.ID, card); err != nil {
-		common.ApiError(c, err)
-		return
+		// The card exists on the board and cannot be removed; answering with a
+		// failure would make the operator create a second card for the same
+		// problem, so the caller gets the card it already has.
+		common.SysLog("hw: escalation " + strconv.Itoa(row.ID) + " has card " + card + " but the row was not updated: " + err.Error())
 	}
 	common.ApiSuccess(c, gin.H{"card": card, "id": row.ID})
 }
