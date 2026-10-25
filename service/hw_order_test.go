@@ -1164,6 +1164,106 @@ func TestHwAdminRefundTakesBackCreditAndReward(t *testing.T) {
 	assert.ErrorIs(t, err, ErrHwOrderNotFound)
 }
 
+// A refund that fails after the credit was taken back must not leave the order
+// paid with an empty balance: the status change to refunded commits together
+// with the revocation, so a failure in between changes nothing.
+func TestHwAdminRefundKeepsTheOrderAndBalanceInOneTransaction(t *testing.T) {
+	fake := hwOrderTestSetup(t)
+	now := time.Now()
+	expectedQuota := hwOrderTestListQuota(t, 600)
+	buyer := hwOrderTestUser(t, 0)
+	hwOrderTestIdentify(t, buyer.Id, "refund-atomic")
+	order := hwOrderTestCreate(t, buyer.Id, 600)
+	require.Equal(t, HwWebhookAccepted, hwOrderTestPaidWebhook(t, fake, order.MerchantRef, now))
+	require.Equal(t, expectedQuota, hwOrderTestQuota(t, buyer.Id))
+
+	// A trigger refuses the status change to refunded while the balance
+	// deduction inside the same transaction has already run; the transaction
+	// must roll both back. SQLite triggers take no bound parameters, so the
+	// reference is formatted in.
+	require.NoError(t, model.DB.Exec(
+		"CREATE TRIGGER hw_test_block_refund_status BEFORE UPDATE OF status ON hw_orders "+
+			"WHEN NEW.merchant_ref = '"+order.MerchantRef+"' AND NEW.status = 'refunded' "+
+			"BEGIN SELECT RAISE(ABORT, 'hw-test-blocked-refund-status'); END").Error)
+	t.Cleanup(func() { model.DB.Exec("DROP TRIGGER IF EXISTS hw_test_block_refund_status") })
+
+	_, err := HwAdminRefundOrder(order.MerchantRef, now.Add(time.Minute))
+	require.Error(t, err, "the failed status change is reported to the admin")
+	assert.Contains(t, err.Error(), "hw-test-blocked-refund-status")
+	assert.Equal(t, expectedQuota, hwOrderTestQuota(t, buyer.Id), "the credit stays when the status change fails")
+	var paid model.HwOrder
+	require.NoError(t, model.DB.Where("merchant_ref = ?", order.MerchantRef).First(&paid).Error)
+	assert.Equal(t, model.HwOrderStatusPaid, paid.Status, "the order stays paid together with the credit")
+	assert.Empty(t, paid.AdminNote, "no refund note is left on an order that was not refunded")
+	var pkg model.HwCreditPackage
+	require.NoError(t, model.DB.Where("order_ref = ?", order.MerchantRef).First(&pkg).Error)
+	assert.Zero(t, pkg.RetiredAt, "the purchase package is not retired")
+
+	// With the obstacle gone the same call completes and both sides agree.
+	require.NoError(t, model.DB.Exec("DROP TRIGGER IF EXISTS hw_test_block_refund_status").Error)
+	result, err := HwAdminRefundOrder(order.MerchantRef, now.Add(2*time.Minute))
+	require.NoError(t, err)
+	require.True(t, result.Refunded)
+	assert.Zero(t, hwOrderTestQuota(t, buyer.Id))
+}
+
+// A Revolut order is refunded outside this system. The answer of the admin route
+// must say so instead of reporting a refunded order with no provider step.
+func TestHwAdminRefundReportsAProviderRefundThatNeedsAHand(t *testing.T) {
+	fake := hwOrderTestSetup(t)
+	now := time.Now()
+	expectedQuota := hwOrderTestListQuota(t, 600)
+	buyer := hwOrderTestUser(t, 0)
+	hwOrderTestIdentify(t, buyer.Id, "refund-manual")
+	order := hwOrderTestCreate(t, buyer.Id, 600)
+	require.Equal(t, HwWebhookAccepted, hwOrderTestPaidWebhook(t, fake, order.MerchantRef, now))
+	require.Equal(t, expectedQuota, hwOrderTestQuota(t, buyer.Id))
+
+	result, err := HwAdminRefundOrder(order.MerchantRef, now.Add(time.Minute))
+	require.NoError(t, err)
+	require.True(t, result.Refunded)
+	assert.Equal(t, HwProviderRefundManual, result.ProviderRefund,
+		"a Revolut order is reversed here but refunded at the provider by hand")
+	assert.Zero(t, result.RefundedMinor, "no card refund is claimed")
+	assert.Zero(t, hwOrderTestQuota(t, buyer.Id))
+	assert.Contains(t, result.Note, HwProviderRefundManual, "the admin note names the manual provider step")
+
+	var stored model.HwOrder
+	require.NoError(t, model.DB.Where("merchant_ref = ?", order.MerchantRef).First(&stored).Error)
+	assert.Contains(t, stored.AdminNote, HwProviderRefundManual, "the stored note carries the same fact")
+
+	// A second call repeats the same answer and changes nothing.
+	again, err := HwAdminRefundOrder(order.MerchantRef, now.Add(2*time.Minute))
+	require.NoError(t, err)
+	assert.False(t, again.Refunded)
+	assert.Equal(t, HwProviderRefundManual, again.ProviderRefund)
+}
+
+// An order that never recorded a provider order id is refused before any credit
+// is taken: reporting success there would leave the customer without credit and
+// with no money returned.
+func TestHwAdminRefundRefusesAnOrderWithoutAProviderOrderId(t *testing.T) {
+	fake := hwOrderTestSetup(t)
+	now := time.Now()
+	expectedQuota := hwOrderTestListQuota(t, 600)
+	buyer := hwOrderTestUser(t, 0)
+	hwOrderTestIdentify(t, buyer.Id, "refund-no-provider-id")
+	order := hwOrderTestCreate(t, buyer.Id, 600)
+	require.Equal(t, HwWebhookAccepted, hwOrderTestPaidWebhook(t, fake, order.MerchantRef, now))
+	require.Equal(t, expectedQuota, hwOrderTestQuota(t, buyer.Id))
+	// A payment recorded by reference while the provider id was never stored.
+	require.NoError(t, model.DB.Model(&model.HwOrder{}).Where("merchant_ref = ?", order.MerchantRef).
+		Update("revolut_order_id", nil).Error)
+
+	_, err := HwAdminRefundOrder(order.MerchantRef, now.Add(time.Minute))
+	require.ErrorIs(t, err, ErrHwProviderRefundUnknown)
+	assert.Equal(t, expectedQuota, hwOrderTestQuota(t, buyer.Id), "nothing was taken back")
+	var stored model.HwOrder
+	require.NoError(t, model.DB.Where("merchant_ref = ?", order.MerchantRef).First(&stored).Error)
+	assert.Equal(t, model.HwOrderStatusPaid, stored.Status)
+	assert.Empty(t, stored.AdminNote)
+}
+
 func TestHwTopUpLogsNoSecrets(t *testing.T) {
 	fake := hwOrderTestSetup(t)
 	capture := hwOrderTestCaptureLog(t)

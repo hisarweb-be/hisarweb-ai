@@ -701,15 +701,27 @@ type HwAdminRefundResult struct {
 	Currency      string
 	FeeMinor      int64
 	RefundedMinor int64
+	// ProviderRefund says what happened to the money: HwProviderRefundStripeAutomatic
+	// when this call refunded a Stripe payment, HwProviderRefundManual when the
+	// credit was reversed but the payment has to be returned at the provider by
+	// hand. It is never empty, so an answer cannot be read as "the money is back"
+	// when no provider refund happened.
+	ProviderRefund string
 }
 
 // HwAdminRefundOrder takes back the credit of one paid order: the purchase
 // package is retired with its remaining value, the balance is lowered by that
 // remainder (never below zero), the affiliate reward of the purchase is revoked,
 // and the order moves to refunded with an admin note naming what stayed owed.
+// Those steps commit in one transaction, so an interrupted refund never leaves an
+// order paid with its credit already gone.
 // For a card order the costs HisarWeb paid to Stripe (processing and currency
 // conversion) are deducted from the money that goes back; the fee is read first,
 // and when it cannot be read nothing changes and the refund can be repeated.
+// The result names the provider step: a Stripe order is refunded at the provider
+// by this call, any other provider order is reversed here and the money has to be
+// returned at the provider by hand, and an order without a provider order id is
+// refused before any credit is taken.
 // Calling it again for the same order changes nothing.
 func HwAdminRefundOrder(merchantRef string, now time.Time) (HwAdminRefundResult, error) {
 	merchantRef = strings.TrimSpace(merchantRef)
@@ -729,6 +741,12 @@ func HwAdminRefundOrder(merchantRef string, now time.Time) (HwAdminRefundResult,
 	if !alreadyRefunded && order.Status != model.HwOrderStatusPaid {
 		return result, ErrHwOrderNotRefundable
 	}
+	if order.RevolutOrderId == nil || strings.TrimSpace(*order.RevolutOrderId) == "" {
+		// No provider order id was ever recorded, so no money can be returned
+		// there and this route cannot finish the refund. Refusing before anything
+		// changes keeps the credit and the payment together.
+		return result, ErrHwProviderRefundUnknown
+	}
 	// The card part is planned before anything changes, so an unreadable fee
 	// leaves the order and the balance untouched and never turns into a full refund.
 	plan, hasPlan, err := hwPlanProviderRefund(order)
@@ -736,50 +754,78 @@ func HwAdminRefundOrder(merchantRef string, now time.Time) (HwAdminRefundResult,
 		return result, err
 	}
 	result.Currency = order.Currency
+	result.ProviderRefund = HwProviderRefundManual
 	if hasPlan {
+		result.ProviderRefund = HwProviderRefundStripeAutomatic
 		result.FeeMinor = plan.FeeMinor
 		result.RefundedMinor = plan.RefundMinor
 		if plan.AlreadyRefundedMinor > 0 {
 			result.RefundedMinor = plan.AlreadyRefundedMinor
 		}
 	}
-	revocation, err := model.HwRevokeOrderCredit(merchantRef, now.Unix())
+	if alreadyRefunded {
+		revocation, err := model.HwRevokeOrderCredit(nil, merchantRef, now.Unix())
+		if err != nil {
+			return result, err
+		}
+		result.GrantedQuota = revocation.GrantedQuota
+		result.ReturnedQuota = revocation.RemainingQuota
+		result.SpentQuota = max(revocation.GrantedQuota-revocation.RemainingQuota, 0)
+		result.BonusReturnedQuota = revocation.BonusReturnedQuota
+		result.Note = order.AdminNote
+		// A card refund that failed on the first call is retried here; Stripe's
+		// idempotency key makes a repeat of one that went through harmless.
+		return result, hwRefundAtProvider(order, plan, hasPlan)
+	}
+	revocation, note, changed, err := model.HwRefundOrder(merchantRef, hwAdminRefundExtraNote(plan, hasPlan), now.Unix())
 	if err != nil {
+		common.SysError(common.LogText("could not take back the credit of order %s (class %s)", merchantRef, hwPaymentErrorClass(err)))
 		return result, err
 	}
 	result.GrantedQuota = revocation.GrantedQuota
 	result.ReturnedQuota = revocation.RemainingQuota
 	result.SpentQuota = max(revocation.GrantedQuota-revocation.RemainingQuota, 0)
 	result.BonusReturnedQuota = revocation.BonusReturnedQuota
-	if alreadyRefunded {
-		result.Note = order.AdminNote
-		// A card refund that failed on the first call is retried here; Stripe's
-		// idempotency key makes a repeat of one that went through harmless.
-		return result, hwRefundAtProvider(order, plan, hasPlan)
-	}
-	if err := model.HwRevokeAffiliateReward(merchantRef, now.Unix()); err != nil {
-		common.SysError(common.LogText("could not revoke the affiliate reward of order %s (class %s)", merchantRef, hwPaymentErrorClass(err)))
-		return result, err
-	}
-	result.Note = fmt.Sprintf("refund: granted %d quota, returned %d quota, %d quota already spent stays owed",
-		result.GrantedQuota, result.ReturnedQuota, result.SpentQuota)
-	if result.BonusReturnedQuota > 0 {
-		result.Note += fmt.Sprintf("; bonus: %d quota taken back with it", result.BonusReturnedQuota)
-	}
-	if hasPlan {
-		result.Note += fmt.Sprintf("; card: paid %d, provider costs deducted %d, refunded %d (%s, minor units)",
-			plan.PaidMinor, plan.FeeMinor, result.RefundedMinor, plan.Currency)
-		if plan.RefundMinor <= 0 && plan.AlreadyRefundedMinor <= 0 {
-			result.Note += "; no card refund: the costs are as high as the payment"
-		}
-	}
-	changed, err := model.HwMarkOrderRefunded(merchantRef, result.Note, now.Unix())
-	if err != nil {
-		return result, err
-	}
 	result.Refunded = changed
+	result.Note = note
 	common.SysLog(common.LogText("admin refund took back order %s: %d of %d quota returned", merchantRef, result.ReturnedQuota, result.GrantedQuota))
 	return result, hwRefundAtProvider(order, plan, hasPlan)
+}
+
+// HwAdminRefundResult.ProviderRefund values. They say whether the money went
+// back through the payment provider or still has to be returned by hand; an
+// answer of this route never claims a provider refund that did not happen.
+const (
+	// HwProviderRefundStripeAutomatic: a Stripe order whose card refund this call
+	// planned and sent.
+	HwProviderRefundStripeAutomatic = "stripe_automatic"
+	// HwProviderRefundManual: an order of another provider; the credit and the
+	// affiliate reward were reversed, the payment has to be returned by hand.
+	HwProviderRefundManual = "manual_required"
+)
+
+// ErrHwProviderRefundUnknown: the order carries no provider order id, so nothing
+// can be refunded at the provider. Nothing was changed; the payment has to be
+// looked up and returned at the provider dashboard first.
+var ErrHwProviderRefundUnknown = errors.New("the order has no provider order id; nothing was changed and the payment has to be refunded at the provider")
+
+// hwAdminRefundExtraNote describes the provider part of a refund for the admin
+// note of the order: what the card refund returned, or that the money still sits
+// at the provider because this system does not refund that provider.
+func hwAdminRefundExtraNote(plan HwStripeRefundPlan, hasPlan bool) string {
+	if !hasPlan {
+		return fmt.Sprintf("; provider refund: %s, the money is still with the payment provider", HwProviderRefundManual)
+	}
+	refundedMinor := plan.RefundMinor
+	if plan.AlreadyRefundedMinor > 0 {
+		refundedMinor = plan.AlreadyRefundedMinor
+	}
+	note := fmt.Sprintf("; card: paid %d, provider costs deducted %d, refunded %d (%s, minor units)",
+		plan.PaidMinor, plan.FeeMinor, refundedMinor, plan.Currency)
+	if plan.RefundMinor <= 0 && plan.AlreadyRefundedMinor <= 0 {
+		note += "; no card refund: the costs are as high as the payment"
+	}
+	return note
 }
 
 // ErrHwProviderRefundFailed: the credit was taken back but the money could not

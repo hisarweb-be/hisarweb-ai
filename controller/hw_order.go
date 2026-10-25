@@ -122,6 +122,11 @@ func HwAdminRefundOrder(c *gin.Context) {
 			// Nothing was changed: the cost of the payment is not booked yet (or
 			// cannot be read), so the refund can simply be repeated later.
 			common.ApiErrorStatus(c, http.StatusServiceUnavailable, common.NewMessage("The payment provider's cost for this order is not available yet; nothing was changed, repeat the refund later"))
+		case errors.Is(err, service.ErrHwProviderRefundUnknown):
+			// Nothing was changed: without a provider order id there is no
+			// payment this route could return, so the money is returned at the
+			// provider dashboard and the refund repeated afterwards.
+			common.ApiErrorStatus(c, http.StatusConflict, common.NewMessage("The order has no payment provider reference; nothing was changed, refund the payment at the provider first"))
 		case errors.Is(err, service.ErrHwProviderRefundFailed):
 			common.ApiErrorStatus(c, http.StatusBadGateway, common.NewMessage("The credit was taken back but the card refund failed; repeat the refund to retry it"))
 		default:
@@ -142,5 +147,6 @@ func HwAdminRefundOrder(c *gin.Context) {
 		"currency":             result.Currency,
 		"fee_minor":            result.FeeMinor,
 		"refunded_minor":       result.RefundedMinor,
+		"provider_refund":      result.ProviderRefund,
 	})
 }
