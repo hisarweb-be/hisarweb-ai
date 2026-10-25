@@ -132,6 +132,34 @@ func HwQualityRunOptionsFromEnv() HwQualityRunOptions {
 type hwChatMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
+	// Parts carries images next to the text (OpenAI content parts). When set it
+	// replaces Content in the request body.
+	Parts []hwChatPart `json:"-"`
+}
+
+// hwChatPart is one text or image part of a message.
+type hwChatPart struct {
+	Type     string          `json:"type"`
+	Text     string          `json:"text,omitempty"`
+	ImageURL *hwChatImageURL `json:"image_url,omitempty"`
+}
+
+type hwChatImageURL struct {
+	URL string `json:"url"`
+}
+
+// MarshalJSON writes the content as a string, or as parts when images came along.
+func (m hwChatMessage) MarshalJSON() ([]byte, error) {
+	if len(m.Parts) == 0 {
+		return common.Marshal(struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		}{m.Role, m.Content})
+	}
+	return common.Marshal(struct {
+		Role    string       `json:"role"`
+		Content []hwChatPart `json:"content"`
+	}{m.Role, m.Parts})
 }
 
 type hwChatRequest struct {

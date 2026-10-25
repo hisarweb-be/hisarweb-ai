@@ -22,7 +22,6 @@ import { SkipToMain } from '@/components/skip-to-main'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { LayoutProvider } from '@/context/layout-provider'
 import { SearchProvider } from '@/context/search-provider'
-import { AdminAgentPanel } from '@/features/hw/admin-agent/admin-agent-panel'
 import { getCookie } from '@/lib/cookies'
 import { cn } from '@/lib/utils'
 
@@ -64,7 +63,6 @@ export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
           </div>
         </SidebarProvider>
         <CommandMenu />
-        <AdminAgentPanel />
       </SearchProvider>
     </LayoutProvider>
   )

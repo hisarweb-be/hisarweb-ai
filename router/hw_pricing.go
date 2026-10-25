@@ -30,6 +30,10 @@ func SetHwRouter(apiRouter *gin.RouterGroup) {
 	// The admin agent: chat, one-click text fixes and the escalation card.
 	// Admin only; the text read is public (the pages merge it at start-up).
 	hwRouter.GET("/text-overrides", middleware.HwPublicReadRateLimit(), middleware.HwPublicReadCache(), controller.HwTextOverrides)
+	// The assistant: fixed answers without a model call, public and rate limited.
+	hwRouter.GET("/assistant/faq", middleware.HwPublicReadRateLimit(), controller.HwAssistantFAQ)
+	hwRouter.POST("/assistant/ask", middleware.HwPublicReadRateLimit(), controller.HwAssistantAsk)
+	hwRouter.GET("/admin/assistant/questions", middleware.AdminAuth(), controller.HwAssistantOpenQuestions)
 	hwRouter.POST("/admin/agent/chat", middleware.AdminAuth(), controller.HwAdminAgentChat)
 	hwRouter.GET("/admin/agent/texts", middleware.AdminAuth(), controller.HwAdminAgentListTexts)
 	hwRouter.POST("/admin/agent/texts", middleware.AdminAuth(), controller.HwAdminAgentApplyText)

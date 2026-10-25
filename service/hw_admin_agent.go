@@ -53,10 +53,7 @@ func HwAdminAgentConfigFromEnv() HwAdminAgentConfig {
 		}
 		return ""
 	}
-	model := pick(HwAdminAgentModelEnv)
-	if model == "" {
-		model = HwAdminAgentDefaultModel
-	}
+	model := HwAdminAgentResolveModel(pick(HwAdminAgentModelEnv))
 	return HwAdminAgentConfig{
 		BaseURL: pick(HwAdminAgentBaseURLEnv, HwQualityBaseURLEnv),
 		APIKey:  pick(HwAdminAgentAPIKeyEnv, HwQualityAPIKeyEnv),
@@ -64,10 +61,89 @@ func HwAdminAgentConfigFromEnv() HwAdminAgentConfig {
 	}
 }
 
+// HwAdminAgentResolveModel makes sure the agent never runs on a retired or
+// unknown model: only a model of the sold catalog is accepted, anything else
+// (an empty value, a retired name such as claude-haiku-4-5, a typo) falls back
+// to the default. A stale environment value can therefore not bring an old,
+// dearer model back.
+func HwAdminAgentResolveModel(configured string) string {
+	name := strings.TrimSpace(configured)
+	for _, sold := range hwSoldModels {
+		if sold.Name == name {
+			return name
+		}
+	}
+	return HwAdminAgentDefaultModel
+}
+
+// HwAdminAgentAttachment is a pasted screenshot (an image data URL) or a small
+// text file that travels with a message.
+type HwAdminAgentAttachment struct {
+	Name string `json:"name"`
+	Mime string `json:"mime"`
+	// Data is a data URL for an image, or the plain text of a text file.
+	Data string `json:"data"`
+}
+
+const (
+	HwAssistantMaxAttachments    = 3
+	HwAssistantMaxImageDataBytes = 3 << 20
+	HwAssistantMaxTextRunes      = 12000
+)
+
+var hwAssistantImageMimes = map[string]bool{"image/png": true, "image/jpeg": true, "image/webp": true, "image/gif": true}
+
 // HwAdminAgentTurn is one chat message of the conversation.
 type HwAdminAgentTurn struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role        string                   `json:"role"`
+	Content     string                   `json:"content"`
+	Attachments []HwAdminAgentAttachment `json:"attachments,omitempty"`
+}
+
+// hwAssistantCleanAttachments checks the attachments of one turn: images must be
+// a base64 data URL of a known image type and small, text must be short.
+func hwAssistantCleanAttachments(items []HwAdminAgentAttachment) ([]HwAdminAgentAttachment, error) {
+	if len(items) > HwAssistantMaxAttachments {
+		return nil, errors.New("too many attachments")
+	}
+	clean := make([]HwAdminAgentAttachment, 0, len(items))
+	for _, item := range items {
+		item.Name = strings.TrimSpace(item.Name)
+		if utf8.RuneCountInString(item.Name) > 120 {
+			item.Name = string([]rune(item.Name)[:120])
+		}
+		if hwAssistantImageMimes[item.Mime] {
+			prefix := "data:" + item.Mime + ";base64,"
+			if !strings.HasPrefix(item.Data, prefix) || len(item.Data) > HwAssistantMaxImageDataBytes {
+				return nil, errors.New("invalid or too large image")
+			}
+		} else if strings.HasPrefix(item.Mime, "text/") {
+			if strings.TrimSpace(item.Data) == "" || utf8.RuneCountInString(item.Data) > HwAssistantMaxTextRunes {
+				return nil, errors.New("text attachment is empty or too long")
+			}
+		} else {
+			return nil, errors.New("unsupported attachment type")
+		}
+		clean = append(clean, item)
+	}
+	return clean, nil
+}
+
+// hwAssistantMessage turns one clean turn into a chat message; images become
+// content parts, text files are appended to the text.
+func hwAssistantMessage(role, content string, attachments []HwAdminAgentAttachment) hwChatMessage {
+	var parts []hwChatPart
+	for _, item := range attachments {
+		if hwAssistantImageMimes[item.Mime] {
+			parts = append(parts, hwChatPart{Type: "image_url", ImageURL: &hwChatImageURL{URL: item.Data}})
+		} else {
+			content += "\n\nAttached file " + item.Name + ":\n" + item.Data
+		}
+	}
+	if len(parts) == 0 {
+		return hwChatMessage{Role: role, Content: content}
+	}
+	return hwChatMessage{Role: role, Content: content, Parts: append([]hwChatPart{{Type: "text", Text: content}}, parts...)}
 }
 
 // HwAdminAgentTextFix asks the admin to replace a displayed text. Shown is
@@ -91,7 +167,8 @@ type HwAdminAgentAnswer struct {
 	Escalate *HwAdminAgentEscalation `json:"escalate,omitempty"`
 }
 
-const hwAdminAgentInstruction = `You are the assistant of the owner of api.hisarweb.be, a Turkish AI gateway. The owner reports an error or a hard word on the admin panel or the customer pages. Customers are Turkish; the customer interface language is Turkish. Reply in the language the owner writes in (Dutch by default), plain and short.
+const hwAdminAgentInstruction = `You are the chat employee of HisarWeb AI, fed through the Claude API, and you work only on api.hisarweb.be, a Turkish AI gateway. If asked who or what you are, say you are the chatbot employee of HisarWeb AI that runs on the Claude API. Never name a model, a model version, a supplier or a development tool, and you are not a coding assistant: you cannot run commands. Write like Altuner of HisarWeb: short active sentences, no em-dash, no emoji, no bold, no invented numbers, and end with one concrete question or action.
+You are the assistant of the owner of api.hisarweb.be, a Turkish AI gateway. The owner reports an error or a hard word on the admin panel or the customer pages. Customers are Turkish; the customer interface language is Turkish. Reply in the language the owner writes in (Dutch by default), plain and short.
 
 Answer with one JSON object and nothing else:
 {"reply": "<your answer>", "text_fix": null, "escalate": null}
@@ -114,10 +191,17 @@ func HwAdminAgentValidate(turns []HwAdminAgentTurn) ([]HwAdminAgentTurn, error) 
 			return nil, errors.New("invalid role")
 		}
 		content := strings.TrimSpace(turn.Content)
-		if content == "" || utf8.RuneCountInString(content) > HwAdminAgentMaxMessageRunes {
+		attachments, err := hwAssistantCleanAttachments(turn.Attachments)
+		if err != nil {
+			return nil, err
+		}
+		if (content == "" && len(attachments) == 0) || utf8.RuneCountInString(content) > HwAdminAgentMaxMessageRunes {
 			return nil, errors.New("message is empty or too long")
 		}
-		clean = append(clean, HwAdminAgentTurn{Role: turn.Role, Content: content})
+		if content == "" {
+			content = "(see attachment)"
+		}
+		clean = append(clean, HwAdminAgentTurn{Role: turn.Role, Content: content, Attachments: attachments})
 	}
 	if clean[len(clean)-1].Role != "user" {
 		return nil, errors.New("the last message must come from the user")
@@ -146,7 +230,7 @@ func HwAdminAgentAsk(ctx context.Context, config HwAdminAgentConfig, turns []HwA
 		if index == 0 {
 			content = hwAdminAgentInstruction + "\n\nOwner message:\n" + content
 		}
-		messages = append(messages, hwChatMessage{Role: turn.Role, Content: content})
+		messages = append(messages, hwAssistantMessage(turn.Role, content, turn.Attachments))
 	}
 	if messages[0].Role != "user" {
 		messages = append([]hwChatMessage{{Role: "user", Content: hwAdminAgentInstruction}}, messages...)
@@ -157,7 +241,9 @@ func HwAdminAgentAsk(ctx context.Context, config HwAdminAgentConfig, turns []HwA
 	if err != nil {
 		return HwAdminAgentAnswer{}, fmt.Errorf("admin agent call failed: %w", err)
 	}
-	return HwAdminAgentParse(text), nil
+	answer := HwAdminAgentParse(text)
+	answer.Reply = HwAssistantGuardReply(answer.Reply, "nl")
+	return answer, nil
 }
 
 // HwAdminAgentParse reads the model's answer. A model that ignores the JSON

@@ -55,8 +55,14 @@ Bureau V2.
 Instellingen op de server (Coolify), geen geheimen in de repo:
 
 - `HW_ADMIN_AGENT_BASE_URL`, `HW_ADMIN_AGENT_API_KEY`, `HW_ADMIN_AGENT_MODEL`
-  (standaard `claude-haiku-5-5`, voorlopig beste model voor de beste prijs). Zonder
-  eigen waarden valt de assistent terug op `HW_QUALITY_BASE_URL` en `HW_QUALITY_API_KEY`.
+  (standaard `claude-haiku-5-5`, voorlopig beste model voor de beste prijs). Alleen een
+  model uit de verkochte lijst wordt geaccepteerd; een oude of onbekende waarde valt terug
+  op de standaard, zodat een verouderd model niet terugkomt. Zonder eigen waarden valt de
+  assistent terug op `HW_QUALITY_BASE_URL` en `HW_QUALITY_API_KEY`.
+- De chat op elke pagina beantwoordt vaste vragen (identiteit, modellen, prijzen, API,
+  munten) uit de code zonder modelaanroep, ook in de Telegram-bot. Vragen zonder
+  antwoord staan voor beheerders in `GET /api/hw/admin/assistant/questions`; een nieuw
+  vast antwoord wordt toegevoegd in `service/hw_assistant_faq.go`.
 - `HW_BUREAU_URL`, `HW_BUREAU_COMPANY_ID`, optioneel `HW_BUREAU_TOKEN` voor de
   kaart naar Bureau V2. Zonder deze meldt de knop eerlijk dat het bord niet is
   gekoppeld.

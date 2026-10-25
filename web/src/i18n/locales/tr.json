@@ -2828,6 +2828,14 @@
     "This text was not found on the screen.": "Bu metin ekranda bulunamadı.",
     "This text is used in too many places to change at once.": "Bu metin çok fazla yerde kullanılıyor, tek seferde değiştirilemez.",
     "The original text is back after a reload.": "Özgün metin sayfa yenilenince geri gelir.",
-    "Card created: {{card}}": "Kart oluşturuldu: {{card}}"
+    "Card created: {{card}}": "Kart oluşturuldu: {{card}}",
+    "Assistant": "Asistan",
+    "Pick a question or type your own.": "Bir soru seçin ya da kendi sorunuzu yazın.",
+    "Type your question": "Sorunuzu yazın",
+    "At most 3 attachments per message.": "Mesaj başına en fazla 3 ek eklenebilir.",
+    "This file is too large.": "Bu dosya çok büyük.",
+    "Only images and text files can be attached.": "Yalnızca görsel ve metin dosyaları eklenebilir.",
+    "Attach a file": "Dosya ekle",
+    "I have no ready answer for this yet. Pick one of the questions above or ask support. Which one fits?": "Buna henüz hazır bir yanıtım yok. Yukarıdaki sorulardan birini seçin ya da destekle iletişime geçin. Hangisi size uyuyor?"
   }
 }

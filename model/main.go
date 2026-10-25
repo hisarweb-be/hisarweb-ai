@@ -409,6 +409,7 @@ func migrateDB() error {
 		&HwCreditExtension{},
 		&HwTextOverride{},
 		&HwAdminEscalation{},
+		&HwAssistantHit{},
 	)
 	if err != nil {
 		return err
