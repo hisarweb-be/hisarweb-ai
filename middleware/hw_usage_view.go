@@ -115,9 +115,14 @@ func (w *hwMaskWriter) correctCustomerUsage(usage map[string]any) {
 		return
 	}
 	usage["prompt_tokens"] = corrected
-	if completion, ok := hwUsageNumber(usage["completion_tokens"]); ok {
-		usage["total_tokens"] = corrected + completion
+	completion, ok := hwUsageNumber(usage["completion_tokens"])
+	if !ok {
+		// Without a readable completion count the old total would contradict
+		// prompt + completion, so the customer sees no total at all.
+		delete(usage, "total_tokens")
+		return
 	}
+	usage["total_tokens"] = corrected + completion
 }
 
 // hwUsageNumber reads one token count out of a decoded usage object.

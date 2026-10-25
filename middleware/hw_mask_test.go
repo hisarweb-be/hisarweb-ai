@@ -377,6 +377,7 @@ func TestHwMaskAppliesSupplierPromptOverhead(t *testing.T) {
 	for _, tc := range []struct {
 		name, path, body, estimate string
 		wantBody                   []string
+		wantAbsent                 []string
 	}{
 		{
 			name: "claude messages", path: "/v1/messages",
@@ -392,6 +393,18 @@ func TestHwMaskAppliesSupplierPromptOverhead(t *testing.T) {
 			name: "chat completions", path: "/v1/chat/completions",
 			body:     `{"id":"chatcmpl-1","object":"chat.completion","choices":[],"usage":{"prompt_tokens":807,"completion_tokens":5,"total_tokens":812}}`,
 			estimate: "0", wantBody: []string{`"prompt_tokens":7`, `"completion_tokens":5`, `"total_tokens":12`},
+		},
+		{
+			// Without a completion count the reported total cannot be recomputed,
+			// and the stale total would contradict prompt + completion.
+			name: "chat completions without a completion count", path: "/v1/chat/completions",
+			body:     `{"id":"chatcmpl-1","object":"chat.completion","choices":[],"usage":{"prompt_tokens":807,"total_tokens":812}}`,
+			estimate: "0", wantBody: []string{`"prompt_tokens":7`}, wantAbsent: []string{"total_tokens"},
+		},
+		{
+			name: "chat completions with an unreadable completion count", path: "/v1/chat/completions",
+			body:     `{"id":"chatcmpl-1","object":"chat.completion","choices":[],"usage":{"prompt_tokens":807,"completion_tokens":"5","total_tokens":812}}`,
+			estimate: "0", wantBody: []string{`"prompt_tokens":7`}, wantAbsent: []string{"total_tokens"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -411,6 +424,9 @@ func TestHwMaskAppliesSupplierPromptOverhead(t *testing.T) {
 			require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
 			for _, want := range tc.wantBody {
 				assert.Contains(t, recorder.Body.String(), want, "the customer sees the corrected count:\n%s", recorder.Body.String())
+			}
+			for _, absent := range tc.wantAbsent {
+				assert.NotContains(t, recorder.Body.String(), absent, "the customer sees no inconsistent count:\n%s", recorder.Body.String())
 			}
 		})
 	}

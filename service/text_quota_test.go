@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"net/http/httptest"
@@ -1548,6 +1549,90 @@ func TestAppendToolSurchargeLogInfoWritesOnlyStructuredFields(t *testing.T) {
 	assert.NotContains(t, fields, "file_search")
 	assert.NotContains(t, fields, "image_generation_call")
 	assert.NotContains(t, fields, "image_generation_call_price")
+}
+
+// A supplier stream that ends before the customer saw anything is retried and
+// therefore never settled: it writes no log of its own, because one request
+// leaves exactly one log. The supplier may still invoice the prompt of that
+// abandoned attempt, so its count travels on the route into the admin-only part
+// of the request's final log.
+func TestPostTextConsumeQuotaKeepsAbandonedStreamPrompt(t *testing.T) {
+	truncate(t)
+	const userID, channelID = 63, 63
+	seedUser(t, userID, 10_000)
+	seedChannel(t, channelID)
+	gin.SetMode(gin.TestMode)
+
+	for _, tc := range []struct {
+		name         string
+		streamStatus *relaycommon.StreamStatus
+		cut          bool
+	}{
+		{
+			name:         "supplier stream cut before its first chunk",
+			streamStatus: hwCutStreamStatus(),
+			cut:          true,
+		},
+		{
+			// The same stream that ends with its terminal event is settled as
+			// usual and is no abandoned attempt.
+			name: "supplier stream with its terminal event",
+			streamStatus: func() *relaycommon.StreamStatus {
+				status := hwCutStreamStatus()
+				status.MarkCompleted()
+				return status
+			}(),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			truncateLogs(t)
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+			ctx.Set(hwRouteContextKey, &HwRouteState{active: true, model: "stream-cut-model", channelID: channelID})
+			info := &relaycommon.RelayInfo{
+				UserId:          userID,
+				OriginModelName: "stream-cut-model",
+				UsingGroup:      "default",
+				StartTime:       time.Now(),
+				IsStream:        true,
+				ChannelMeta:     &relaycommon.ChannelMeta{ChannelId: channelID},
+				PriceData:       hosttypes.PriceData{ModelRatio: 1, CompletionRatio: 1, GroupRatioInfo: hosttypes.GroupRatioInfo{GroupRatio: 1}},
+				StreamStatus:    tc.streamStatus,
+			}
+
+			PostTextConsumeQuota(ctx, info, &dto.Usage{PromptTokens: 900, TotalTokens: 900}, nil)
+
+			finalLog := model.NewLogOther()
+			HwAppendRelayLogAdminInfo(ctx, finalLog)
+			adminInfo, _ := finalLog.Snapshot()["admin_info"].(map[string]any)
+			if !tc.cut {
+				log := getLastLog(t)
+				require.NotNil(t, log)
+				assert.Equal(t, 900, log.Quota, "a stream that completed is settled as usual")
+				assert.NotContains(t, adminInfo, "provider_abandoned_prompt_tokens")
+				return
+			}
+			assert.Nil(t, getLastLog(t), "the abandoned attempt writes no log of its own")
+			assert.Equal(t, 900, adminInfo["provider_abandoned_prompt_tokens"],
+				"the supplier prompt of the abandoned attempt stays measurable")
+		})
+	}
+}
+
+// hwCutStreamStatus builds the stream state of a supplier stream that ended
+// without its protocol terminal event.
+func hwCutStreamStatus() *relaycommon.StreamStatus {
+	status := relaycommon.NewStreamStatus()
+	status.RequireTerminal()
+	status.SetEndReason(relaycommon.StreamEndReasonScannerErr, errors.New("supplier connection reset"))
+	return status
+}
+
+// truncateLogs clears only the log table, so table-driven cases in one test
+// start from an empty log history.
+func truncateLogs(t *testing.T) {
+	t.Helper()
+	require.NoError(t, model.LOG_DB.Exec("DELETE FROM logs").Error)
 }
 
 // A request whose upstream returns no usage is logged without a charge. The

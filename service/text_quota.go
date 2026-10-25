@@ -393,6 +393,9 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		// saw nothing, so the route retries. Settling this attempt would charge
 		// an answer nobody saw and make the retry's settlement a no-op, leaving
 		// the real completion tokens unbilled.
+		if usage != nil {
+			HwNoteAbandonedAttempt(ctx, usage.PromptTokens)
+		}
 		return
 	}
 	originUsage := usage
