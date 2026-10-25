@@ -59,7 +59,7 @@ const tr = {
 
   filmTitle: 'HisarWeb AI’yı 54 saniyede izleyin',
   filmBody:
-    'Claude ve Gemini resmî API liste fiyatının yarısına, Türk lirasıyla ve KDV dahil: beş saatlik veya haftalık limit yok, yalnızca kullandığınız kadar ödersiniz. Film Türkçe seslendirmeli ve Türkçe altyazılıdır; görseller yapay zekâ ile üretilmiştir.',
+    'Claude ve Gemini resmî API liste fiyatının yarısına, Türk lirasıyla ve KDV dahil: beş saatlik veya haftalık limit yok, yalnızca kullandığınız kadar ödersiniz. Film Türkçe seslendirmeli ve Türkçe ekran metinlidir; görseller yapay zekâ ile üretilmiştir.',
   filmLabel: 'HisarWeb AI tanıtım filmi',
 
   benefitTitle: 'Neden HisarWeb AI?',
@@ -455,7 +455,7 @@ const en: Record<HwTextKey, string> = {
 
   filmTitle: 'Watch HisarWeb AI in 54 seconds',
   filmBody:
-    'Claude and Gemini at half the official API list price, in Turkish lira and VAT (KDV) included: no five-hour or weekly limits, you pay only for what you use. The film has a Turkish voice-over with Turkish subtitles; the images are AI-generated.',
+    'Claude and Gemini at half the official API list price, in Turkish lira and VAT (KDV) included: no five-hour or weekly limits, you pay only for what you use. The film has an English voice-over and English on-screen text; the images are AI-generated.',
   filmLabel: 'HisarWeb AI launch film',
 
   benefitTitle: 'Why HisarWeb AI?',

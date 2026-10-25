@@ -126,7 +126,26 @@ test('offers the launch film with controls, a poster and no autoplay', async () 
   expect(film).toHaveAttribute('controls')
   expect(film).toHaveAttribute('preload', 'none')
   expect(film).toHaveAttribute('poster', '/film/hisarweb-ai-lansman.jpg')
+  expect(film).toHaveAttribute('src', '/film/hisarweb-ai-lansman.mp4')
   expect(film).not.toHaveAttribute('autoplay')
+  expect(film.querySelector('track')).toBeNull()
+})
+
+// Every language is its own film with its own voice and on-screen text, so the
+// English page must not play the Turkish file and no subtitle track may return.
+test('plays the English film with its own poster on the English page', async () => {
+  await useLanguage('en')
+  renderLanding()
+
+  const film = await screen.findByLabelText('HisarWeb AI launch film')
+  expect(film).toHaveAttribute('src', '/film/hisarweb-ai-lansman-en-v1.mp4')
+  expect(film).toHaveAttribute('poster', '/film/hisarweb-ai-lansman-en.jpg')
+  expect(film).toHaveAttribute('controls')
+  expect(film).not.toHaveAttribute('autoplay')
+  expect(film.querySelector('track')).toBeNull()
+  expect(
+    screen.getByText(/English voice-over and English on-screen text/)
+  ).toBeInTheDocument()
 })
 
 // The film states the price honestly: half of the official API list price,
