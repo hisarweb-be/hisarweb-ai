@@ -175,6 +175,7 @@ Tasks that touch none of these (for example unrelated frontend work, authenticat
 
 - A fresh worktree cannot build the root module: `main.go` embeds `web/dist`, which is gitignored. Build, vet, and test per package (for example `go test ./controller/ ./model/`), with `GOCACHE` set explicitly on Windows; do not spend turns on the root build.
 - One agent run handles one finding, or two that share a file: red test, smallest fix, green test, commit. Commit after every green finding, so a turn limit never leaves uncommitted work behind.
+- A change in `service/` that writes or skips a consume log, a settlement, or a refund also runs `go test -run TestHw ./controller/`: the end-to-end route tests hold the one-request-one-consume-log contract that the new unit test alone does not see.
 - A change without database behavior (see the list under Database compatibility) needs no three-database matrix and goes to a pull request. A change with database behavior that cannot get the full matrix locally: run SQLite, commit the work on the branch, name the missing engines as the blocker in the handoff, and leave the pull request to the orchestrator. Never drop the work.
 
 ### Project Governance
