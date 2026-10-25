@@ -1552,10 +1552,11 @@ func TestAppendToolSurchargeLogInfoWritesOnlyStructuredFields(t *testing.T) {
 }
 
 // A supplier stream that ends before the customer saw anything is retried and
-// therefore never settled. The supplier may still invoice the prompt of that
-// abandoned attempt, so the attempt leaves one consume log with zero quota and
-// the supplier's prompt count in its admin-only part.
-func TestPostTextConsumeQuotaLogsStreamCutBeforeOutput(t *testing.T) {
+// therefore never settled: it writes no log of its own, because one request
+// leaves exactly one log. The supplier may still invoice the prompt of that
+// abandoned attempt, so its count travels on the route into the admin-only part
+// of the request's final log.
+func TestPostTextConsumeQuotaKeepsAbandonedStreamPrompt(t *testing.T) {
 	truncate(t)
 	const userID, channelID = 63, 63
 	seedUser(t, userID, 10_000)
@@ -1574,7 +1575,7 @@ func TestPostTextConsumeQuotaLogsStreamCutBeforeOutput(t *testing.T) {
 		},
 		{
 			// The same stream that ends with its terminal event is settled as
-			// usual: the reconciliation row must not appear there.
+			// usual and is no abandoned attempt.
 			name: "supplier stream with its terminal event",
 			streamStatus: func() *relaycommon.StreamStatus {
 				status := hwCutStreamStatus()
@@ -1587,7 +1588,7 @@ func TestPostTextConsumeQuotaLogsStreamCutBeforeOutput(t *testing.T) {
 			truncateLogs(t)
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 			ctx.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
-			ctx.Set(hwRouteContextKey, &HwRouteState{active: true, model: "stream-cut-model"})
+			ctx.Set(hwRouteContextKey, &HwRouteState{active: true, model: "stream-cut-model", channelID: channelID})
 			info := &relaycommon.RelayInfo{
 				UserId:          userID,
 				OriginModelName: "stream-cut-model",
@@ -1601,22 +1602,18 @@ func TestPostTextConsumeQuotaLogsStreamCutBeforeOutput(t *testing.T) {
 
 			PostTextConsumeQuota(ctx, info, &dto.Usage{PromptTokens: 900, TotalTokens: 900}, nil)
 
-			log := getLastLog(t)
-			require.NotNil(t, log)
-			var other map[string]any
-			require.NoError(t, common.UnmarshalJsonStr(log.Other, &other))
-			adminInfo, _ := other["admin_info"].(map[string]any)
+			finalLog := model.NewLogOther()
+			HwAppendRelayLogAdminInfo(ctx, finalLog)
+			adminInfo, _ := finalLog.Snapshot()["admin_info"].(map[string]any)
 			if !tc.cut {
+				log := getLastLog(t)
+				require.NotNil(t, log)
 				assert.Equal(t, 900, log.Quota, "a stream that completed is settled as usual")
-				assert.NotContains(t, adminInfo, "stream_cut_before_output")
+				assert.NotContains(t, adminInfo, "provider_abandoned_prompt_tokens")
 				return
 			}
-			assert.Zero(t, log.Quota, "an answer nobody saw is not charged")
-			assert.Zero(t, log.PromptTokens, "the usage aggregates stay untouched")
-			assert.Equal(t, "Stream did not complete successfully", log.Content)
-			require.NotNil(t, adminInfo, "the reason is admin-only: %s", log.Other)
-			assert.Equal(t, true, adminInfo["stream_cut_before_output"])
-			assert.Equal(t, float64(900), adminInfo["prompt_tokens_upstream"],
+			assert.Nil(t, getLastLog(t), "the abandoned attempt writes no log of its own")
+			assert.Equal(t, 900, adminInfo["provider_abandoned_prompt_tokens"],
 				"the supplier prompt of the abandoned attempt stays measurable")
 		})
 	}

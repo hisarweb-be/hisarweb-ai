@@ -387,47 +387,15 @@ func usageSemanticFromUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) 
 	return "openai"
 }
 
-// hwLogInterruptedStreamAttempt records a supplier stream that ended before the
-// customer saw any output. The attempt itself is not settled: the route retries
-// and that retry settles the request, so charging this attempt would bill an
-// answer nobody saw and turn the retry's settlement into a no-op. The supplier
-// may still invoice the prompt of the abandoned attempt, so the row keeps that
-// count in its admin-only part; without a row there is nothing to reconcile the
-// supplier invoice against.
-func hwLogInterruptedStreamAttempt(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage) {
-	if relayInfo == nil {
-		return
-	}
-	other := model.NewLogOther()
-	other.SetAdmin("stream_cut_before_output", true)
-	if usage != nil && usage.PromptTokens > 0 {
-		other.SetAdmin("prompt_tokens_upstream", usage.PromptTokens)
-	}
-	HwAppendRelayLogAdminInfo(ctx, other)
-	// The row exists for reconciliation only: zero quota and zero token columns
-	// keep the usage aggregates and the customer's charge unchanged.
-	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
-		ChannelId: relayInfo.ChannelId,
-		ModelName: relayInfo.GetBillingModelName(),
-		TokenName: ctx.GetString("token_name"),
-		// Reuse a sentence the consoles already translate. The precise reason
-		// stays in the admin-only marker above.
-		Content:        []*common.Message{common.NewMessage("Stream did not complete successfully")},
-		TokenId:        relayInfo.TokenId,
-		UseTimeSeconds: int(time.Now().Unix() - relayInfo.StartTime.Unix()),
-		IsStream:       relayInfo.IsStream,
-		Group:          relayInfo.UsingGroup,
-		Other:          other,
-	})
-}
-
 func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent []*common.Message) {
 	if HwStreamCutBeforeOutput(ctx, relayInfo) {
 		// The supplier stream ended before its terminal event and the customer
 		// saw nothing, so the route retries. Settling this attempt would charge
 		// an answer nobody saw and make the retry's settlement a no-op, leaving
 		// the real completion tokens unbilled.
-		hwLogInterruptedStreamAttempt(ctx, relayInfo, usage)
+		if usage != nil {
+			HwNoteAbandonedAttempt(ctx, usage.PromptTokens)
+		}
 		return
 	}
 	originUsage := usage

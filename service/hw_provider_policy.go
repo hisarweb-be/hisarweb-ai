@@ -64,6 +64,7 @@ type HwRouteState struct {
 	fallback        bool
 	streamWrites    int
 	streamCut       bool
+	abandonedPrompt int
 	maskAlerts      int
 	upstreamIDs     []string
 }
@@ -524,6 +525,18 @@ func HwNoteStreamWrite(c *gin.Context) {
 	}
 }
 
+// HwNoteAbandonedAttempt keeps the supplier prompt count of an attempt whose
+// stream ended before the customer saw output. That attempt is retried and not
+// settled, but the supplier may still invoice its prompt; the count lands in the
+// admin-only part of the request's single log so the invoice can be reconciled.
+func HwNoteAbandonedAttempt(c *gin.Context, promptTokens int) {
+	state := HwRoute(c)
+	if state == nil || promptTokens <= 0 {
+		return
+	}
+	state.abandonedPrompt += promptTokens
+}
+
 // HwNoteMaskAlert records that the last-resort scan had to rewrite provider
 // traces. Only the count is logged; the content never is.
 func HwNoteMaskAlert(c *gin.Context) {
@@ -572,6 +585,9 @@ func HwAppendRelayLogAdminInfo(c *gin.Context, other *model.LogOther) {
 	}
 	if state.streamCut {
 		other.SetAdmin("provider_stream_interrupted", true)
+	}
+	if state.abandonedPrompt > 0 {
+		other.SetAdmin("provider_abandoned_prompt_tokens", state.abandonedPrompt)
 	}
 	if state.maskAlerts > 0 {
 		other.SetAdmin("provider_mask_alerts", state.maskAlerts)
