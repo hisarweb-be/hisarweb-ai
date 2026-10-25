@@ -7479,6 +7479,14 @@
     "This text was not found on the screen.": "This text was not found on the screen.",
     "This text is used in too many places to change at once.": "This text is used in too many places to change at once.",
     "The original text is back after a reload.": "The original text is back after a reload.",
-    "Card created: {{card}}": "Card created: {{card}}"
+    "Card created: {{card}}": "Card created: {{card}}",
+    "Assistant": "Assistant",
+    "Pick a question or type your own.": "Pick a question or type your own.",
+    "Type your question": "Type your question",
+    "At most 3 attachments per message.": "At most 3 attachments per message.",
+    "This file is too large.": "This file is too large.",
+    "Only images and text files can be attached.": "Only images and text files can be attached.",
+    "Attach a file": "Attach a file",
+    "I have no ready answer for this yet. Pick one of the questions above or ask support. Which one fits?": "I have no ready answer for this yet. Pick one of the questions above or ask support. Which one fits?"
   }
 }

@@ -16,17 +16,22 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { loadTextOverrides } from '@/i18n/text-overrides'
 
-import { AdminAgentPanel } from '../admin-agent-panel'
 import { applyFix } from '../apply-fix'
+import { AssistantWidget } from '../assistant-widget'
 import { findTextKeys, MAX_TEXT_MATCHES } from '../find-keys'
 
 const admin = vi.hoisted(() => ({ isAdmin: false }))
-const api = vi.hoisted(() => ({ applyTextOverride: vi.fn() }))
+const api = vi.hoisted(() => ({
+  applyTextOverride: vi.fn(),
+  fetchAssistantFaq: vi.fn(),
+  askAssistantFaq: vi.fn(),
+  askAdminAgent: vi.fn(),
+}))
 
 vi.mock('@/hooks/use-admin', () => ({ useIsAdmin: () => admin.isAdmin }))
 vi.mock('react-i18next', () => ({
@@ -38,6 +43,9 @@ vi.mock('react-i18next', () => ({
 vi.mock('../api', async (original) => ({
   ...(await original<typeof import('../api')>()),
   applyTextOverride: api.applyTextOverride,
+  fetchAssistantFaq: api.fetchAssistantFaq,
+  askAssistantFaq: api.askAssistantFaq,
+  askAdminAgent: api.askAdminAgent,
 }))
 
 describe('findTextKeys', () => {
@@ -103,17 +111,70 @@ describe('applyFix', () => {
   })
 })
 
-describe('AdminAgentPanel', () => {
-  it('is hidden for a customer', () => {
+describe('AssistantWidget', () => {
+  beforeEach(() => {
+    api.fetchAssistantFaq.mockReset()
+    api.askAssistantFaq.mockReset()
+    api.askAdminAgent.mockReset()
+    api.fetchAssistantFaq.mockResolvedValue([
+      { id: 'identity', question: 'Who are you?', answer: 'x' },
+    ])
+  })
+
+  it('shows the Telegram icon with an online light to a customer', () => {
     admin.isAdmin = false
-    render(<AdminAgentPanel />)
+    render(<AssistantWidget />)
+    expect(screen.getByLabelText('Assistant')).toBeTruthy()
+    expect(screen.getByTestId('assistant-online')).toBeTruthy()
     expect(screen.queryByLabelText('Admin assistant')).toBeNull()
   })
 
-  it('shows the assistant button to an admin', () => {
+  it('labels the button for an admin', () => {
     admin.isAdmin = true
-    render(<AdminAgentPanel />)
+    render(<AssistantWidget />)
     expect(screen.getByLabelText('Admin assistant')).toBeTruthy()
+  })
+
+  it('answers a fixed question without asking the model', async () => {
+    admin.isAdmin = true
+    api.askAssistantFaq.mockResolvedValue({
+      matched: true,
+      id: 'identity',
+      answer: 'I am the chat employee of HisarWeb AI.',
+    })
+    render(<AssistantWidget />)
+    fireEvent.click(screen.getByLabelText('Admin assistant'))
+    fireEvent.click(await screen.findByText('Who are you?'))
+    expect(
+      await screen.findByText('I am the chat employee of HisarWeb AI.')
+    ).toBeTruthy()
+    expect(api.askAdminAgent).not.toHaveBeenCalled()
+  })
+
+  it('gives a customer no model answer for an unknown question', async () => {
+    admin.isAdmin = false
+    api.askAssistantFaq.mockResolvedValue({ matched: false })
+    render(<AssistantWidget />)
+    fireEvent.click(screen.getByLabelText('Assistant'))
+    const box = await screen.findByLabelText('Type your question')
+    fireEvent.change(box, { target: { value: 'something odd' } })
+    fireEvent.click(screen.getByLabelText('Send'))
+    await waitFor(() =>
+      expect(screen.getByText(/no ready answer/)).toBeTruthy()
+    )
+    expect(api.askAdminAgent).not.toHaveBeenCalled()
+  })
+
+  it('adds a pasted screenshot as an attachment for an admin', async () => {
+    admin.isAdmin = true
+    render(<AssistantWidget />)
+    fireEvent.click(screen.getByLabelText('Admin assistant'))
+    const box = await screen.findByLabelText('What is wrong or unclear?')
+    const file = new File(['png'], 'shot.png', { type: 'image/png' })
+    fireEvent.paste(box, {
+      clipboardData: { items: [{ kind: 'file', type: 'image/png', getAsFile: () => file }], files: [file] },
+    })
+    expect(await screen.findByLabelText('Remove attachment')).toBeTruthy()
   })
 })
 

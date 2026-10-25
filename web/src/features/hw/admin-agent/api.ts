@@ -19,7 +19,38 @@ For commercial licensing, please contact support@quantumnous.com
 import { api } from '@/lib/api'
 import { requireServerSuccess } from '@/lib/server-error-message'
 
-export type AgentTurn = { role: 'user' | 'assistant'; content: string }
+export type AgentAttachment = { name: string; mime: string; data: string }
+
+export type AgentTurn = {
+  role: 'user' | 'assistant'
+  content: string
+  attachments?: AgentAttachment[]
+}
+
+export type AssistantFaq = { id: string; question: string; answer: string }
+
+export type AssistantAsk =
+  | { matched: false }
+  | { matched: true; id: string; answer: string }
+
+/** The assistant answers in one of these languages; other UI languages get English. */
+export function assistantLanguage(language: string | undefined): string {
+  const base = (language ?? 'tr').slice(0, 2).toLowerCase()
+  return base === 'tr' || base === 'nl' ? base : 'en'
+}
+
+export async function fetchAssistantFaq(lang: string): Promise<AssistantFaq[]> {
+  const response = await api.get('/api/hw/assistant/faq', { params: { lang } })
+  return (requireServerSuccess(response.data).data as { faq: AssistantFaq[] }).faq
+}
+
+export async function askAssistantFaq(
+  question: string,
+  lang: string
+): Promise<AssistantAsk> {
+  const response = await api.post('/api/hw/assistant/ask', { question, lang })
+  return requireServerSuccess(response.data).data as AssistantAsk
+}
 
 export type AgentTextFix = { lang: string; shown: string; proposed: string }
 

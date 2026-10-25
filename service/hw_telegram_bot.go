@@ -201,6 +201,10 @@ func hwProcessTelegramUpdate(ctx context.Context, update hwTelegramUpdate, now i
 	if payload, ok := hwTelegramLinkPayload(message.Text); ok {
 		return hwLinkTelegramAccount(ctx, message, payload, texts, now)
 	}
+	// A question with a fixed answer is answered for anyone, without a model call.
+	if hwTelegramFAQReply(ctx, message, now) {
+		return HwWebhookAccepted
+	}
 	user, err := model.GetUserByTelegramID(strconv.FormatInt(message.From.Id, 10))
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		// Someone who opens the bot without a link gets told where the link
@@ -222,6 +226,12 @@ func hwProcessTelegramUpdate(ctx context.Context, update hwTelegramUpdate, now i
 		// login would reach only customers who had opened the bot before.
 		if strings.HasPrefix(strings.TrimSpace(message.Text), "/start") {
 			hwAnswerTelegramChat(ctx, strconv.FormatInt(message.Chat.Id, 10), texts.Prompt, texts.Button)
+			return HwWebhookAccepted
+		}
+		// A linked customer who asks something without a fixed answer is told so
+		// instead of being left without a reply.
+		if text := strings.TrimSpace(message.Text); text != "" && !strings.HasPrefix(text, "/") {
+			hwAnswerTelegramChat(ctx, strconv.FormatInt(message.Chat.Id, 10), hwTelegramNoAnswer(hwTelegramAssistantLang(message.From.LanguageCode)), "")
 			return HwWebhookAccepted
 		}
 		return HwWebhookIgnored
