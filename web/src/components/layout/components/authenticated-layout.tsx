@@ -49,11 +49,16 @@ export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
               className={cn(
                 '@container/content',
                 'h-[calc(100svh-var(--app-header-height,0px))]',
-                'min-h-0 overflow-hidden',
+                'min-h-0 overflow-y-auto',
                 'peer-data-[variant=inset]:h-[calc(100svh-var(--app-header-height,0px)-(var(--spacing)*4))]'
               )}
             >
-              {props.children ?? <AnimatedOutlet />}
+              {/* The page fills the whole view and the footer sits below it, so
+                  the footer scrolls into view at the end of every page instead
+                  of taking a fixed slice of a small screen. */}
+              <div className='flex h-full min-h-0 shrink-0 flex-col'>
+                {props.children ?? <AnimatedOutlet />}
+              </div>
               <Footer variant='compact' />
             </SidebarInset>
           </div>

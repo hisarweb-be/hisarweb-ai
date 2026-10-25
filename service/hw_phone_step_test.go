@@ -677,8 +677,22 @@ func TestHwTelegramWebhookPhoneStep(t *testing.T) {
 		assert.Empty(t, api.messages())
 	})
 
+	t.Run("a German number as Telegram shares it is recorded and earns the credit", func(t *testing.T) {
+		api, secret := hwTelegramTestSetup(t)
+		user := hwPhoneStepTestTelegramUser(t, "german-number@example.com", "700099")
+		body := hwTelegramContactUpdate(t, 99, 700099, "tr", hwInt64Ptr(700099), "4915123456789")
+
+		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+		assert.Equal(t, http.StatusOK, outcome.HTTPStatus())
+		assert.Len(t, hwPhoneStepSignals(t, user.Id, "phone"), 1)
+		assert.Len(t, hwPhoneStepFreePackages(t, user.Id), 1)
+		sent := api.messages()
+		require.Len(t, sent, 1)
+		assert.Equal(t, hwTelegramTextsFor("tr").Accepted, sent[0].Text)
+	})
+
 	t.Run("an invalid or foreign number is refused", func(t *testing.T) {
-		for _, phone := range []string{"12345", "+1 555 123 4567", "+90 555 000 11 2a"} {
+		for _, phone := range []string{"12345", "+1 555 123 4567", "15551234567", "+90 555 000 11 2a"} {
 			t.Run(phone, func(t *testing.T) {
 				api, secret := hwTelegramTestSetup(t)
 				user := hwPhoneStepTestTelegramUser(t, "bad-number@example.com", "700009")
@@ -812,6 +826,20 @@ func TestHwTelegramWebhookLinksAnAccount(t *testing.T) {
 		api, secret := hwTelegramTestSetup(t)
 		user := hwPhoneStepTestTelegramUser(t, "relink@example.com", "900026")
 		body := hwTelegramTextUpdate(t, 26, 900026, "tr", "/start "+hwTelegramLinkTokenFor(t, user.Id))
+
+		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+		assert.Equal(t, http.StatusOK, outcome.HTTPStatus())
+
+		sent := api.messages()
+		require.Len(t, sent, 1)
+		assert.Equal(t, hwTelegramTextsFor("tr").Prompt, sent[0].Text)
+		assert.Equal(t, hwTelegramTextsFor("tr").Button, sent[0].Button)
+	})
+
+	t.Run("a spent link from an already linked account still offers the share button", func(t *testing.T) {
+		api, secret := hwTelegramTestSetup(t)
+		hwPhoneStepTestTelegramUser(t, "spent-link@example.com", "900027")
+		body := hwTelegramTextUpdate(t, 27, 900027, "tr", "/start not-a-real-token")
 
 		outcome := HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
 		assert.Equal(t, http.StatusOK, outcome.HTTPStatus())

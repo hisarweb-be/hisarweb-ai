@@ -46,14 +46,19 @@ var ErrHwInvalidUserSignal = errors.New("invalid user signal")
 var ErrHwInvalidPhoneNumber = errors.New("invalid phone number")
 
 // hwPhoneCountryCodesEnv names the comma-separated country codes a phone number
-// may carry. The default accepts Turkey only, so a foreign number never becomes
-// the signal that earns the free trial credit.
+// may carry. The first code completes a national spelling.
 const hwPhoneCountryCodesEnv = "HW_PHONE_COUNTRY_CODES"
 
-// hwDefaultPhoneCountryCode is the country code used when
-// HW_PHONE_COUNTRY_CODES is unset, empty or holds no usable code, and the code a
-// national spelling (without a country code) is completed with.
+// hwDefaultPhoneCountryCode is the code a national spelling (without a country
+// code) is completed with when HW_PHONE_COUNTRY_CODES is unset.
 const hwDefaultPhoneCountryCode = "90"
+
+// hwDefaultPhoneCountryCodes apply when HW_PHONE_COUNTRY_CODES is unset, empty
+// or holds no usable code: Turkey first, then the European countries where most
+// of our Turkish-speaking customers live (Germany, the Netherlands, Belgium,
+// France, Austria, Switzerland, the United Kingdom, Sweden, Denmark). A customer
+// there shares a local SIM, and refusing it left them stuck on the phone step.
+var hwDefaultPhoneCountryCodes = []string{hwDefaultPhoneCountryCode, "49", "31", "32", "33", "43", "41", "44", "46", "45"}
 
 // Signal kinds recorded in hw_user_signals. Every kind is hashed before it is
 // stored; the table never holds a raw address, number or fingerprint.
@@ -158,7 +163,7 @@ func HwHashSignalValue(value string) (string, error) {
 
 // hwPhoneCountryCodes reads the country codes a number may carry from
 // HW_PHONE_COUNTRY_CODES (comma separated, a leading plus is dropped). Without
-// a usable setting only Turkey is accepted.
+// a usable setting hwDefaultPhoneCountryCodes apply.
 func hwPhoneCountryCodes() []string {
 	codes := make([]string, 0, 4)
 	for part := range strings.SplitSeq(os.Getenv(hwPhoneCountryCodesEnv), ",") {
@@ -178,7 +183,7 @@ func hwPhoneCountryCodes() []string {
 		}
 	}
 	if len(codes) == 0 {
-		return []string{hwDefaultPhoneCountryCode}
+		return hwDefaultPhoneCountryCodes
 	}
 	return codes
 }
@@ -197,8 +202,8 @@ func hwValidPhoneNationalLength(code string, national int) bool {
 // hwNormalizePhone reduces a phone number to E.164 (+90XXXXXXXXXX by default).
 // Accepted spellings are "+90 555 123 45 67", "905551234567", "0555 123 45 67"
 // and a bare "555 123 45 67"; spaces, dashes, dots, parentheses and a leading
-// plus are separators. A number that carries a country code outside
-// HW_PHONE_COUNTRY_CODES is refused, and so is anything that does not leave a
+// plus are separators. Another accepted country needs the plus ("+49 151 ...").
+// A number that carries a country code outside the accepted codes is refused, and so is anything that does not leave a
 // national part of the right length: two spellings of one number must produce
 // one hash, and an unrecognisable or foreign number must not be stored at all.
 func hwNormalizePhone(raw string) (string, error) {
@@ -218,7 +223,13 @@ func hwNormalizePhone(raw string) (string, error) {
 	}
 	number := digits.String()
 	codes := hwPhoneCountryCodes()
-	for _, code := range codes {
+	// Without the plus only the first code is read as a country code: a bare
+	// national spelling such as Ankara's "312 ..." must not turn into +31.
+	candidates := codes
+	if !international {
+		candidates = codes[:1]
+	}
+	for _, code := range candidates {
 		if national, ok := strings.CutPrefix(number, code); ok && hwValidPhoneNationalLength(code, len(national)) {
 			return "+" + code + national, nil
 		}

@@ -175,6 +175,9 @@ func TestHwNormalizePhone(t *testing.T) {
 		{"5551234567", "+905551234567"},
 		{"555 123 45 67", "+905551234567"},
 		{"(0555) 123-45-67", "+905551234567"},
+		// The European countries of the diaspora are accepted by default.
+		{"+49 151 23456789", "+4915123456789"},
+		{"+32 470 12 34 56", "+32470123456"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.given, func(t *testing.T) {
@@ -184,9 +187,9 @@ func TestHwNormalizePhone(t *testing.T) {
 		})
 	}
 
-	// A foreign number is refused by default: only a Turkish number may become
-	// the signal that earns the free trial credit.
-	for _, given := range []string{"", "12345", "+1 555 123 4567", "+49 30 1234567", "0555 123 45 6a", "00905551234567"} {
+	// A number outside the accepted countries is refused by default, and so is
+	// a national spelling that only looks like another country code.
+	for _, given := range []string{"", "12345", "+1 555 123 4567", "+7 912 345 67 89", "0555 123 45 6a", "00905551234567"} {
 		t.Run("rejects "+given, func(t *testing.T) {
 			_, err := hwNormalizePhone(given)
 			require.ErrorIs(t, err, ErrHwInvalidPhoneNumber)
@@ -203,6 +206,15 @@ func TestHwNormalizePhone(t *testing.T) {
 		normalised, err = hwNormalizePhone("555 123 45 67")
 		require.NoError(t, err)
 		assert.Equal(t, "+905551234567", normalised)
+		// A country that the setting leaves out is refused again.
+		_, err = hwNormalizePhone("+32 470 12 34 56")
+		require.ErrorIs(t, err, ErrHwInvalidPhoneNumber)
+	})
+
+	t.Run("without a plus an Ankara number stays Turkish", func(t *testing.T) {
+		normalised, err := hwNormalizePhone("312 123 45 67")
+		require.NoError(t, err)
+		assert.Equal(t, "+903121234567", normalised)
 	})
 }
 

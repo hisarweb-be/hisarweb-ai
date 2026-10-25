@@ -218,7 +218,14 @@ func hwProcessTelegramUpdate(ctx context.Context, update hwTelegramUpdate, now i
 		hwAnswerTelegramChat(ctx, strconv.FormatInt(message.Chat.Id, 10), texts.Rejected, "")
 		return HwWebhookAccepted
 	}
-	if err := model.HwRecordPhoneSignal(user.Id, message.Contact.PhoneNumber); err != nil {
+	// Telegram shares the full international number, usually without the plus;
+	// adding it lets a German or Belgian number keep its own country code. A
+	// number with a trunk zero is national and stays as given.
+	phone := strings.TrimSpace(message.Contact.PhoneNumber)
+	if !strings.HasPrefix(phone, "+") && !strings.HasPrefix(phone, "0") {
+		phone = "+" + phone
+	}
+	if err := model.HwRecordPhoneSignal(user.Id, phone); err != nil {
 		if errors.Is(err, model.ErrHwInvalidPhoneNumber) {
 			common.SysLog(common.LogText("telegram webhook refused an unaccepted phone number for user %d", user.Id))
 			hwAnswerTelegramChat(ctx, strconv.FormatInt(message.Chat.Id, 10), texts.Rejected, "")
@@ -265,6 +272,12 @@ func hwLinkTelegramAccount(ctx context.Context, message *hwTelegramMessage, payl
 	userID, err := model.HwConsumeTelegramLinkToken(payload, now)
 	if err != nil {
 		if errors.Is(err, model.ErrHwTelegramLinkInvalid) {
+			// A customer who is already linked and opens the bot again through an
+			// old dashboard link wants the share button, not a dead end.
+			if _, lookupErr := model.GetUserByTelegramID(telegramID); lookupErr == nil {
+				hwAnswerTelegramChat(ctx, chatID, texts.Prompt, texts.Button)
+				return HwWebhookAccepted
+			}
 			common.SysLog(common.LogText("telegram webhook refused an unusable link token"))
 			hwAnswerTelegramChat(ctx, chatID, texts.LinkInvalid, "")
 			return HwWebhookAccepted
