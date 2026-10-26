@@ -71,9 +71,12 @@ func TestMain(m *testing.M) {
 // Seed helpers
 // ---------------------------------------------------------------------------
 
+// truncate empties the billing tables before and after the test: a test that
+// ran earlier without this helper may have left rows, and the log counts below
+// would then depend on the test order.
 func truncate(t *testing.T) {
 	t.Helper()
-	t.Cleanup(func() {
+	empty := func() {
 		model.DB.Exec("DELETE FROM tasks")
 		model.DB.Exec("DELETE FROM users")
 		model.DB.Exec("DELETE FROM tokens")
@@ -84,7 +87,9 @@ func truncate(t *testing.T) {
 		model.DB.Exec("DELETE FROM user_subscriptions")
 		model.DB.Exec("DELETE FROM system_task_locks")
 		model.DB.Exec("DELETE FROM system_tasks")
-	})
+	}
+	empty()
+	t.Cleanup(empty)
 }
 
 func seedUser(t *testing.T, id int, quota int) {
