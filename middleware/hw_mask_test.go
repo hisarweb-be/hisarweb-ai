@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -568,4 +570,134 @@ func TestHwLooksLikeSSE(t *testing.T) {
 	for _, data := range []string{`{"a":1}`, "<html>", "datum: x", "events: x"} {
 		assert.False(t, hwLooksLikeSSE([]byte(data)), data)
 	}
+}
+
+// TestHwFilterHandshake proves the upgrade response of a hijacked connection
+// keeps the handshake working but loses every supplier trace.
+func TestHwFilterHandshake(t *testing.T) {
+	block := "HTTP/1.1 101 Switching Protocols\r\n" +
+		"Upgrade: websocket\r\n" +
+		"Connection: Upgrade\r\n" +
+		"Sec-WebSocket-Accept: abc=\r\n" +
+		"X-Or-Cost: 0.2\r\n" +
+		"X-LiteLLM-Call-Id: 1\r\n" +
+		"X-Served-By: served by Lumia\r\n" +
+		"\r\n" +
+		"\r\n"
+	out := string(hwFilterHandshake([]byte(block)))
+	lines := strings.Split(strings.TrimSuffix(out, "\r\n\r\n"), "\r\n")
+	assert.Equal(t, "HTTP/1.1 101 Switching Protocols", lines[0], "the status line stays")
+	assert.Contains(t, lines, "Upgrade: websocket", "protocol headers stay")
+	assert.Contains(t, lines, "Connection: Upgrade")
+	assert.Contains(t, lines, "Sec-WebSocket-Accept: abc=")
+	assert.NotContains(t, strings.ToLower(out), "x-or-cost", "a header named after the supplier is dropped")
+	assert.NotContains(t, strings.ToLower(out), "litellm")
+	assert.NotContains(t, strings.ToLower(out), "lumia", "a supplier word in a value is replaced")
+	assert.Contains(t, out, "X-Served-By: served by provider")
+	assert.True(t, strings.HasSuffix(out, "\r\n\r\n"), "the head ends with one empty line")
+	assert.False(t, strings.HasSuffix(out, "\r\n\r\n\r\n"), "an empty line in the block does not end up as a second empty line")
+
+	t.Run("a line without a colon is kept", func(t *testing.T) {
+		out := string(hwFilterHandshake([]byte("HTTP/1.1 200 OK\r\nstray line\r\n\r\n")))
+		assert.Equal(t, "HTTP/1.1 200 OK\r\nstray line\r\n\r\n", out)
+	})
+}
+
+type hwRecordingWriter struct {
+	writes [][]byte
+	failAt int
+}
+
+func (r *hwRecordingWriter) Write(data []byte) (int, error) {
+	r.writes = append(r.writes, append([]byte(nil), data...))
+	if r.failAt > 0 && len(r.writes) == r.failAt {
+		return 0, errors.New("closed")
+	}
+	return len(data), nil
+}
+
+// TestHwHandshakeWriter proves the head is held until it is complete, filtered
+// once, and that the traffic after it is never touched or delayed.
+func TestHwHandshakeWriter(t *testing.T) {
+	t.Run("a head split over two writes is filtered as one block", func(t *testing.T) {
+		target := &hwRecordingWriter{}
+		writer := &hwHandshakeWriter{target: target}
+		first := []byte("HTTP/1.1 101 Switching Protocols\r\nX-Or-Cost: 1\r\nUpg")
+		n, err := writer.Write(first)
+		require.NoError(t, err)
+		assert.Equal(t, len(first), n)
+		assert.Empty(t, target.writes, "nothing leaves before the head is complete")
+
+		second := []byte("rade: websocket\r\n\r\nframe")
+		n, err = writer.Write(second)
+		require.NoError(t, err)
+		assert.Equal(t, len(second), n, "the caller is told every byte was taken")
+		require.Len(t, target.writes, 2)
+		assert.Equal(t, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n\r\n", string(target.writes[0]))
+		assert.Equal(t, "frame", string(target.writes[1]), "bytes after the head pass through")
+	})
+	t.Run("everything after the handshake is passed through untouched", func(t *testing.T) {
+		target := &hwRecordingWriter{}
+		writer := &hwHandshakeWriter{target: target}
+		_, err := writer.Write([]byte("HTTP/1.1 101 Switching Protocols\r\n\r\n"))
+		require.NoError(t, err)
+		later := "frame\r\nX-Or-Cost: raw lumia payload\r\n\r\n"
+		_, err = writer.Write([]byte(later))
+		require.NoError(t, err)
+		require.Len(t, target.writes, 2)
+		assert.Equal(t, later, string(target.writes[1]), "the filter only reads the first block")
+	})
+	t.Run("a failing connection is reported", func(t *testing.T) {
+		writer := &hwHandshakeWriter{target: &hwRecordingWriter{failAt: 1}}
+		_, err := writer.Write([]byte("HTTP/1.1 101 Switching Protocols\r\n\r\n"))
+		assert.Error(t, err, "a failed head write surfaces")
+
+		writer = &hwHandshakeWriter{target: &hwRecordingWriter{failAt: 2}}
+		_, err = writer.Write([]byte("HTTP/1.1 101 Switching Protocols\r\n\r\nframe"))
+		assert.Error(t, err, "a failed write of the bytes after the head surfaces")
+	})
+}
+
+// TestHwUsageNumber proves a token count is only trusted when it is a plausible
+// non-negative number, so a corrupt supplier value never reaches the customer.
+func TestHwUsageNumber(t *testing.T) {
+	cases := []struct {
+		name  string
+		value any
+		want  int
+		ok    bool
+	}{
+		{"whole float", float64(42), 42, true},
+		{"zero", float64(0), 0, true},
+		{"negative float", float64(-1), 0, false},
+		{"largest accepted", float64(math.MaxInt32), math.MaxInt32, true},
+		{"too large", float64(math.MaxInt32) + 1, 0, false},
+		{"int", 7, 7, true},
+		{"negative int", -7, 0, false},
+		{"string", "7", 0, false},
+		{"nil", nil, 0, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := hwUsageNumber(tc.value)
+			assert.Equal(t, tc.ok, ok)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestHwOpenAIChatPath(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	contextFor := func(path string) *gin.Context {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, path, nil)
+		return c
+	}
+	assert.True(t, hwOpenAIChatPath(contextFor("/v1/chat/completions")))
+	assert.True(t, hwOpenAIChatPath(contextFor("/pg/chat/completions")))
+	assert.False(t, hwOpenAIChatPath(contextFor("/v1/completions")))
+	assert.False(t, hwOpenAIChatPath(contextFor("/v1/messages")))
+	assert.False(t, hwOpenAIChatPath(contextFor("/v1/chat/models")), "only the completions route is answered in the chat shape")
+	assert.False(t, hwOpenAIChatPath(nil))
+	assert.False(t, hwOpenAIChatPath(&gin.Context{}), "a context without a request is no chat route")
 }
