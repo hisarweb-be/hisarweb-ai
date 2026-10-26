@@ -376,6 +376,18 @@ export function ToolGuides() {
     if (toolFromHash()) scrollToPicker()
   }, [])
 
+  // A link that only changes the hash on an open page does not reload it.
+  useEffect(() => {
+    function followHash() {
+      const fromHash = toolFromHash()
+      if (!fromHash) return
+      setTool(fromHash)
+      scrollToPicker()
+    }
+    window.addEventListener('hashchange', followHash)
+    return () => window.removeEventListener('hashchange', followHash)
+  }, [])
+
   function select(id: GuideToolId) {
     setTool(id)
     scrollToPicker()

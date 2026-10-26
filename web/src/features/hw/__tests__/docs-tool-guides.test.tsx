@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createInstance } from 'i18next'
 import { I18nextProvider } from 'react-i18next'
@@ -375,6 +375,23 @@ describe('program guide content', () => {
         within(panel).getByRole('tab', { name: variant.label.en })
       ).toBeInTheDocument()
     }
+  })
+
+  it('follows a changed address hash on a page that is already open', async () => {
+    renderGuides('en')
+    const list = screen.getByRole('tablist', { name: GUIDE_UI.en.pickLabel })
+    const cline = within(list).getByRole('tab', {
+      name: tabLabel(guideOf('cline'), 'en'),
+    })
+    expect(cline).toHaveAttribute('aria-selected', 'false')
+
+    window.location.hash = '#rehber-cline'
+    await act(async () => {
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+
+    expect(cline).toHaveAttribute('aria-selected', 'true')
+    window.location.hash = ''
   })
 
   it('keeps the Claude Code address without a trailing /v1', async () => {
