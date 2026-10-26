@@ -23,8 +23,9 @@ import (
 const hwStatusProbeTimeout = 8 * time.Second
 
 var (
-	hwStatusProbeMu sync.RWMutex
-	hwStatusProbe   func(ctx context.Context, modelName string) bool
+	hwStatusProbeMu    sync.RWMutex
+	hwStatusProbe      func(ctx context.Context, modelName string) bool
+	hwStatusProbeToken int
 )
 
 // SetHwStatusProbe installs the mini call that decides a quiet minute, or
@@ -32,10 +33,22 @@ var (
 // only that layer knows the customer route and its key; the model layer keeps
 // the measurement free of supplier knowledge. Without a probe the route check
 // decides, so an environment without a key never reports a false outage.
-func SetHwStatusProbe(probe func(ctx context.Context, modelName string) bool) {
+//
+// probeTokenId is the token the mini call itself calls with, or 0 when the
+// token could not be looked up. The mini call writes its own rows in the log
+// table the measurement reads, so its traffic must be left out of the count:
+// otherwise every failed probe makes the next minute look like a customer
+// failure, the chain never reaches three bad minutes and an outage of a quiet
+// upstream is never opened.
+func SetHwStatusProbe(probe func(ctx context.Context, modelName string) bool, probeTokenId int) {
 	hwStatusProbeMu.Lock()
 	defer hwStatusProbeMu.Unlock()
 	hwStatusProbe = probe
+	if probe == nil {
+		hwStatusProbeToken = 0
+		return
+	}
+	hwStatusProbeToken = probeTokenId
 }
 
 // hwStatusProbeCurrent returns the installed probe, or nil.
@@ -43,6 +56,14 @@ func hwStatusProbeCurrent() func(ctx context.Context, modelName string) bool {
 	hwStatusProbeMu.RLock()
 	defer hwStatusProbeMu.RUnlock()
 	return hwStatusProbe
+}
+
+// hwStatusProbeTokenId returns the token id of the installed probe, or 0 when
+// no probe is installed or its token is unknown. A zero excludes nothing.
+func hwStatusProbeTokenId() int {
+	hwStatusProbeMu.RLock()
+	defer hwStatusProbeMu.RUnlock()
+	return hwStatusProbeToken
 }
 
 // HwMeasureStatusOnce measures the minute that ends at at for the given own

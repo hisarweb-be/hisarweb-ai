@@ -165,7 +165,7 @@ func StartHwStatusJob() {
 			return
 		}
 		if probe := hwStatusProbeFromEnv(); probe != nil {
-			model.SetHwStatusProbe(probe)
+			model.SetHwStatusProbe(probe, hwStatusProbeTokenIdFromEnv())
 			common.SysLog(common.LogText("status measurement probe installed: a quiet minute is decided by a mini call"))
 		} else {
 			common.SysLog(common.LogText("status measurement probe not configured: a quiet minute is decided by the route"))
@@ -215,6 +215,26 @@ func hwStatusProbeFromEnv() func(ctx context.Context, modelName string) bool {
 		})
 		return err == nil
 	}
+}
+
+// hwStatusProbeTokenIdFromEnv looks up the token the mini call calls with, so
+// the measurement can leave the probe's own rows out of the customer count.
+// Without that id a failed probe would count as a customer failure. An unknown
+// token yields 0, which excludes nothing: a missing id costs an outage signal,
+// never a false one. Only the group and whether the token was found are logged,
+// never the key.
+func hwStatusProbeTokenIdFromEnv() int {
+	options := HwQualityRunOptionsFromEnv()
+	if options.APIKey == "" {
+		return 0
+	}
+	token, err := model.GetTokenByKey(options.APIKey, true)
+	if err != nil || token == nil || token.Id <= 0 {
+		common.SysLog(common.LogText("status measurement probe token not found: probe traffic stays in the count"))
+		return 0
+	}
+	common.SysLog(common.LogText("status measurement probe token resolved: group=%s found=true id=%d", token.Group, token.Id))
+	return token.Id
 }
 
 // runHwStatusOnceSafely is one measurement pass. A panic is logged and ends the

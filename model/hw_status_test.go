@@ -318,7 +318,7 @@ func TestHwStatusQuietMinuteProbesTheUpstream(t *testing.T) {
 	require.NoError(t, DB.Exec("DELETE FROM abilities").Error)
 	t.Cleanup(func() { DB.Exec("DELETE FROM abilities") })
 	require.NoError(t, DB.Create(&Ability{Group: HwPaidGroupName, Model: "claude-sonnet-5-5", ChannelId: 1, Enabled: true}).Error)
-	t.Cleanup(func() { SetHwStatusProbe(nil) })
+	t.Cleanup(func() { SetHwStatusProbe(nil, 0) })
 
 	base := int64(1_800_000_000)
 	models := []string{"claude-sonnet-5-5", "claude-unrouted"}
@@ -326,7 +326,7 @@ func TestHwStatusQuietMinuteProbesTheUpstream(t *testing.T) {
 	// The upstream of the routed model does not answer; the unrouted one does.
 	SetHwStatusProbe(func(ctx context.Context, modelName string) bool {
 		return modelName != "claude-sonnet-5-5"
-	})
+	}, 0)
 	for i := int64(1); i <= 5; i++ {
 		require.NoError(t, HwMeasureStatusOnce(time.Unix(base+i*60, 0), models))
 	}
@@ -338,11 +338,73 @@ func TestHwStatusQuietMinuteProbesTheUpstream(t *testing.T) {
 
 	// Without a probe the route decides again, so an environment without a key
 	// never reports a false outage.
-	SetHwStatusProbe(nil)
+	SetHwStatusProbe(nil, 0)
 	require.NoError(t, HwMeasureStatusOnce(time.Unix(base+6*60, 0), models))
 	var probeFree int64
 	require.NoError(t, DB.Model(&HwStatusSample{}).Where("minute = ? AND model = ? AND ok = ?", base+6*60, "claude-sonnet-5-5", true).Count(&probeFree).Error)
 	assert.EqualValues(t, 1, probeFree, "without a probe the route decides, as before")
+}
+
+// The mini call writes its own rows in the log table the measurement reads, so
+// its traffic must stay out of the customer count. Left in, a failed probe kept
+// the next minute from being idle, the failure never rose above one, the run of
+// three bad minutes never happened and an outage of a quiet upstream stayed
+// invisible (the 503 of 24-26 Oct 2026 that /api/hw/status reported as
+// operational). The counter-check keeps a customer row counting.
+func TestHwStatusProbeTrafficStaysOutOfTheCount(t *testing.T) {
+	hwStatusTestSetup(t)
+	require.NoError(t, LOG_DB.AutoMigrate(&Log{}))
+	require.NoError(t, LOG_DB.Exec("DELETE FROM logs").Error)
+	t.Cleanup(func() { LOG_DB.Exec("DELETE FROM logs") })
+	t.Cleanup(func() { SetHwStatusProbe(nil, 0) })
+
+	const probeTokenId = 7
+	base := int64(1_800_000_000)
+	models := []string{"claude-sonnet-5-5"}
+
+	// The pass runs at the start of its minute, so the row a probe writes lands
+	// in the window of the next pass, exactly as in production.
+	probeRowAt := base + 60
+	SetHwStatusProbe(func(ctx context.Context, modelName string) bool {
+		require.NoError(t, LOG_DB.Create(&Log{
+			Type: LogTypeError, CreatedAt: probeRowAt, Group: HwPaidGroupName,
+			ModelName: modelName, TokenId: probeTokenId, RequestId: "probe",
+		}).Error)
+		probeRowAt += 60
+		return false
+	}, probeTokenId)
+
+	for i := int64(1); i <= 10; i++ {
+		require.NoError(t, HwMeasureStatusOnce(time.Unix(base+i*60, 0), models))
+		if i == 3 {
+			var opened int64
+			require.NoError(t, DB.Model(&HwIncident{}).Where("ended_at = 0").Count(&opened).Error)
+			assert.EqualValues(t, 1, opened, "three bad minutes of a quiet upstream open the outage")
+		}
+	}
+	var bad int64
+	require.NoError(t, DB.Model(&HwStatusSample{}).
+		Where("model = ? AND ok = ? AND reason = ?", "claude-sonnet-5-5", false, HwStatusReasonProbeFailed).
+		Count(&bad).Error)
+	assert.EqualValues(t, 10, bad, "every silent minute with a failing probe is a bad sample")
+
+	// Counter-check: the error rows of a customer token do count. Three of them
+	// in one window are customer failures, so that minute is not idle and no
+	// probe decides it.
+	SetHwStatusProbe(nil, 0)
+	for i := 0; i < 3; i++ {
+		require.NoError(t, LOG_DB.Create(&Log{
+			Type: LogTypeError, CreatedAt: base + 661, Group: HwPaidGroupName,
+			ModelName: "claude-sonnet-5-5", TokenId: 99,
+			RequestId: fmt.Sprintf("customer-%d", i),
+		}).Error)
+	}
+	require.NoError(t, HwMeasureStatusOnce(time.Unix(base+12*60, 0), models))
+	var customerBad int64
+	require.NoError(t, DB.Model(&HwStatusSample{}).
+		Where("minute = ? AND model = ? AND ok = ? AND reason = ?", base+12*60, "claude-sonnet-5-5", false, HwStatusReasonRelayFailures).
+		Count(&customerBad).Error)
+	assert.EqualValues(t, 1, customerBad, "an error row of a customer token still counts")
 }
 
 // The sweep removes an outage made only of quiet minutes and keeps a real one.

@@ -437,6 +437,13 @@ func HwCountPaidRequests(from int64, to int64) (map[string]HwPaidCounts, error) 
 		return nil, errors.New("invalid status measurement window")
 	}
 	counts := make(map[string]HwPaidCounts)
+	// The mini call of the status probe calls the same paid group with its own
+	// token, so its rows describe the probe and not a customer. Left in, a
+	// failed probe makes the next minute look like a customer failure and a
+	// quiet upstream never opens an outage: the failure stays at one per minute
+	// instead of building the run of three. A zero token excludes nothing, so a
+	// probe without a looked-up token changes no count.
+	probeTokenId := hwStatusProbeTokenId()
 	for _, logType := range []int{LogTypeConsume, LogTypeError} {
 		var rows []hwPaidCountRow
 		counted := "model_name, COUNT(*) AS total"
@@ -444,6 +451,9 @@ func HwCountPaidRequests(from int64, to int64) (map[string]HwPaidCounts, error) 
 			Where("type = ?", logType).
 			Where("created_at >= ? AND created_at < ?", from, to).
 			Where(logGroupCol+" = ?", HwPaidGroupName)
+		if probeTokenId > 0 {
+			query = query.Where("token_id IS NULL OR token_id <> ?", probeTokenId)
+		}
 		if logType == LogTypeError {
 			// An empty id cannot be told apart from another empty one, so it is
 			// left out here as well; the relay always writes a request id.
@@ -454,6 +464,9 @@ func HwCountPaidRequests(from int64, to int64) (map[string]HwPaidCounts, error) 
 				Where("type = ?", LogTypeConsume).
 				Where("created_at >= ? AND created_at < ?", from, to).
 				Where("request_id IS NOT NULL AND request_id <> ''")
+			if probeTokenId > 0 {
+				served = served.Where("token_id IS NULL OR token_id <> ?", probeTokenId)
+			}
 			counted = "model_name, COUNT(DISTINCT request_id) AS total"
 			query = query.Where("request_id IS NOT NULL AND request_id <> ''").
 				Where("request_id NOT IN (?)", served)
