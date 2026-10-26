@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -117,6 +119,31 @@ func HwCompleteTelegramPhoneStep(userID int, telegramID string) (granted bool, r
 	return hwMaybeGrantFreeTrialCredit(user)
 }
 
+// hwPhonePromptCooldown is how long one Telegram chat waits before the login
+// sends it the phone prompt again; hwPhonePromptSent holds the last send per
+// chat. A burst of logins on one account then costs one goroutine and one
+// outbound call instead of one per login.
+const hwPhonePromptCooldown = time.Minute
+
+var hwPhonePromptSent sync.Map
+
+// hwPhonePromptDue reserves the prompt for this chat and reports whether it may
+// leave now; concurrent logins race on the same entry and only one wins.
+func hwPhonePromptDue(telegramID string) bool {
+	now := time.Now()
+	previous, loaded := hwPhonePromptSent.LoadOrStore(telegramID, now)
+	if loaded {
+		if now.Sub(previous.(time.Time)) < hwPhonePromptCooldown {
+			return false
+		}
+		if !hwPhonePromptSent.CompareAndSwap(telegramID, previous, now) {
+			return false
+		}
+	}
+	time.AfterFunc(hwPhonePromptCooldown, func() { hwPhonePromptSent.CompareAndDelete(telegramID, now) })
+	return true
+}
+
 // hwPromptForPhoneStep asks the bot to show the share-contact button, outside
 // the login and with its own deadline. Nothing waits for it: the customer's
 // language is not known here, so the site default (Turkish) is used, and a
@@ -124,6 +151,9 @@ func HwCompleteTelegramPhoneStep(userID int, telegramID string) (granted bool, r
 // account that already shared a number is not asked again, because the prompt
 // would invite a second number nobody needs.
 func hwPromptForPhoneStep(userID int, telegramID string) {
+	if !hwPhonePromptDue(telegramID) {
+		return
+	}
 	go func() {
 		// A panic here must not take the process down: the login would otherwise
 		// be a way to crash the service.
