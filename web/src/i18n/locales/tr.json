@@ -2763,6 +2763,8 @@
     "OpenAI-compatible (Cursor, Cline, Codex and more)": "OpenAI uyumlu (Cursor, Cline, Codex ve diğerleri)",
     "Works with tools that speak the OpenAI format, such as Cursor and Cline. You only change the address and the key in the tool.": "OpenAI biçimini konuşan araçlarla çalışır, örneğin Cursor ve Cline. Araçta yalnızca adresi ve anahtarı değiştirirsiniz.",
     "Anthropic-compatible (Claude Code)": "Anthropic uyumlu (Claude Code)",
+    "OpenAI Responses (Codex)": "OpenAI Responses (Codex)",
+    "Works with tools that speak the OpenAI Responses format, such as Codex. You only change the address and the key in the tool.": "OpenAI Responses biçimini konuşan araçlarla çalışır, örneğin Codex. Araçta yalnızca adresi ve anahtarı değiştirirsiniz.",
     "Works with tools that speak the Anthropic format, such as Claude Code. You only change the address and the key in the tool.": "Anthropic biçimini konuşan araçlarla çalışır, örneğin Claude Code. Araçta yalnızca adresi ve anahtarı değiştirirsiniz.",
     "Connection type: {{name}}": "Bağlantı türü: {{name}}",
     "Billing": "Ücretlendirme",

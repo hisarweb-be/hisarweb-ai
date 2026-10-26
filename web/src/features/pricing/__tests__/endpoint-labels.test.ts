@@ -34,8 +34,19 @@ describe('describeEndpoint', () => {
     )
   })
 
+  it('names the Responses format after the tool that uses it', () => {
+    expect(describeEndpoint('openai-response', t).label).toBe(
+      'OpenAI Responses (Codex)'
+    )
+  })
+
   it('gives every endpoint a one-sentence hint', () => {
-    for (const endpoint of ['openai', 'anthropic', 'jina-rerank']) {
+    for (const endpoint of [
+      'openai',
+      'anthropic',
+      'openai-response',
+      'jina-rerank',
+    ]) {
       expect(describeEndpoint(endpoint, t).hint.length).toBeGreaterThan(10)
     }
   })
