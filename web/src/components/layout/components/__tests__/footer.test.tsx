@@ -62,6 +62,13 @@ describe('site footer', () => {
     )
   })
 
+  test('the brand logo is decorative because the brand name stands next to it', () => {
+    const { container } = render(<Footer />)
+
+    // axe image-redundant-alt: alt text repeating the adjacent text.
+    expect(container.querySelector('footer img')).toHaveAttribute('alt', '')
+  })
+
   test('compact footer keeps the licence links clickable without the brand block', () => {
     render(<Footer variant='compact' />)
 
