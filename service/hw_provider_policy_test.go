@@ -8,6 +8,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -522,4 +523,101 @@ func TestHwTerminalErrorHidesSupplierOutagesOnly(t *testing.T) {
 	assert.Nil(t, HwTerminalError(c, hwPolicyError(http.StatusBadGateway, HwErrorCodeStreamInterrupted), stop), "own code survives")
 	assert.Nil(t, HwTerminalError(c, hwPolicyError(http.StatusBadGateway, "other", types.ErrOptionWithSkipRetry()), stop))
 	assert.Nil(t, HwTerminalError(hwClientErrorContext(""), outage, stop), "no route")
+}
+
+// hwRouteDBChannel stores an enabled channel with its ability and supplier tag,
+// then rebuilds the channel cache so hwStartRoute sees it like production does.
+func hwRouteDBChannel(t *testing.T, id int, group, modelName, tag string, channelType int, mapping string) {
+	t.Helper()
+	createChannelSelectAutoGroupsChannel(t, model.DB, id, group, modelName)
+	updates := map[string]any{"type": channelType}
+	if tag != "" {
+		updates["tag"] = tag
+	}
+	if mapping != "" {
+		updates["model_mapping"] = mapping
+	}
+	require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", id).Updates(updates).Error)
+}
+
+func hwRouteIDs(channels []*model.Channel) []int {
+	ids := make([]int, 0, len(channels))
+	for _, channel := range channels {
+		ids = append(ids, channel.Id)
+	}
+	return ids
+}
+
+// hwStartRoute decides whether the supplier policy takes over a request at
+// all. A deployment without supplier tags must keep the stock selection, a
+// free group must never see the emergency supplier, and a channel that maps the
+// model into another family must be counted but not offered.
+func TestHwStartRouteBuildsTheRouteFromTaggedChannels(t *testing.T) {
+	setupChannelSelectAutoGroupsTest(t)
+	const modelName = "claude-sonnet-4-5"
+	hwRouteDBChannel(t, 3101, HwPaidGroup, modelName, "", constant.ChannelTypeOpenAI, "")
+	hwRouteDBChannel(t, 3102, HwPaidGroup, modelName, HwProviderLumia, constant.ChannelTypeOpenAI, "")
+	hwRouteDBChannel(t, 3103, HwPaidGroup, modelName, HwProviderOpenRouter, constant.ChannelTypeOpenAI, "")
+	hwRouteDBChannel(t, 3104, HwPaidGroup, modelName, HwProviderLumia, constant.ChannelTypeOpenAI, `{"claude-sonnet-4-5":"gpt-4o"}`)
+	hwRouteDBChannel(t, 3105, HwPaidGroup, modelName, HwProviderLumia, constant.ChannelTypeTaskPlugin, "")
+	hwRouteDBChannel(t, 3201, "plain", modelName, "", constant.ChannelTypeOpenAI, "")
+	hwRouteDBChannel(t, 3301, "free", modelName, HwProviderOpenRouter, constant.ChannelTypeOpenAI, "")
+	model.InitChannelCache()
+
+	t.Run("nothing to route", func(t *testing.T) {
+		assert.Nil(t, hwStartRoute(nil, HwPaidGroup, modelName, nil))
+		c := hwClientErrorContext("")
+		assert.Nil(t, hwStartRoute(c, HwPaidGroup, "", nil), "no model")
+		assert.Nil(t, hwStartRoute(c, HwPaidGroup, "unknown-model", nil), "no candidates")
+		assert.Nil(t, HwRoute(c), "no route stored when the policy stays out")
+	})
+
+	t.Run("untagged channels keep the stock selection", func(t *testing.T) {
+		c := hwClientErrorContext("")
+		assert.Nil(t, hwStartRoute(c, "plain", modelName, nil))
+		assert.Nil(t, HwRoute(c))
+	})
+
+	t.Run("lumia and openrouter are split, family and filters respected", func(t *testing.T) {
+		c := hwClientErrorContext("")
+		common.SetContextKey(c, constant.ContextKeyUserGroup, HwPaidGroup)
+		filters := []dto.ChannelFilter{{Kind: dto.FilterTaskPluginIdentity}}
+
+		state := hwStartRoute(c, HwPaidGroup, modelName, filters)
+		require.NotNil(t, state)
+		assert.Same(t, state, HwRoute(c))
+		assert.True(t, state.active)
+		assert.Equal(t, HwPaidGroup, state.group)
+		assert.Equal(t, HwPaidGroup, state.userGroup)
+		assert.Equal(t, modelName, state.model)
+		assert.Equal(t, HwModelFamily(modelName), state.family)
+		assert.Equal(t, []int{3102}, hwRouteIDs(state.lumia), "untagged, foreign-family and plugin-typed channels are left out")
+		assert.Equal(t, []int{3103}, hwRouteIDs(state.openRouter))
+		assert.Equal(t, 1, state.blockedByFamily)
+	})
+
+	t.Run("an empty group falls back to the context groups", func(t *testing.T) {
+		c := hwClientErrorContext("")
+		common.SetContextKey(c, constant.ContextKeyUsingGroup, HwPaidGroup)
+		common.SetContextKey(c, constant.ContextKeyUserGroup, HwPaidGroup)
+		state := hwStartRoute(c, "", modelName, nil)
+		require.NotNil(t, state)
+		assert.Equal(t, HwPaidGroup, state.group)
+
+		c = hwClientErrorContext("")
+		common.SetContextKey(c, constant.ContextKeyUserGroup, HwPaidGroup)
+		state = hwStartRoute(c, "", modelName, nil)
+		require.NotNil(t, state, "the user group stands in when no group is in use")
+		assert.Equal(t, HwPaidGroup, state.group)
+	})
+
+	t.Run("the emergency supplier never serves a free group", func(t *testing.T) {
+		c := hwClientErrorContext("")
+		common.SetContextKey(c, constant.ContextKeyUserGroup, "free")
+		state := hwStartRoute(c, "free", modelName, nil)
+		require.NotNil(t, state, "a tagged channel still puts the route in charge")
+		assert.Empty(t, state.openRouter)
+		assert.Empty(t, state.lumia)
+		assert.Nil(t, state.next(), "nothing is left to try, so the caller ends in service-busy")
+	})
 }
