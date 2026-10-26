@@ -109,6 +109,8 @@ type CodeBlockFrameProps = Omit<HTMLAttributes<HTMLDivElement>, 'title'> & {
   bodyOverlay?: ReactNode
   children: ReactNode
   endActions?: ReactNode
+  /** Makes the scrollable body reachable by keyboard when it overflows. */
+  scrollFocusable?: boolean
   showToolbar?: boolean
   title?: ReactNode
 }
@@ -281,6 +283,7 @@ function getCodeBlockMaxHeight(
 }
 
 function getCodeMirrorExtensions(options: {
+  ariaLabel: string
   language: BundledLanguage | string
   onKeyDown: (event: globalThis.KeyboardEvent) => void
   placeholder?: string
@@ -294,6 +297,10 @@ function getCodeMirrorExtensions(options: {
     EditorState.tabSize.of(2),
     EditorState.readOnly.of(options.readOnly),
     EditorView.editable.of(!options.readOnly),
+    EditorView.contentAttributes.of({
+      'aria-label': options.ariaLabel,
+      'aria-readonly': String(options.readOnly),
+    }),
     EditorView.domEventHandlers({
       keydown(event) {
         options.onKeyDown(event)
@@ -338,13 +345,14 @@ function CodeMirrorCodeView({
   const editorExtensions = useMemo(
     () =>
       getCodeMirrorExtensions({
+        ariaLabel,
         language,
         onKeyDown: (event) => onKeyDownRef.current?.(event),
         placeholder,
         readOnly,
         showLineNumbers,
       }),
-    [language, placeholder, readOnly, showLineNumbers]
+    [ariaLabel, language, placeholder, readOnly, showLineNumbers]
   )
 
   useEffect(() => {
@@ -407,11 +415,9 @@ function CodeMirrorCodeView({
 
   return (
     <div
-      aria-label={ariaLabel}
-      aria-readonly={readOnly}
       className='min-h-(--code-editor-min-height)'
+      data-slot='code-editor-host'
       ref={editorHostRef}
-      role='textbox'
       style={
         {
           '--code-editor-min-height': editorMinHeight,
@@ -428,6 +434,7 @@ export const CodeBlockFrame = ({
   children,
   className,
   endActions,
+  scrollFocusable = false,
   showToolbar = false,
   title,
   ...props
@@ -458,6 +465,7 @@ export const CodeBlockFrame = ({
           bodyClassName
         )}
         style={{ maxHeight: bodyMaxHeight }}
+        tabIndex={scrollFocusable ? 0 : undefined}
       >
         {children}
       </div>
@@ -577,6 +585,7 @@ export const CodeBlock = ({
             </Tooltip>
           </>
         }
+        scrollFocusable
         showToolbar={showToolbar}
         title={displayTitle}
         {...props}

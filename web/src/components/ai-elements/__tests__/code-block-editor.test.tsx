@@ -52,7 +52,7 @@ describe('CodeBlockEditor', () => {
     )
 
     const editor = getByRole('textbox', { name: 'Plugin source' })
-    const gutters = editor.querySelector('.cm-gutters')
+    const gutters = editor.closest('.cm-editor')?.querySelector('.cm-gutters')
 
     // CodeMirror already offsets each gutter line by the content padding.
     // Extra vertical padding here shifts every number below its source line.

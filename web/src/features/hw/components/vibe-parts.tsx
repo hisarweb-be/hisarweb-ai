@@ -29,7 +29,9 @@ export function Section(props: { title: string; children?: ReactNode }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className='text-xl'>{props.title}</CardTitle>
+        <CardTitle className='text-xl'>
+          <h2>{props.title}</h2>
+        </CardTitle>
       </CardHeader>
       <CardContent className='space-y-3'>{props.children}</CardContent>
     </Card>

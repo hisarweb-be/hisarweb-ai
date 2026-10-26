@@ -31,7 +31,7 @@ export function AttributionNotice(props: { className?: string }) {
   const { t } = useTranslation()
 
   return (
-    <span className={cn('text-muted-foreground/45', props.className)}>
+    <span className={cn('text-muted-foreground/80', props.className)}>
       <a
         href='https://github.com/hisarweb-be/hisarweb-ai'
         target='_blank'
