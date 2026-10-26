@@ -112,3 +112,18 @@ func TestHwBureauCreateCardRefusesWhenNotConnectedOrIncomplete(t *testing.T) {
 	_, err = HwBureauCreateCard(context.Background(), HwBureauCardConfig{BaseURL: board.URL, CompanyID: "c"}, "t", "s", "")
 	assert.ErrorContains(t, err, "500")
 }
+
+func TestHwBureauCardConfigFromEnvTrimsAndLeavesTheClientToTheDefault(t *testing.T) {
+	t.Setenv(HwBureauURLEnv, "  http://10.88.0.1:3100/ ")
+	t.Setenv(HwBureauCompanyEnv, " company-1 ")
+	t.Setenv(HwBureauTokenEnv, "  ")
+	config := HwBureauCardConfigFromEnv()
+	assert.Equal(t, "http://10.88.0.1:3100/", config.BaseURL)
+	assert.Equal(t, "company-1", config.CompanyID)
+	assert.Empty(t, config.Token, "a blank token means header-less calls")
+	assert.Nil(t, config.Client)
+
+	t.Setenv(HwBureauURLEnv, "")
+	_, err := HwBureauCreateCard(context.Background(), HwBureauCardConfigFromEnv(), "t", "s", "")
+	assert.EqualError(t, err, "the bureau board is not connected")
+}
