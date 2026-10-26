@@ -344,3 +344,106 @@ func TestHwReserveMessagesNameNoSupplier(t *testing.T) {
 	assert.Equal(t, 1, HwReserveMinutes(60))
 	assert.Equal(t, 2, HwReserveMinutes(61))
 }
+
+// The production usage source decides whether customer traffic may pass, so
+// every odd answer of the bureau endpoint must end as an error (the gate stays
+// closed) and the bearer token must travel only as a header.
+func TestHwBureauUsageHTTPMeasureAcceptsOnlyAUsableAnswer(t *testing.T) {
+	const window = int64(1_800_000_000)
+	type answer struct {
+		status int
+		body   string
+	}
+	measure := func(t *testing.T, response answer) (float64, error, string) {
+		t.Helper()
+		var authorization string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authorization = r.Header.Get("Authorization")
+			w.WriteHeader(response.status)
+			_, _ = w.Write([]byte(response.body))
+		}))
+		t.Cleanup(server.Close)
+		source := &hwBureauUsageHTTP{url: server.URL, token: "test-token", client: server.Client()}
+		value, err := source.measure(context.Background(), window)
+		return value, err, authorization
+	}
+
+	value, err, authorization := measure(t, answer{http.StatusOK, `{"window_start":1800000000,"used_usd":12.5,"capacity_usd":100}`})
+	require.NoError(t, err)
+	assert.Equal(t, 12.5, value)
+	assert.Equal(t, "Bearer test-token", authorization)
+
+	value, err, _ = measure(t, answer{http.StatusOK, `{"used_usd":3}`})
+	require.NoError(t, err, "an answer without a window is accepted")
+	assert.Equal(t, 3.0, value)
+
+	for name, response := range map[string]answer{
+		"other window": {http.StatusOK, `{"window_start":1799990000,"used_usd":1}`},
+		"negative":     {http.StatusOK, `{"used_usd":-1}`},
+		"not json":     {http.StatusOK, `<html>`},
+		"server error": {http.StatusInternalServerError, `{"used_usd":1}`},
+		"unauthorized": {http.StatusUnauthorized, ``},
+	} {
+		value, err, _ := measure(t, response)
+		require.Error(t, err, name)
+		assert.Zero(t, value, name)
+		assert.NotContains(t, err.Error(), "test-token", name)
+	}
+
+	unreachable := &hwBureauUsageHTTP{url: "http://127.0.0.1:1", client: &http.Client{Timeout: time.Second}}
+	_, err = unreachable.measure(context.Background(), window)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unreachable")
+	assert.NotContains(t, err.Error(), "127.0.0.1", "the endpoint never appears in the error")
+
+	_, err = (&hwBureauUsageHTTP{url: "http://bad host/", client: http.DefaultClient}).measure(context.Background(), window)
+	require.Error(t, err)
+
+	// Without a token no Authorization header is sent.
+	var header string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		header = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte(`{"used_usd":0}`))
+	}))
+	t.Cleanup(server.Close)
+	_, err = (&hwBureauUsageHTTP{url: server.URL, client: server.Client()}).measure(context.Background(), window)
+	require.NoError(t, err)
+	assert.Empty(t, header)
+}
+
+// A burst of customer requests must not become a burst of measurements: one
+// window is cached for the TTL, the error with it, and a new window or an
+// expired entry measures again.
+func TestHwBureauUsageHTTPCachesOneWindowForTheTTL(t *testing.T) {
+	var calls int
+	status := http.StatusOK
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(`{"used_usd":4}`))
+	}))
+	t.Cleanup(server.Close)
+	source := &hwBureauUsageHTTP{url: server.URL, client: server.Client()}
+	ctx := context.Background()
+
+	value, err := source.UsedUSD(ctx, 100, 200)
+	require.NoError(t, err)
+	assert.Equal(t, 4.0, value)
+	_, _ = source.UsedUSD(ctx, 100, 200)
+	assert.Equal(t, 1, calls, "the second read comes from the cache")
+
+	_, _ = source.UsedUSD(ctx, 300, 400)
+	assert.Equal(t, 2, calls, "another window measures again")
+
+	source.cacheAt = time.Now().Add(-2 * hwBureauUsageCacheTTL)
+	_, _ = source.UsedUSD(ctx, 300, 400)
+	assert.Equal(t, 3, calls, "an expired entry measures again")
+
+	status = http.StatusBadGateway
+	source.cacheAt = time.Now().Add(-2 * hwBureauUsageCacheTTL)
+	_, err = source.UsedUSD(ctx, 300, 400)
+	require.Error(t, err)
+	_, err = source.UsedUSD(ctx, 300, 400)
+	require.Error(t, err, "the failure is cached too")
+	assert.Equal(t, 4, calls)
+}
