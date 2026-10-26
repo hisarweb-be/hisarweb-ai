@@ -18,16 +18,18 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { TFunction } from 'i18next'
 
+import { customerGroupLabel } from './customer-groups'
+
 /**
  * A customer cannot pick a group, so a group name such as "paid" means nothing
- * to them. Everything that is on sale reads as "Everyone"; an unknown group
- * keeps its configured name.
+ * to them. Everything that is on sale reads as "Everyone", the free group as
+ * "Free"; an unknown group keeps its configured name.
  */
 export function plainGroupLabel(group: string, t: TFunction): string {
   if (group === 'paid' || group === 'default' || group === 'vip') {
     return t('Everyone')
   }
-  return group
+  return customerGroupLabel(group, t)
 }
 
 /**
