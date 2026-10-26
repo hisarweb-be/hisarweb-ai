@@ -65,6 +65,11 @@ export function parseTaskResult() { return {}; }
 func cleanupTaskPluginControllerRuntime(t *testing.T, key string) {
 	t.Helper()
 	t.Cleanup(func() {
+		// Subtests share one database: a saved row would be synced back into the
+		// global registry by a later upload and conflict with built-in plugins.
+		if model.DB != nil && model.DB.Migrator().HasTable(&model.TaskPlugin{}) {
+			model.DB.Where("key = ?", key).Delete(&model.TaskPlugin{})
+		}
 		jsplugin.DefaultRegistry.Unregister(key)
 		taskPluginSyncState.Lock()
 		delete(taskPluginSyncState.hashes, key)
