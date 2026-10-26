@@ -431,3 +431,141 @@ func TestHwMaskAppliesSupplierPromptOverhead(t *testing.T) {
 		})
 	}
 }
+
+// hwMaskWriterFor builds a bare mask writer for the pure stream helpers.
+func hwMaskWriterFor(anthropic bool, acceptLanguage string) *hwMaskWriter {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	if acceptLanguage != "" {
+		c.Request.Header.Set("Accept-Language", acceptLanguage)
+	}
+	return &hwMaskWriter{ctx: c, anthropic: anthropic}
+}
+
+// TestHwErrorEnvelopeMessage proves that only the gateway's own error wording
+// is reused: a supplier error code gives no message, and a numeric code is
+// still read as text.
+func TestHwErrorEnvelopeMessage(t *testing.T) {
+	cases := []struct {
+		name        string
+		envelope    map[string]any
+		wantMessage string
+		wantCode    string
+	}{
+		{"own code keeps its message", map[string]any{"error": map[string]any{"code": "insufficient_user_quota", "message": "user quota is not enough"}}, "user quota is not enough", "insufficient_user_quota"},
+		{"supplier code loses its message but keeps the code", map[string]any{"error": map[string]any{"code": "insufficient_quota", "message": "OpenRouter billing limit"}}, "", "insufficient_quota"},
+		{"no error object", map[string]any{"message": "x"}, "", ""},
+		{"error is not an object", map[string]any{"error": "boom"}, "", ""},
+		{"numeric code is no own code", map[string]any{"error": map[string]any{"code": float64(429), "message": "slow down"}}, "", "429"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			message, code := hwErrorEnvelopeMessage(tc.envelope)
+			assert.Equal(t, tc.wantMessage, message)
+			assert.Equal(t, tc.wantCode, code)
+		})
+	}
+}
+
+func TestHwStringValue(t *testing.T) {
+	assert.Equal(t, "abc", hwStringValue("abc"))
+	assert.Equal(t, "429", hwStringValue(float64(429)))
+	assert.Equal(t, "", hwStringValue(1.5), "a fractional number is no code")
+	assert.Equal(t, "", hwStringValue(nil))
+	assert.Equal(t, "", hwStringValue(true))
+}
+
+// TestHwMaskStreamErrorEvent proves the terminal error of a stream reaches the
+// customer in the customer's own protocol, with our wording only.
+func TestHwMaskStreamErrorEvent(t *testing.T) {
+	t.Run("openai: own error text and code are kept, stream is closed", func(t *testing.T) {
+		w := hwMaskWriterFor(false, "")
+		out := string(w.streamErrorEvent([]byte(`{"error":{"code":"insufficient_user_quota","message":"user quota is not enough"}}`)))
+		assert.True(t, strings.HasPrefix(out, "data: "), out)
+		assert.True(t, strings.HasSuffix(out, "\n\ndata: [DONE]\n\n"), out)
+		assert.Contains(t, out, `"message":"user quota is not enough"`)
+		assert.Contains(t, out, `"code":"insufficient_user_quota"`)
+		assert.Contains(t, out, `"type":"service_error"`)
+	})
+	t.Run("openai: supplier wording becomes the generic message", func(t *testing.T) {
+		w := hwMaskWriterFor(false, "")
+		out := string(w.streamErrorEvent([]byte(`{"error":{"code":"insufficient_quota","message":"OpenRouter billing limit reached for lumia"}}`)))
+		assert.NotContains(t, out, "billing limit")
+		assert.NotContains(t, strings.ToLower(out), "lumia")
+		assert.Contains(t, out, service.HwGenericErrorMessage(w.ctx, http.StatusBadGateway))
+		assert.Contains(t, out, `"code":"insufficient_quota"`, "the code is not wording and stays")
+	})
+	t.Run("anthropic: error event without a done marker", func(t *testing.T) {
+		w := hwMaskWriterFor(true, "")
+		out := string(w.streamErrorEvent([]byte(`{"error":{"code":"insufficient_user_quota","message":"user quota is not enough"}}`)))
+		assert.True(t, strings.HasPrefix(out, "event: error\ndata: "), out)
+		assert.True(t, strings.HasSuffix(out, "\n\n"), out)
+		assert.NotContains(t, out, "[DONE]")
+		assert.Contains(t, out, `"type":"api_error"`)
+		assert.Contains(t, out, `"message":"user quota is not enough"`)
+	})
+	t.Run("a payload that is not json is passed on unchanged", func(t *testing.T) {
+		w := hwMaskWriterFor(false, "")
+		assert.Equal(t, "not json", string(w.streamErrorEvent([]byte("not json"))))
+	})
+	t.Run("the generic message follows the language of the request", func(t *testing.T) {
+		w := hwMaskWriterFor(false, "tr-TR,tr;q=0.9")
+		out := string(w.streamErrorEvent([]byte(`{"error":{"code":"insufficient_quota","message":"x"}}`)))
+		assert.Contains(t, out, "Hizmet şu anda kullanılamıyor")
+	})
+	t.Run("a message with a supplier word is cleaned by the safety net", func(t *testing.T) {
+		w := hwMaskWriterFor(false, "")
+		out := string(w.streamErrorEvent([]byte(`{"error":{"code":"service_busy","message":"OpenRouter is busy"}}`)))
+		assert.NotContains(t, strings.ToLower(out), "openrouter")
+	})
+}
+
+// TestHwSplitStreamTerminal proves the end-of-stream marker is held back,
+// including a marker cut in two by the write boundary, so an error event can
+// replace it.
+func TestHwSplitStreamTerminal(t *testing.T) {
+	cases := []struct {
+		name         string
+		data         string
+		anthropic    bool
+		wantBody     string
+		wantTerminal string
+	}{
+		{"empty", "", false, "", ""},
+		{"openai marker at the end", "data: {\"a\":1}\n\ndata: [DONE]\n\n", false, "data: {\"a\":1}\n\n", "data: [DONE]\n\n"},
+		{"marker followed by more data is no terminal", "data: [DONE]\n\ndata: {\"a\":1}\n\n", false, "data: [DONE]\n\ndata: {\"a\":1}\n\n", ""},
+		{"marker cut in two", "data: {\"a\":1}\n\ndata: [DO", false, "data: {\"a\":1}\n\n", "data: [DO"},
+		{"no marker", "data: {\"a\":1}\n\n", false, "data: {\"a\":1}\n\n", ""},
+		{"anthropic message_stop", "event: content_block_stop\ndata: {}\n\nevent: message_stop\ndata: {}\n\n", true, "event: content_block_stop\ndata: {}\n\n", "event: message_stop\ndata: {}\n\n"},
+		{"anthropic without message_stop", "event: ping\ndata: {}\n\n", true, "event: ping\ndata: {}\n\n", ""},
+		{"an openai marker is no terminal for anthropic", "data: [DONE]\n\n", true, "data: [DONE]\n\n", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body, terminal := hwSplitStreamTerminal([]byte(tc.data), tc.anthropic)
+			assert.Equal(t, tc.wantBody, string(body))
+			assert.Equal(t, tc.wantTerminal, string(terminal))
+		})
+	}
+}
+
+// TestHwStreamCarriesError proves a stream write counts as an error only when
+// it holds a protocol error event, not when the model merely writes the word.
+func TestHwStreamCarriesError(t *testing.T) {
+	assert.True(t, hwStreamCarriesError([]byte("event: error\ndata: {}\n\n")))
+	assert.True(t, hwStreamCarriesError([]byte("data: {\"error\":{\"message\":\"x\"}}\n\n")))
+	assert.False(t, hwStreamCarriesError([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"error\"}}]}\n\n")))
+	assert.False(t, hwStreamCarriesError([]byte("data: not json\n\n")))
+	assert.False(t, hwStreamCarriesError([]byte("data: [DONE]\n\n")))
+	assert.False(t, hwStreamCarriesError(nil))
+}
+
+func TestHwLooksLikeSSE(t *testing.T) {
+	for _, data := range []string{"data: {}", "  \n event: x", ": ping", "id: 1", "retry: 10", ""} {
+		assert.True(t, hwLooksLikeSSE([]byte(data)), data)
+	}
+	for _, data := range []string{`{"a":1}`, "<html>", "datum: x", "events: x"} {
+		assert.False(t, hwLooksLikeSSE([]byte(data)), data)
+	}
+}
