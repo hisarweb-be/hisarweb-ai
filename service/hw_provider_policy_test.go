@@ -1,11 +1,14 @@
 package service
 
 import (
+	"errors"
+	"net/http"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relaykit/types"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -154,4 +157,239 @@ func TestHwTaskBillingAliasIsAdminOnly(t *testing.T) {
 	adminInfo, ok := snapshot["admin_info"].(map[string]any)
 	require.True(t, ok, "the admin block must carry the alias: %v", snapshot)
 	assert.Equal(t, "supplier-alias-9", adminInfo["upstream_model_name"])
+}
+
+func hwPolicyChannel(id int, provider, modelMapping string) *model.Channel {
+	channel := &model.Channel{Id: id, Type: constant.ChannelTypeOpenAI}
+	channel.SetTag(provider)
+	if modelMapping != "" {
+		channel.ModelMapping = &modelMapping
+	}
+	return channel
+}
+
+func hwPolicyRoute(lumia, openRouter []*model.Channel) *HwRouteState {
+	return &HwRouteState{
+		active:     true,
+		group:      HwPaidGroup,
+		userGroup:  HwPaidGroup,
+		model:      "claude-sonnet-4-5",
+		family:     HwModelFamily("claude-sonnet-4-5"),
+		lumia:      lumia,
+		openRouter: openRouter,
+		tried:      map[int]bool{},
+	}
+}
+
+func hwPolicyError(status int, code types.ErrorCode, opts ...types.NewAPIErrorOptions) *types.NewAPIError {
+	return types.NewErrorWithStatusCode(errors.New("upstream failed"), code, status, opts...)
+}
+
+// Only transient supplier failures earn the extra Lumia attempt; a 4xx from the
+// supplier is the customer's own problem and must not be retried as an outage.
+func TestHwIsOutageErrorClassifiesTransientFailures(t *testing.T) {
+	assert.False(t, hwIsOutageError(nil))
+	assert.True(t, hwIsOutageError(hwPolicyError(http.StatusTooManyRequests, "other")))
+	assert.True(t, hwIsOutageError(hwPolicyError(http.StatusBadGateway, "other")))
+	assert.True(t, hwIsOutageError(hwPolicyError(599, "other")))
+	assert.False(t, hwIsOutageError(hwPolicyError(600, "other")))
+	assert.False(t, hwIsOutageError(hwPolicyError(http.StatusBadRequest, "invalid_request")))
+	for _, code := range []types.ErrorCode{
+		types.ErrorCodeDoRequestFailed,
+		types.ErrorCodeReadResponseBodyFailed,
+		types.ErrorCodeBadResponse,
+		types.ErrorCodeBadResponseStatusCode,
+		HwErrorCodeStreamInterrupted,
+	} {
+		assert.True(t, hwIsOutageError(hwPolicyError(http.StatusBadRequest, code)), string(code))
+	}
+}
+
+// HwDecideRetry owns the retry decision of a supplier route: it ends the route
+// on terminal errors, remembers an outage for the extra Lumia attempt and never
+// switches supplier once the customer received data.
+func TestHwDecideRetryFollowsTheSupplierRoute(t *testing.T) {
+	previousPause := common.HwLumiaRetryPauseMs
+	common.HwLumiaRetryPauseMs = 0
+	t.Cleanup(func() { common.HwLumiaRetryPauseMs = previousPause })
+
+	lumia := hwPolicyChannel(1, HwProviderLumia, "")
+	spare := hwPolicyChannel(2, HwProviderLumia, "")
+	openRouter := hwPolicyChannel(3, HwProviderOpenRouter, "")
+	serverError := hwPolicyError(http.StatusInternalServerError, types.ErrorCodeBadResponseStatusCode)
+
+	t.Run("no route leaves the generic decision alone", func(t *testing.T) {
+		decision, handled := HwDecideRetry(hwClientErrorContext(""), serverError)
+		assert.False(t, handled)
+		assert.Equal(t, PolicyDecision{}, decision)
+	})
+
+	t.Run("no error stops", func(t *testing.T) {
+		c := hwClientErrorContext("")
+		c.Set(hwRouteContextKey, hwPolicyRoute([]*model.Channel{lumia}, nil))
+		decision, handled := HwDecideRetry(c, nil)
+		require.True(t, handled)
+		assert.Equal(t, "stop", decision.Action)
+		assert.Equal(t, "hw_no_error", decision.Reason)
+	})
+
+	t.Run("skip-retry and service-busy errors are terminal", func(t *testing.T) {
+		for _, apiErr := range []*types.NewAPIError{
+			hwPolicyError(http.StatusBadRequest, "invalid_request", types.ErrOptionWithSkipRetry()),
+			hwPolicyError(http.StatusServiceUnavailable, HwErrorCodeServiceBusy),
+		} {
+			c := hwClientErrorContext("")
+			state := hwPolicyRoute([]*model.Channel{lumia, spare}, nil)
+			c.Set(hwRouteContextKey, state)
+			decision, handled := HwDecideRetry(c, apiErr)
+			require.True(t, handled)
+			assert.Equal(t, "hw_terminal_error", decision.Reason)
+			assert.True(t, state.finished)
+			assert.Nil(t, state.next(), "a finished route offers nothing more")
+		}
+	})
+
+	t.Run("an untried alias keeps the route going", func(t *testing.T) {
+		c := hwClientErrorContext("")
+		state := hwPolicyRoute([]*model.Channel{lumia, spare}, nil)
+		state.tried[lumia.Id] = true
+		c.Set(hwRouteContextKey, state)
+		decision, handled := HwDecideRetry(c, hwPolicyError(http.StatusBadRequest, "invalid_request"))
+		require.True(t, handled)
+		assert.Equal(t, "retry", decision.Action)
+		assert.Equal(t, "hw_supplier_route", decision.Reason)
+		assert.Equal(t, "supplier_policy", decision.Source)
+		assert.False(t, state.outage, "a 400 is not an outage")
+	})
+
+	t.Run("an outage on the only Lumia alias earns one retry, then the route ends", func(t *testing.T) {
+		c := hwClientErrorContext("")
+		state := hwPolicyRoute([]*model.Channel{lumia}, nil)
+		c.Set(hwRouteContextKey, state)
+		require.Same(t, lumia, state.next())
+
+		decision, handled := HwDecideRetry(c, serverError)
+		require.True(t, handled)
+		assert.Equal(t, "hw_supplier_route", decision.Reason)
+		assert.True(t, state.outage)
+		assert.True(t, HwRetryLoopExtends(c))
+
+		require.Same(t, lumia, state.next(), "the single extra Lumia attempt")
+		assert.True(t, state.lumiaRetried)
+		decision, _ = HwDecideRetry(c, serverError)
+		assert.Equal(t, "hw_route_exhausted", decision.Reason)
+		assert.True(t, state.finished)
+		assert.False(t, HwRetryLoopExtends(c))
+	})
+
+	t.Run("an outage moves a paid request on to the emergency supplier", func(t *testing.T) {
+		c := hwClientErrorContext("")
+		state := hwPolicyRoute([]*model.Channel{lumia}, []*model.Channel{openRouter})
+		state.lumiaRetried = true
+		c.Set(hwRouteContextKey, state)
+		require.Same(t, lumia, state.next())
+
+		decision, _ := HwDecideRetry(c, serverError)
+		assert.Equal(t, "hw_supplier_route", decision.Reason)
+		require.Same(t, openRouter, state.next())
+		assert.True(t, state.fallback)
+		assert.Equal(t, HwProviderOpenRouter, state.provider)
+	})
+
+	t.Run("a stream that already wrote data never switches supplier", func(t *testing.T) {
+		c := hwClientErrorContext("")
+		state := hwPolicyRoute([]*model.Channel{lumia, spare}, []*model.Channel{openRouter})
+		state.tried[lumia.Id] = true
+		state.streamWrites = 1
+		c.Set(hwRouteContextKey, state)
+		decision, _ := HwDecideRetry(c, serverError)
+		assert.Equal(t, "hw_route_exhausted", decision.Reason)
+		assert.True(t, state.streamCut)
+		assert.True(t, state.finished)
+	})
+}
+
+// A route claims only a channel that belongs to it: tagged, allowed for the
+// group and serving the requested family through its own model mapping.
+func TestHwRouteClaimOnlyAcceptsChannelsOfTheRoute(t *testing.T) {
+	var nilState *HwRouteState
+	assert.False(t, nilState.claim(hwPolicyChannel(1, HwProviderLumia, "")))
+	assert.False(t, hwPolicyRoute(nil, nil).claim(nil))
+
+	state := hwPolicyRoute(nil, nil)
+	assert.False(t, state.claim(&model.Channel{Id: 2, Type: constant.ChannelTypeOpenAI}), "untagged channel")
+	assert.False(t, state.claim(hwPolicyChannel(3, HwProviderLumia, `{"claude-sonnet-4-5":"gpt-4o"}`)), "mapped to another family")
+
+	free := hwPolicyRoute(nil, nil)
+	free.group, free.userGroup = "free", "free"
+	assert.False(t, free.claim(hwPolicyChannel(4, HwProviderOpenRouter, "")), "emergency supplier for a free group")
+
+	require.True(t, state.claim(hwPolicyChannel(5, HwProviderLumia, `{"claude-sonnet-4-5":"claude-sonnet-4-5-20250929"}`)))
+	require.True(t, state.claim(hwPolicyChannel(6, HwProviderOpenRouter, "")))
+	assert.Equal(t, 2, state.attempts)
+	assert.True(t, state.fallback, "the second attempt counts as a fallback")
+	assert.Equal(t, 6, state.channelID)
+	assert.Equal(t, HwProviderOpenRouter, state.provider)
+	assert.True(t, state.tried[5] && state.tried[6])
+}
+
+// The retry-path selector keeps routing on the prebuilt route and ends an
+// exhausted route in the service-busy error instead of leaking to a foreign
+// family.
+func TestHwSelectChannelFollowsTheRoute(t *testing.T) {
+	lumia := hwPolicyChannel(1, HwProviderLumia, "")
+	retry := &RetryParam{ModelName: "claude-sonnet-4-5"}
+
+	t.Run("first channel needs a context and a pick", func(t *testing.T) {
+		replacement, apiErr := HwFirstChannel(nil, lumia, HwPaidGroup, "claude-sonnet-4-5")
+		assert.Nil(t, replacement)
+		assert.Nil(t, apiErr)
+
+		replacement, apiErr = HwFirstChannel(hwClientErrorContext(""), nil, HwPaidGroup, "claude-sonnet-4-5")
+		assert.Nil(t, replacement)
+		assert.Nil(t, apiErr)
+	})
+
+	t.Run("prebuilt route", func(t *testing.T) {
+		c := hwClientErrorContext("")
+		state := hwPolicyRoute([]*model.Channel{lumia}, nil)
+		c.Set(hwRouteContextKey, state)
+
+		channel, group, err := HwSelectChannel(c, retry, func() (*model.Channel, string, error) {
+			t.Fatal("the stock selection must not run once the route exists")
+			return nil, "", nil
+		})
+		require.NoError(t, err)
+		assert.Same(t, lumia, channel)
+		assert.Equal(t, HwPaidGroup, group)
+
+		channel, _, err = HwSelectChannel(c, retry, nil)
+		assert.Nil(t, channel)
+		require.Error(t, err)
+		assert.True(t, state.finished)
+		var apiErr *types.NewAPIError
+		require.ErrorAs(t, err, &apiErr)
+		assert.Equal(t, HwErrorCodeServiceBusy, apiErr.GetErrorCode())
+	})
+
+	t.Run("stock selection errors pass through", func(t *testing.T) {
+		boom := errors.New("no channel")
+		channel, group, err := HwSelectChannel(hwClientErrorContext(""), retry, func() (*model.Channel, string, error) {
+			return nil, "stock-group", boom
+		})
+		assert.Nil(t, channel)
+		assert.Equal(t, "stock-group", group)
+		assert.ErrorIs(t, err, boom)
+	})
+}
+
+func TestHwCustomerModelPrefersTheRouteModel(t *testing.T) {
+	assert.Empty(t, HwCustomerModel(nil))
+
+	c := hwClientErrorContext("")
+	c.Set("original_model", "from-request")
+	assert.Equal(t, "from-request", HwCustomerModel(c))
+
+	c.Set(hwRouteContextKey, hwPolicyRoute(nil, nil))
+	assert.Equal(t, "claude-sonnet-4-5", HwCustomerModel(c))
 }
