@@ -861,7 +861,9 @@ func hwDropJSONKey(key string) bool {
 		"provider_name", "provider_slug", "generation_id", "is_byok", "cost_details":
 		return true
 	}
-	return strings.HasPrefix(lower, "openrouter") || strings.HasPrefix(lower, "x_") || strings.HasPrefix(lower, "x-")
+	// A key that names the supplier (openrouter_cost, lumia_cost_usd) goes,
+	// whatever its position in the name.
+	return common.HwHasProviderTextTrace(lower) || strings.HasPrefix(lower, "x_") || strings.HasPrefix(lower, "x-")
 }
 
 // hwResponseHeaderAllowed keeps headers our own middleware set and a small

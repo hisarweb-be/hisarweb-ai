@@ -47,7 +47,7 @@ func TestHwMaskDropsNestedSupplierFields(t *testing.T) {
 			`"choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"native_finish_reason":"stop"}],`+
 			`"usage":{"prompt_tokens":1,"total_tokens":2,"is_byok":true,`+
 			`"cost_details":{"openrouter_cost":0.01,"x-or-fee":1}},`+
-			`"system_fingerprint":"fp-lumia","nested":{"deep":[{"provider":"openrouter"}]}}`)
+			`"system_fingerprint":"fp-lumia","lumia_cost_usd":0.01,"nested":{"deep":[{"provider":"openrouter"}]}}`)
 	})
 
 	recorder := hwMaskDo(t, engine, http.MethodPost, "/v1/chat/completions", "", nil)
