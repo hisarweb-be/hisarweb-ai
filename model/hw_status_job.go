@@ -12,8 +12,38 @@
 package model
 
 import (
+	"context"
+	"sync"
 	"time"
 )
+
+// hwStatusProbeTimeout bounds one mini call of the status probe. The pass runs
+// every minute and probes the sold models one after another only when they saw
+// no customer traffic, so a hanging upstream costs at most this per model.
+const hwStatusProbeTimeout = 8 * time.Second
+
+var (
+	hwStatusProbeMu sync.RWMutex
+	hwStatusProbe   func(ctx context.Context, modelName string) bool
+)
+
+// SetHwStatusProbe installs the mini call that decides a quiet minute, or
+// clears it with nil. The service layer installs it once at startup, because
+// only that layer knows the customer route and its key; the model layer keeps
+// the measurement free of supplier knowledge. Without a probe the route check
+// decides, so an environment without a key never reports a false outage.
+func SetHwStatusProbe(probe func(ctx context.Context, modelName string) bool) {
+	hwStatusProbeMu.Lock()
+	defer hwStatusProbeMu.Unlock()
+	hwStatusProbe = probe
+}
+
+// hwStatusProbeCurrent returns the installed probe, or nil.
+func hwStatusProbeCurrent() func(ctx context.Context, modelName string) bool {
+	hwStatusProbeMu.RLock()
+	defer hwStatusProbeMu.RUnlock()
+	return hwStatusProbe
+}
 
 // HwMeasureStatusOnce measures the minute that ends at at for the given own
 // model names and records it. It is exported so a test can run the pass without
@@ -30,18 +60,27 @@ func HwMeasureStatusOnce(at time.Time, models []string) error {
 		return err
 	}
 	var routed map[string]bool
+	probe := hwStatusProbeCurrent()
 	for _, name := range models {
 		verdict := HwEvaluateStatusMinute(counts[name].Failed, counts[name].Measured)
 		ok, reason := verdict.Ok, verdict.Reason
 		if verdict.Idle {
-			// Without traffic the evidence is the route: a sold model with an
-			// enabled channel in the paid group can be served.
-			if routed == nil {
-				routed = hwRoutedModels()
-			}
-			ok, reason = routed[name], ""
-			if !ok {
-				reason = HwStatusReasonNoRoute
+			// Without traffic the evidence is the upstream itself: a mini call
+			// per sold model. Only that call shows whether an upstream answers,
+			// and without it a 503 stayed invisible on the status page (the
+			// outage of 24-26 Oct 2026).
+			if probe != nil {
+				ok, reason = hwProbeStatusModel(probe, name)
+			} else {
+				// No probe configured: the route is the only evidence. A sold
+				// model with an enabled channel in the paid group can be served.
+				if routed == nil {
+					routed = hwRoutedModels()
+				}
+				ok, reason = routed[name], ""
+				if !ok {
+					reason = HwStatusReasonNoRoute
+				}
 			}
 		}
 		sample := HwStatusSample{
@@ -60,6 +99,17 @@ func HwMeasureStatusOnce(at time.Time, models []string) error {
 	}
 	_, err = HwExtendPendingIncidents(at.Unix())
 	return err
+}
+
+// hwProbeStatusModel runs the mini call for one model and turns its answer into
+// the verdict of a quiet minute: only an answer counts as good.
+func hwProbeStatusModel(probe func(ctx context.Context, modelName string) bool, name string) (bool, string) {
+	ctx, cancel := context.WithTimeout(context.Background(), hwStatusProbeTimeout)
+	defer cancel()
+	if probe(ctx, name) {
+		return true, ""
+	}
+	return false, HwStatusReasonProbeFailed
 }
 
 // hwRoutedModels is the set of model names with an enabled channel in the paid

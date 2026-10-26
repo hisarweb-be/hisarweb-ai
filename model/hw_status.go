@@ -75,6 +75,10 @@ const (
 const (
 	HwStatusReasonRelayFailures = "relay_failures"
 	HwStatusReasonNoRoute       = "no_route"
+	// HwStatusReasonProbeFailed is a quiet minute in which the mini call to the
+	// model did not get a 200: the upstream does not answer, whatever the route
+	// says (the invisible 503 of 24-26 Oct 2026).
+	HwStatusReasonProbeFailed = "probe_failed"
 	// HwStatusReasonMeasurement is the retired verdict of a minute without
 	// traffic. Until 23 Oct 2026 such a minute counted as bad, so every quiet
 	// night opened a false outage of the whole estate; the sweep in
