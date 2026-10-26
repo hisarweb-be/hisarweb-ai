@@ -7,17 +7,21 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// SetHwWebhookRoutes registers the anonymous provider webhooks on a group
+// without any IP rate limit. Each one authenticates itself (the payment
+// signature over the raw body, the Telegram secret header) before any
+// expensive work, and the providers retry bursts after an outage; a per-IP
+// limiter, the global one included, would drop exactly those retries. The
+// body-size limit stays.
+func SetHwWebhookRoutes(webhookRouter *gin.RouterGroup) {
+	webhookRouter.POST("/hw/revolut/webhook", middleware.AnonymousRequestBodyLimit(), controller.HwRevolutWebhook)
+	webhookRouter.POST("/hw/stripe/webhook", middleware.AnonymousRequestBodyLimit(), controller.HwStripeWebhook)
+	webhookRouter.POST("/hw/telegram/webhook", middleware.AnonymousRequestBodyLimit(), controller.HwTelegramWebhook)
+}
+
 // SetHwRoutes registers the HisarWeb top-up API: the user-facing order endpoint
-// behind the normal login, the anonymous payment webhook (whose signature of the
-// raw body is its authentication), and the admin refund route.
+// behind the normal login and the admin refund route.
 func SetHwRoutes(apiRouter *gin.RouterGroup) {
-	// No IP rate limit here on purpose: the webhook is authenticated by the
-	// HMAC signature over the raw body, which is checked before any expensive
-	// work, and the provider retries bursts of events after an outage. The
-	// shared critical limiter (20 requests per 20 minutes per IP) would drop
-	// exactly those retries. The body-size limit stays.
-	apiRouter.POST("/hw/revolut/webhook", middleware.AnonymousRequestBodyLimit(), controller.HwRevolutWebhook)
-	apiRouter.POST("/hw/stripe/webhook", middleware.AnonymousRequestBodyLimit(), controller.HwStripeWebhook)
 
 	hwUserRoute := apiRouter.Group("/user/hw")
 	hwUserRoute.Use(middleware.DisableCache(), middleware.UserAuth())
