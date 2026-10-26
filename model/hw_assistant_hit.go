@@ -36,7 +36,7 @@ func HwAssistantRecordHit(db *gorm.DB, key string, now int64) error {
 	return db.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "key"}},
 		DoUpdates: clause.Assignments(map[string]any{
-			"hits":    gorm.Expr("hits + 1"),
+			"hits":    gorm.Expr("hw_assistant_hits.hits + 1"),
 			"last_at": now,
 		}),
 	}).Create(&HwAssistantHit{Key: key, Hits: 1, LastAt: now}).Error
