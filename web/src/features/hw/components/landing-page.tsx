@@ -562,11 +562,11 @@ function FinalCta(props: { text: Translate }) {
  */
 export function LandingPage() {
   const text = useHwText()
-  const root = useRef<HTMLElement>(null)
+  const root = useRef<HTMLDivElement>(null)
   useLandingMotion(root)
 
   return (
-    <main ref={root} className='hwl'>
+    <div ref={root} className='hwl'>
       <Hero text={text} />
       <Ticker
         items={[
@@ -585,6 +585,6 @@ export function LandingPage() {
       <Steps text={text} />
       <Faq text={text} />
       <FinalCta text={text} />
-    </main>
+    </div>
   )
 }

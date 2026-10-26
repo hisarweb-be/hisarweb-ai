@@ -74,7 +74,7 @@ export function PublicLayout(props: PublicLayoutProps) {
           {props.children}
         </main>
       ) : (
-        props.children
+        <main>{props.children}</main>
       )}
       {/* Every public page ends with the same footer. */}
       <Footer />

@@ -57,9 +57,9 @@ export function Home() {
   if (!isLoaded) {
     return (
       <PublicLayout showMainContainer={false}>
-        <main className='flex min-h-screen items-center justify-center'>
+        <div className='flex min-h-screen items-center justify-center'>
           <div className='text-muted-foreground'>{t('Loading...')}</div>
-        </main>
+        </div>
       </PublicLayout>
     )
   }

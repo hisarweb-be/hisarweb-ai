@@ -61,6 +61,29 @@ test('the landing page keeps its own hero and opts out of the backdrop', () => {
   expect(screen.queryByTestId('public-backdrop')).not.toBeInTheDocument()
 })
 
+test('a page without the default container still sits in the one main landmark', () => {
+  render(
+    <PublicLayout showMainContainer={false}>
+      <header>page head</header>
+    </PublicLayout>
+  )
+
+  // axe: landmark-one-main, and a page header outside main is a second banner.
+  expect(screen.getByRole('main')).toContainElement(
+    screen.getByText('page head')
+  )
+})
+
+test('the best price label keeps dark text on green in both themes', () => {
+  const css = readFileSync(resolve(styles, 'hw-cinematic.css'), 'utf8')
+
+  // White on the light-theme green measured 3.4:1 (axe color-contrast, WCAG AA needs 4.5).
+  expect(css).toMatch(
+    /\n\.hwp-best-label \{[^}]*\n {2}color: oklch\(0\.18 0\.03 155\);/
+  )
+  expect(css).not.toMatch(/\.dark \.hwp-best-label/)
+})
+
 test('the landing chips sit above the code window', () => {
   const css = readFileSync(resolve(styles, 'hw-landing.css'), 'utf8')
   const rule = (selector: string) =>
