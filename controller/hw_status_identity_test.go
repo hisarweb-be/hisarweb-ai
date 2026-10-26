@@ -184,3 +184,106 @@ func TestHwStatusListsTheCurrenciesThatCanBeSold(t *testing.T) {
 	assert.NotContains(t, data["hw_rates"], "EUR")
 	assert.NotContains(t, data["hw_topup"], "EUR")
 }
+
+func hwTopUpErrorServe(t *testing.T, err error, currency string) *httptest.ResponseRecorder {
+	t.Helper()
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/hw/orders", nil)
+	c.Set(common.RequestIdKey, "hw-topup-error-request")
+	hwTopUpOrderError(c, err, currency)
+	return recorder
+}
+
+// TestHwTopUpOrderErrorAnswers proves a failed top-up is told to the customer
+// in the right class: a request they can fix is a 400 or 409 with the range
+// they may choose, a shop that cannot sell right now is a 503, and an
+// unexpected failure never echoes its own text.
+func TestHwTopUpOrderErrorAnswers(t *testing.T) {
+	hwStatusIdentityFixture(t)
+	common.OptionMapRWMutex.Lock()
+	common.OptionMap[model.HwTryPerUsdOption] = "40"
+	common.OptionMap[model.HwEurPerUsdOption] = "0.8"
+	common.OptionMap[model.HwEurPerUsdDateOption] = time.Now().UTC().Format("2006-01-02")
+	common.OptionMapRWMutex.Unlock()
+
+	t.Run("unsupported currency", func(t *testing.T) {
+		recorder := hwTopUpErrorServe(t, service.ErrHwCurrencyUnsupported, "GBP")
+		assert.Equal(t, http.StatusBadRequest, recorder.Code)
+		assert.Contains(t, recorder.Body.String(), "Invalid request")
+	})
+	t.Run("amount outside the range names the range of the chosen currency", func(t *testing.T) {
+		recorder := hwTopUpErrorServe(t, service.ErrHwTopUpAmountOutOfRange, "EUR")
+		assert.Equal(t, http.StatusBadRequest, recorder.Code)
+		body := recorder.Body.String()
+		assert.Contains(t, body, "Top-up value must be between")
+		assert.Contains(t, body, `"min":2`)
+		assert.Contains(t, body, `"max":400`)
+		assert.Contains(t, body, `"currency":"EUR"`)
+	})
+	t.Run("amount outside the range without a usable rate cannot name a range", func(t *testing.T) {
+		common.OptionMapRWMutex.Lock()
+		common.OptionMap[model.HwEurPerUsdDateOption] = time.Now().UTC().AddDate(0, 0, -9).Format("2006-01-02")
+		common.OptionMapRWMutex.Unlock()
+		recorder := hwTopUpErrorServe(t, service.ErrHwTopUpAmountOutOfRange, "EUR")
+		assert.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+		assert.Contains(t, recorder.Body.String(), "not available right now")
+	})
+	t.Run("too many open orders", func(t *testing.T) {
+		recorder := hwTopUpErrorServe(t, service.ErrHwTooManyOpenOrders, "TRY")
+		assert.Equal(t, http.StatusConflict, recorder.Code)
+		assert.Contains(t, recorder.Body.String(), "already have an order waiting")
+	})
+	t.Run("a missing rate or provider is a retryable outage", func(t *testing.T) {
+		for _, err := range []error{service.ErrHwTopUpRateMissing, service.ErrHwPaymentProviderUnavailable} {
+			recorder := hwTopUpErrorServe(t, err, "TRY")
+			assert.Equal(t, http.StatusServiceUnavailable, recorder.Code, err.Error())
+			assert.Contains(t, recorder.Body.String(), "not available right now")
+		}
+	})
+	t.Run("an unexpected error is not echoed", func(t *testing.T) {
+		recorder := hwTopUpErrorServe(t, fmt.Errorf("insert failed for user 4242"), "TRY")
+		assert.Contains(t, recorder.Body.String(), "Failed to start the top-up")
+		assert.NotContains(t, recorder.Body.String(), "4242")
+	})
+}
+
+// hwWebhookServe returns the status the handler set; the webhooks answer with
+// a bare status, which a recorder only sees once the header is flushed.
+func hwWebhookServe(t *testing.T, handler gin.HandlerFunc, body string) int {
+	t.Helper()
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/hw/webhook", strings.NewReader(body))
+	handler(c)
+	return c.Writer.Status()
+}
+
+// TestHwPaymentWebhooksRefuseBeforeAnyCreditIsWritten proves the anonymous
+// webhook routes answer a body that is too big with 413, answer 503 while no
+// webhook secret is configured (so the provider retries instead of an unsigned
+// event being trusted), and answer 401 for a signature that does not match.
+func TestHwPaymentWebhooksRefuseBeforeAnyCreditIsWritten(t *testing.T) {
+	tooBig := strings.Repeat("x", hwRevolutWebhookMaxBodyBytes+1)
+	routes := []struct {
+		name      string
+		handler   gin.HandlerFunc
+		secretEnv string
+		secret    string
+	}{
+		{"revolut", HwRevolutWebhook, service.HwRevolutWebhookSecretEnv, "wsk_test_secret"},
+		{"stripe", HwStripeWebhook, service.HwStripeWebhookSecretEnv, "whsec_test_secret"},
+	}
+	for _, route := range routes {
+		t.Run(route.name, func(t *testing.T) {
+			t.Setenv(route.secretEnv, "")
+			assert.Equal(t, http.StatusRequestEntityTooLarge, hwWebhookServe(t, route.handler, tooBig))
+			assert.Equal(t, http.StatusServiceUnavailable, hwWebhookServe(t, route.handler, `{"event":"x"}`), "no secret, no event is trusted")
+
+			t.Setenv(route.secretEnv, route.secret)
+			assert.Equal(t, http.StatusUnauthorized, hwWebhookServe(t, route.handler, `{"event":"x"}`), "no signature header")
+		})
+	}
+	t.Run("telegram", func(t *testing.T) {
+		assert.Equal(t, http.StatusRequestEntityTooLarge, hwWebhookServe(t, HwTelegramWebhook, tooBig))
+	})
+}
