@@ -26,7 +26,8 @@ afterEach(() => {
 })
 
 function minHeightOf(element: HTMLElement) {
-  return element.style.getPropertyValue('--code-editor-min-height')
+  const host = element.closest<HTMLElement>('[data-slot=code-editor-host]')
+  return host?.style.getPropertyValue('--code-editor-min-height')
 }
 
 describe('CodeBlock', () => {
@@ -45,6 +46,21 @@ describe('CodeBlock', () => {
     )
 
     expect(minHeightOf(getByRole('textbox', { name: 'bash' }))).toBe('11rem')
+  })
+})
+
+describe('CodeBlock accessibility', () => {
+  test('names the editable content and lets the scrolling body take keyboard focus', () => {
+    const { container } = render(
+      <CodeBlock code='npm install' language='bash' />
+    )
+
+    expect(
+      container.querySelector('.cm-content')?.getAttribute('aria-label')
+    ).toBe('bash')
+    expect(
+      container.querySelector('.code-block-scroll')?.getAttribute('tabindex')
+    ).toBe('0')
   })
 })
 
