@@ -317,8 +317,7 @@ export function buildGroupPerformance(model: PricingModel): GroupPerformance[] {
   const spec = PROFILE_SPECS[profile]
   const baseSeed = hashStringToSeed(model.model_name)
 
-  return targets
-    .slice()
+  return [...targets]
     .sort((a, b) => a.localeCompare(b))
     .map<GroupPerformance>((group) => {
       const rand = seededRandom(baseSeed ^ hashStringToSeed(group))
@@ -807,6 +806,16 @@ export type RateLimit = {
   rpd: number
 }
 
+/** Base [rpm, tpm, rpd] before the per-group tier: images and videos are slow, embeddings are cheap. */
+function pickBaseLimits(
+  isHeavy: boolean,
+  isLight: boolean
+): [number, number, number] {
+  if (isHeavy) return [60, 0, 1_000]
+  if (isLight) return [5_000, 1_000_000, 100_000]
+  return [500, 200_000, 10_000]
+}
+
 /** Build per-group RPM / TPM / RPD limits for the model. */
 export function buildRateLimits(model: PricingModel): RateLimit[] {
   const groups = (model.enable_groups ?? []).filter((g) => g && g !== 'auto')
@@ -815,12 +824,9 @@ export function buildRateLimits(model: PricingModel): RateLimit[] {
   const baseSeed = hashStringToSeed(`${model.model_name}:rl`)
   const isHeavy = cat === 'image' || cat === 'video'
   const isLight = cat === 'embedding'
-  const baseRpm = isHeavy ? 60 : isLight ? 5_000 : 500
-  const baseTpm = isHeavy ? 0 : isLight ? 1_000_000 : 200_000
-  const baseRpd = isHeavy ? 1_000 : isLight ? 100_000 : 10_000
+  const [baseRpm, baseTpm, baseRpd] = pickBaseLimits(isHeavy, isLight)
 
-  return targets
-    .slice()
+  return [...targets]
     .sort((a, b) => a.localeCompare(b))
     .map((group) => {
       const rand = seededRandom(baseSeed ^ hashStringToSeed(group))
@@ -832,14 +838,4 @@ export function buildRateLimits(model: PricingModel): RateLimit[] {
         rpd: Math.round((baseRpd * tier) / 100) * 100,
       }
     })
-}
-
-/** Format an integer rate-limit value compactly. */
-export function formatRateLimit(value: number): string {
-  if (value <= 0) return '—'
-  if (value >= 1_000_000) return `${formatDecimal(value / 1_000_000, 1, 1)}M`
-  if (value >= 1_000) {
-    return `${formatDecimal(value / 1_000, value >= 10_000 ? 0 : 1)}K`
-  }
-  return formatDecimal(value, 0)
 }
