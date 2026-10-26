@@ -143,3 +143,10 @@ func TestHwBindTelegramAccountKeepsOneOwner(t *testing.T) {
 	assert.Equal(t, first.Id, holders[0].Id)
 	assert.Equal(t, "hw-tg-race", holders[0].TelegramId)
 }
+
+// TestHwTelegramLinkTokenExpiryIsIndexed proves the expiry cleanup that runs
+// on every link start can use an index instead of scanning the whole table.
+func TestHwTelegramLinkTokenExpiryIsIndexed(t *testing.T) {
+	require.NoError(t, DB.AutoMigrate(&HwTelegramLinkToken{}))
+	assert.True(t, DB.Migrator().HasIndex(&HwTelegramLinkToken{}, "ExpiresAt"))
+}
