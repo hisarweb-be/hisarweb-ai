@@ -196,8 +196,6 @@ func StartHwStatusJob() {
 	})
 }
 
-// runHwStatusOnceSafely is one measurement pass. A panic is logged and ends the
-// pass only, so a bad row cannot stop the ticker.
 // hwStatusProbeFromEnv builds the mini call that decides a quiet minute, from
 // the measurement configuration the quality run already uses
 // (HW_QUALITY_BASE_URL and HW_QUALITY_API_KEY). It returns nil when that
@@ -219,6 +217,8 @@ func hwStatusProbeFromEnv() func(ctx context.Context, modelName string) bool {
 	}
 }
 
+// runHwStatusOnceSafely is one measurement pass. A panic is logged and ends the
+// pass only, so a bad row cannot stop the ticker.
 func runHwStatusOnceSafely(at time.Time) {
 	defer func() {
 		if r := recover(); r != nil {
