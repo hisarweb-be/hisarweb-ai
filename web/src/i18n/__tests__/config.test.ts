@@ -20,13 +20,26 @@ import i18next, { type i18n as I18nInstance } from 'i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 import { beforeEach, describe, expect, test } from 'vitest'
 
-import { INTERFACE_I18N_OPTIONS, applyDocumentLanguage } from '../config'
+import {
+  INTERFACE_I18N_OPTIONS,
+  applyDocumentLanguage,
+  lazyLocaleBackend,
+} from '../config'
+import zhTranslations from '../locales/zh.json'
 
 // The application singleton is initialized by the shared test setup, so the
 // language rules are exercised on a fresh instance built from the same options.
+// i18next stores the resources object it is given and adds loaded languages to
+// it, so every instance gets its own copy.
 async function createInterfaceI18n(): Promise<I18nInstance> {
   const instance = i18next.createInstance()
-  await instance.use(LanguageDetector).init({ ...INTERFACE_I18N_OPTIONS })
+  await instance
+    .use(LanguageDetector)
+    .use(lazyLocaleBackend)
+    .init({
+      ...INTERFACE_I18N_OPTIONS,
+      resources: { ...INTERFACE_I18N_OPTIONS.resources },
+    })
   return instance
 }
 
@@ -65,6 +78,35 @@ describe('interface language', () => {
     i18n.addResource('en', 'translation', '__fallback probe__', 'English only')
 
     expect(i18n.t('__fallback probe__')).toBe('English only')
+  })
+})
+
+describe('language files', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  test('only Turkish and English ship in the main bundle', () => {
+    // The other six files are about 4 MB together; they load when chosen.
+    expect(Object.keys(INTERFACE_I18N_OPTIONS.resources)).toEqual(['tr', 'en'])
+  })
+
+  test('a stored other language is loaded before the interface starts in it', async () => {
+    localStorage.setItem('i18nextLng', 'zhCN')
+
+    const i18n = await createInterfaceI18n()
+
+    expect(i18n.language).toBe('zhCN')
+    expect(i18n.t('About')).toBe(zhTranslations.translation.About)
+  })
+
+  test('choosing another language loads its file on demand', async () => {
+    const i18n = await createInterfaceI18n()
+    expect(i18n.hasResourceBundle('zhCN', 'translation')).toBe(false)
+
+    await i18n.changeLanguage('zhCN')
+
+    expect(i18n.t('About')).toBe(zhTranslations.translation.About)
   })
 })
 

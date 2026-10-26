@@ -22,25 +22,39 @@ import { initReactI18next } from 'react-i18next'
 
 import { convertDetectedLanguage, toIntlLocale } from './languages'
 import en from './locales/en.json'
-import fr from './locales/fr.json'
-import ja from './locales/ja.json'
-import ru from './locales/ru.json'
 import tr from './locales/tr.json'
-import vi from './locales/vi.json'
-import zhTW from './locales/zh-TW.json'
-import zhCN from './locales/zh.json'
 import { loadTextOverrides } from './text-overrides'
 
+// Only the two languages every visitor can fall back to ship in the main
+// bundle; the other six files are about 4 MB together and load when chosen.
 export const resources = {
   tr,
   en,
-  zhCN,
-  fr,
-  ru,
-  ja,
-  vi,
-  zhTW,
 } as const
+
+const LAZY_LOCALES: Record<
+  string,
+  () => Promise<{ default: { translation: Record<string, string> } }>
+> = {
+  zhCN: () => import('./locales/zh.json'),
+  fr: () => import('./locales/fr.json'),
+  ru: () => import('./locales/ru.json'),
+  ja: () => import('./locales/ja.json'),
+  vi: () => import('./locales/vi.json'),
+  zhTW: () => import('./locales/zh-TW.json'),
+}
+
+/** i18next backend that fetches the non-bundled language files on demand. */
+export const lazyLocaleBackend = {
+  type: 'backend' as const,
+  init: () => undefined,
+  async read(language: string, namespace: string) {
+    const load = LAZY_LOCALES[language]
+    if (!load) return {}
+    const module = await load()
+    return module.default[namespace as 'translation']
+  },
+}
 
 /**
  * Init options of the interface languages, exported so a test can exercise them
@@ -49,6 +63,7 @@ export const resources = {
  */
 export const INTERFACE_I18N_OPTIONS = {
   resources,
+  partialBundledLanguages: true,
   // Turkish is the product language for everyone who has not chosen
   // otherwise, so the browser locale is not consulted (a Turkish visitor
   // with an English browser still gets Turkish). The second entry keeps
@@ -71,8 +86,13 @@ export const INTERFACE_I18N_OPTIONS = {
   },
 }
 
-i18n
+/**
+ * Settles once the stored interface language is loaded; the app renders after
+ * it so a visitor on a lazily loaded language never sees the English keys first.
+ */
+export const i18nReady = i18n
   .use(LanguageDetector)
+  .use(lazyLocaleBackend)
   .use(initReactI18next)
   .init({ ...INTERFACE_I18N_OPTIONS, debug: import.meta.env.DEV })
 
