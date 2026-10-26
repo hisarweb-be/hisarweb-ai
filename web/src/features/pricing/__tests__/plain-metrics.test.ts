@@ -79,4 +79,9 @@ describe('plain-metrics', () => {
     expect(plainGroupLabel('default', t)).toBe('Everyone')
     expect(plainGroupLabel('partner', t)).toBe('partner')
   })
+
+  it('shows the free group as a word, not the raw group id', () => {
+    const t = ((key: string) => key) as never
+    expect(plainGroupLabel('free', t)).toBe('Free')
+  })
 })
