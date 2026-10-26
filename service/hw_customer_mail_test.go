@@ -527,3 +527,81 @@ func TestHwMailFormatDateUsesTheTurkishDayAndLanguageMonths(t *testing.T) {
 	assert.Equal(t, "5 Kasım 2026", hwMailFormatDate(hwLanguageTurkish, afternoon))
 	assert.Equal(t, "5 Kasım 2026", hwMailFormatDate("nl", afternoon), "an unknown language falls back to Turkish")
 }
+
+// The low balance mail is keyed by one package: the one that expires first
+// among those that still hold balance, the newest id on a tie.
+func TestHwSpendingPackageIsTheEarliestExpiryWithBalance(t *testing.T) {
+	_, found := hwSpendingPackage(nil)
+	assert.False(t, found)
+	_, found = hwSpendingPackage([]model.HwPackageView{{Id: 1, RemainingQuota: 0, ExpiresAt: 10}})
+	assert.False(t, found, "an empty package never warns")
+
+	views := []model.HwPackageView{
+		{Id: 1, RemainingQuota: 0, ExpiresAt: 100},
+		{Id: 2, RemainingQuota: 5, ExpiresAt: 300},
+		{Id: 3, RemainingQuota: 5, ExpiresAt: 200},
+		{Id: 4, RemainingQuota: 5, ExpiresAt: 200},
+	}
+	spending, found := hwSpendingPackage(views)
+	require.True(t, found)
+	assert.Equal(t, 4, spending.Id, "earliest expiry wins with balance left, the higher id on a tie")
+}
+
+func TestHwMailQuotaToMoneyAndTopUpLink(t *testing.T) {
+	previousQuota := common.QuotaPerUnit
+	t.Cleanup(func() { common.QuotaPerUnit = previousQuota })
+	common.QuotaPerUnit = 500_000
+	assert.True(t, decimal.RequireFromString("20").Equal(hwMailQuotaToMoney(250_000, decimal.RequireFromString("40"))))
+	assert.True(t, hwMailQuotaToMoney(0, decimal.RequireFromString("40")).IsZero())
+	common.QuotaPerUnit = 0
+	assert.True(t, hwMailQuotaToMoney(250_000, decimal.RequireFromString("40")).IsZero(), "no unit size, no amount")
+
+	common.OptionMapRWMutex.Lock()
+	if common.OptionMap == nil {
+		common.OptionMap = map[string]string{}
+	}
+	previousOption, hadOption := common.OptionMap["ServerAddress"]
+	common.OptionMap["ServerAddress"] = " https://shop.example.test/ "
+	common.OptionMapRWMutex.Unlock()
+	t.Cleanup(func() {
+		common.OptionMapRWMutex.Lock()
+		defer common.OptionMapRWMutex.Unlock()
+		if hadOption {
+			common.OptionMap["ServerAddress"] = previousOption
+		} else {
+			delete(common.OptionMap, "ServerAddress")
+		}
+	})
+	assert.Equal(t, "https://shop.example.test"+hwMailTopUpPath, hwMailTopUpLink())
+
+	common.OptionMapRWMutex.Lock()
+	common.OptionMap["ServerAddress"] = ""
+	common.OptionMapRWMutex.Unlock()
+	assert.True(t, strings.HasSuffix(hwMailTopUpLink(), hwMailTopUpPath))
+	assert.NotContains(t, hwMailTopUpLink(), "//satin")
+}
+
+func TestHwMailExpiryAndLowBalanceSentences(t *testing.T) {
+	for _, lang := range []string{"tr", "en"} {
+		subject, content := hwMailExpiryContent(lang, "Ayşe <b>", "6 Kasım 2026", "10,00 €", "30,00 €", "https://example.test/satin-al?a=1&b=2")
+		assert.Contains(t, subject, "5")
+		assert.Contains(t, content, "6 Kasım 2026")
+		assert.Contains(t, content, "10,00 €")
+		assert.Contains(t, content, "30,00 €")
+		assert.Contains(t, content, "&lt;b&gt;", "the name is escaped")
+		assert.Contains(t, content, "a=1&amp;b=2", "the link is escaped")
+		assert.NotContains(t, content, "—")
+
+		subject, content = hwMailLowBalanceContent(lang, "Ayşe <b>", "2,00 €", "5,00 €", "https://example.test/satin-al?a=1&b=2")
+		assert.NotEmpty(t, subject)
+		assert.Contains(t, content, "2,00 €")
+		assert.Contains(t, content, "5,00 €")
+		assert.Contains(t, content, "&lt;b&gt;")
+		assert.Contains(t, content, "a=1&amp;b=2")
+		assert.NotContains(t, content, "—")
+	}
+	subject, _ := hwMailExpiryContent("en", "Sam", "d", "a", "b", "l")
+	assert.Contains(t, subject, "expires in 5 days")
+	subject, _ = hwMailExpiryContent("xx", "Sam", "d", "a", "b", "l")
+	assert.Contains(t, subject, "5 gün", "an unknown language falls back to Turkish")
+}
