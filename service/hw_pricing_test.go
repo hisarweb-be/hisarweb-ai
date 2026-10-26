@@ -690,3 +690,79 @@ func TestHwPricingErrorClassNeverCarriesTheErrorText(t *testing.T) {
 	assert.Equal(t, "timeout", hwPricingErrorClass(errors.Join(errors.New("get"), context.DeadlineExceeded)))
 	assert.Equal(t, "fetch", hwPricingErrorClass(errors.New(`Get "https://rates.example/?key=secret": EOF`)))
 }
+
+// The open price list publishes per-token prices as decimal text, often in
+// scientific notation; the conversion to micro-dollars per million tokens must
+// be exact and must refuse anything that is not a clean, non-negative number.
+func TestHwMicroUsdPerMillionReadsPublishedPricesExactly(t *testing.T) {
+	for raw, want := range map[string]int64{
+		"4e-06":     4_000_000,
+		"0.000002":  2_000_000,
+		"1e-07":     100_000,
+		" 5e-06 ":   5_000_000,
+		"0":         0,
+		"2.5e-07":   250_000,
+		"0.0000015": 1_500_000,
+	} {
+		got, err := hwMicroUsdPerMillion([]byte(raw))
+		require.NoError(t, err, raw)
+		assert.Equal(t, want, got, raw)
+	}
+
+	for _, raw := range []string{"", "null", "abc", `"4e-06"`, "-1e-06"} {
+		_, err := hwMicroUsdPerMillion([]byte(raw))
+		assert.Error(t, err, raw)
+	}
+}
+
+func TestHwParsePriceListKeepsPricesAsRawTextAndRejectsBadJSON(t *testing.T) {
+	list, err := hwParsePriceList([]byte(`{"m1":{"input_cost_per_token":4e-06,"output_cost_per_token":2.0e-05,"mode":"chat"},"m2":{"mode":"embedding"}}`))
+	require.NoError(t, err)
+	require.Len(t, list, 2)
+	assert.Equal(t, "chat", list["m1"].Mode)
+	in, err := hwMicroUsdPerMillion(list["m1"].InputCostPerToken)
+	require.NoError(t, err)
+	out, err := hwMicroUsdPerMillion(list["m1"].OutputCostPerToken)
+	require.NoError(t, err)
+	assert.EqualValues(t, 4_000_000, in)
+	assert.EqualValues(t, 20_000_000, out)
+	_, err = hwMicroUsdPerMillion(list["m2"].InputCostPerToken)
+	assert.Error(t, err, "an entry without a price is not usable")
+
+	_, err = hwParsePriceList([]byte(`not json`))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not valid JSON")
+}
+
+// The model ratio is what the billing engine multiplies tokens by, so it must
+// follow the list price with the standing discount applied once.
+func TestHwRatiosFollowTheListPriceWithTheDiscountAppliedOnce(t *testing.T) {
+	payable := float64(100-HwListPriceDiscountPercent) / 100
+	assert.InDelta(t, payable, hwModelRatioFromInputPrice(2_000_000), 1e-12, "ratio 1 is two dollars per million tokens before the discount")
+	assert.InDelta(t, 2*payable, hwModelRatioFromInputPrice(4_000_000), 1e-12)
+	assert.Zero(t, hwModelRatioFromInputPrice(0))
+
+	assert.InDelta(t, 5.0, hwCompletionRatioFromPrice(model.HwModelPrice{InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000}), 1e-12)
+	assert.Zero(t, hwCompletionRatioFromPrice(model.HwModelPrice{InputMicroUsd: 0, OutputMicroUsd: 10_000_000}), "no input price gives no ratio")
+	assert.Zero(t, hwCompletionRatioFromPrice(model.HwModelPrice{InputMicroUsd: -1, OutputMicroUsd: 10_000_000}))
+}
+
+// The bulletin carries the date twice, in two regional formats; either one is
+// enough, a malformed one is skipped and the result is always YYYY-MM-DD.
+func TestHwTcmbFxDateAcceptsEitherFormat(t *testing.T) {
+	for _, tc := range []struct{ date, tarih, want string }{
+		{"10/26/2026", "", "2026-10-26"},
+		{"", "26.10.2026", "2026-10-26"},
+		{" 10/26/2026 ", "27.10.2026", "2026-10-26"},
+		{"garbage", "26.10.2026", "2026-10-26"},
+	} {
+		got, err := hwTcmbFxDate(tc.date, tc.tarih)
+		require.NoError(t, err, tc.date+"|"+tc.tarih)
+		assert.Equal(t, tc.want, got)
+	}
+
+	for _, tc := range []struct{ date, tarih string }{{"", ""}, {"26.10.2026", "10/26/2026"}, {"13/40/2026", "40.13.2026"}} {
+		_, err := hwTcmbFxDate(tc.date, tc.tarih)
+		assert.Error(t, err, tc.date+"|"+tc.tarih)
+	}
+}
