@@ -7,13 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// SetHwTelegramRoutes registers the bot webhook. The route is anonymous: the
-// secret header that the operator registered with setWebhook authenticates the
-// caller, and the handler refuses every update without it. No IP rate limit:
-// Telegram retries bursts of updates after a timeout and would otherwise be
-// dropped exactly when the bot is catching up. The body-size limit stays.
+// SetHwTelegramRoutes registers the account link routes of the bot. Its
+// webhook is registered by SetHwWebhookRoutes, outside the global rate limit.
 func SetHwTelegramRoutes(apiRouter *gin.RouterGroup) {
-	apiRouter.POST("/hw/telegram/webhook", middleware.AnonymousRequestBodyLimit(), controller.HwTelegramWebhook)
 	// The deep link that makes the bot link a Telegram account. It is handed
 	// out behind the dashboard login and creates a one-time token, so it is
 	// rate limited like the other account-security actions.

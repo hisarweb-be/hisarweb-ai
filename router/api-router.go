@@ -16,6 +16,12 @@ import (
 )
 
 func SetApiRouter(router *gin.Engine) {
+	// HisarWeb AI: the provider webhooks get their own /api group before the
+	// global IP rate limit is added below.
+	hwWebhookRouter := router.Group("/api")
+	hwWebhookRouter.Use(middleware.RouteTag("api"), middleware.BodyStorageCleanup())
+	SetHwWebhookRoutes(hwWebhookRouter)
+
 	apiRouter := router.Group("/api")
 	apiRouter.Use(middleware.RouteTag("api"))
 	apiRouter.Use(gzip.Gzip(gzip.DefaultCompression))
@@ -83,9 +89,9 @@ func SetApiRouter(router *gin.Engine) {
 			// in Pancake's matching webhook slot; handler enforces env match.
 			apiRouter.POST("/waffo-pancake/webhook/:env", anonymousRequestBodyLimit, controller.WaffoPancakeWebhook)
 		}
-		// HisarWeb AI: top-up orders and the card payment webhook.
+		// HisarWeb AI: top-up orders and refunds.
 		SetHwRoutes(apiRouter)
-		// HisarWeb AI: the Telegram bot webhook that carries the phone step.
+		// HisarWeb AI: linking a Telegram account to the bot.
 		SetHwTelegramRoutes(apiRouter)
 
 		// Universal secure verification routes

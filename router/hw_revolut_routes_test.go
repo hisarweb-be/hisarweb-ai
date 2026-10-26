@@ -62,7 +62,7 @@ func TestHwWebhookRouteKeepsAcceptingBursts(t *testing.T) {
 
 	t.Setenv(service.HwRevolutWebhookSecretEnv, "hw-route-webhook-secret")
 	engine := gin.New()
-	SetHwRoutes(engine.Group("/api"))
+	SetHwWebhookRoutes(engine.Group("/api"))
 
 	body := []byte(`{"event":"ORDER_COMPLETED","order_id":"","merchant_order_ext_ref":"hw-route-unknown"}`)
 	answers := map[int]int{}
@@ -130,4 +130,45 @@ func TestHwUpstreamPaymentWebhooksStayUnregistered(t *testing.T) {
 		assert.True(t, on[route], route)
 	}
 	assert.True(t, on["POST /api/hw/revolut/webhook"])
+}
+
+// TestHwProviderWebhooksSkipTheGlobalRateLimit proves the provider webhooks
+// sit outside the global per-IP limit of the /api group: a burst of
+// redeliveries gets no 429, while an ordinary /api route behind the same limit
+// does. Each webhook authenticates itself, so these unauthenticated calls are
+// refused by the handler, never by the limiter.
+func TestHwProviderWebhooksSkipTheGlobalRateLimit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	previousRedis := common.RedisEnabled
+	previousEnable, previousNum, previousDuration := common.GlobalApiRateLimitEnable, common.GlobalApiRateLimitNum, common.GlobalApiRateLimitDuration
+	common.RedisEnabled = false
+	common.GlobalApiRateLimitEnable = true
+	common.GlobalApiRateLimitNum = 5
+	common.GlobalApiRateLimitDuration = 60
+	t.Cleanup(func() {
+		common.RedisEnabled = previousRedis
+		common.GlobalApiRateLimitEnable = previousEnable
+		common.GlobalApiRateLimitNum = previousNum
+		common.GlobalApiRateLimitDuration = previousDuration
+	})
+	engine := gin.New()
+	SetApiRouter(engine)
+
+	burst := func(method, path, ip string) map[int]int {
+		answers := map[int]int{}
+		for range 20 {
+			request := httptest.NewRequest(method, path, bytes.NewReader([]byte(`{}`)))
+			request.RemoteAddr = ip + ":1234"
+			recorder := httptest.NewRecorder()
+			engine.ServeHTTP(recorder, request)
+			answers[recorder.Code]++
+		}
+		return answers
+	}
+	for i, path := range []string{"/api/hw/telegram/webhook", "/api/hw/revolut/webhook", "/api/hw/stripe/webhook"} {
+		answers := burst(http.MethodPost, path, "203.0.113."+strconv.Itoa(i+1))
+		assert.NotContains(t, answers, http.StatusTooManyRequests, "%s: %v", path, answers)
+	}
+	control := burst(http.MethodGet, "/api/hw/telegram/link", "203.0.113.9")
+	assert.Positive(t, control[http.StatusTooManyRequests], "the global limit must still hold for ordinary routes: %v", control)
 }
