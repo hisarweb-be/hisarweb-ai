@@ -23,6 +23,7 @@ import {
   CreditCard,
   FileText,
   FlaskConical,
+  Handshake,
   Key,
   LayoutDashboard,
   ListTodo,
@@ -158,6 +159,11 @@ export function useSidebarData(): SidebarData {
             title: t('Users'),
             url: '/users',
             icon: Users,
+          },
+          {
+            title: t('Partner Channels'),
+            url: '/partner-channels',
+            icon: Handshake,
           },
           {
             title: t('Redemption Codes'),

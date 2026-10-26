@@ -7529,6 +7529,16 @@
     "Copy this address. Some tools call it the base URL or the endpoint.": "Copy this address. Some tools call it the base URL or the endpoint.",
     "Only needed if you write code yourself. Tools like Cursor, Cline and Claude Code just need the three steps above.": "Only needed if you write code yourself. Tools like Cursor, Cline and Claude Code just need the three steps above.",
     "In the examples, <code>YOUR_API_KEY</code> stands for your own API key from step 1.": "In the examples, <code>YOUR_API_KEY</code> stands for your own API key from step 1.",
-    "The page could not be loaded. Please try again.": "The page could not be loaded. Please try again."
+    "The page could not be loaded. Please try again.": "The page could not be loaded. Please try again.",
+    "Partner Channels": "Partner Channels",
+    "Grant channel": "Grant channel",
+    "Paying customers": "Paying customers",
+    "Earned credit": "Earned credit",
+    "Signups": "Signups",
+    "No channels granted yet.": "No channels granted yet.",
+    "We could not load the channels.": "We could not load the channels.",
+    "We could not grant the channel.": "We could not grant the channel.",
+    "Channel granted.": "Channel granted.",
+    "Channel credit granted. The bonus follows once the account is verified.": "Channel credit granted. The bonus follows once the account is verified."
   }
 }
