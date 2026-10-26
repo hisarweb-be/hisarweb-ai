@@ -158,3 +158,26 @@ func hwTelegramLinkTokenHash(raw string) string {
 	sum := sha256.Sum256([]byte(strings.TrimSpace(raw)))
 	return hex.EncodeToString(sum[:])
 }
+
+// HwBindTelegramAccount links a Telegram account to a user without a Telegram
+// account. It claims the account in the identity claim table, whose unique
+// indexes let only one user win two links that race, and writes the user only
+// while the user has no account yet. A lost race returns
+// ErrExternalIdentityAlreadyClaimed and changes nothing.
+func HwBindTelegramAccount(userID int, telegramID string) error {
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := ClaimExternalIdentityWithTx(tx, ExternalIdentityProviderTelegram, telegramID, userID); err != nil {
+			return err
+		}
+		result := tx.Model(&User{}).
+			Where("id = ? AND (telegram_id = ? OR telegram_id IS NULL)", userID, "").
+			Update("telegram_id", telegramID)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return ErrExternalIdentityAlreadyClaimed
+		}
+		return nil
+	})
+}

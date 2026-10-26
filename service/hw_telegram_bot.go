@@ -349,7 +349,12 @@ func hwLinkTelegramAccount(ctx context.Context, message *hwTelegramMessage, payl
 		hwAnswerTelegramChat(ctx, chatID, texts.LinkTaken, "")
 		return HwWebhookAccepted
 	}
-	if err := model.UpdateUserBindColumn(userID, "telegram_id", telegramID); err != nil {
+	if err := model.HwBindTelegramAccount(userID, telegramID); err != nil {
+		if errors.Is(err, model.ErrExternalIdentityAlreadyClaimed) {
+			common.SysLog(common.LogText("telegram webhook lost a link race for user %d", userID))
+			hwAnswerTelegramChat(ctx, chatID, texts.LinkTaken, "")
+			return HwWebhookAccepted
+		}
 		common.SysError(common.LogText("telegram webhook could not link a Telegram account to user %d", userID))
 		return HwWebhookUnavailable
 	}

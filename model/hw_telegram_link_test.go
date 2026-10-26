@@ -122,3 +122,24 @@ func TestHwTelegramLinkToken(t *testing.T) {
 		assert.ErrorIs(t, HwRestoreTelegramLinkToken(token, expiresAt), ErrHwTelegramLinkInvalid)
 	})
 }
+
+// TestHwBindTelegramAccountKeepsOneOwner pins single ownership at the write:
+// the check before it cannot see a link that another request makes at the same
+// moment, so the write itself must refuse a second owner.
+func TestHwBindTelegramAccountKeepsOneOwner(t *testing.T) {
+	truncateTables(t)
+	first := User{Username: "hw-tg-bind-one", Password: "password", AffCode: "hw-tg-bind-one"}
+	second := User{Username: "hw-tg-bind-two", Password: "password", AffCode: "hw-tg-bind-two"}
+	require.NoError(t, DB.Create(&first).Error)
+	require.NoError(t, DB.Create(&second).Error)
+
+	require.NoError(t, HwBindTelegramAccount(first.Id, "hw-tg-race"))
+	assert.ErrorIs(t, HwBindTelegramAccount(second.Id, "hw-tg-race"), ErrExternalIdentityAlreadyClaimed)
+	assert.ErrorIs(t, HwBindTelegramAccount(first.Id, "hw-tg-other"), ErrExternalIdentityAlreadyClaimed)
+
+	var holders []User
+	require.NoError(t, DB.Where("telegram_id <> ''").Find(&holders).Error)
+	require.Len(t, holders, 1)
+	assert.Equal(t, first.Id, holders[0].Id)
+	assert.Equal(t, "hw-tg-race", holders[0].TelegramId)
+}
