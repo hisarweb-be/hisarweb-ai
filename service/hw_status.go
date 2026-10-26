@@ -9,6 +9,8 @@
 package service
 
 import (
+	"context"
+	"net/http"
 	"sync"
 	"time"
 
@@ -162,6 +164,12 @@ func StartHwStatusJob() {
 		if !common.IsMasterNode {
 			return
 		}
+		if probe := hwStatusProbeFromEnv(); probe != nil {
+			model.SetHwStatusProbe(probe)
+			common.SysLog(common.LogText("status measurement probe installed: a quiet minute is decided by a mini call"))
+		} else {
+			common.SysLog(common.LogText("status measurement probe not configured: a quiet minute is decided by the route"))
+		}
 		go func() {
 			common.SysLog(common.LogText("status measurement job started: interval=%s", hwStatusJobInterval))
 			if removed, err := model.HwPurgeFalseIdleOutages(); err != nil {
@@ -190,6 +198,27 @@ func StartHwStatusJob() {
 
 // runHwStatusOnceSafely is one measurement pass. A panic is logged and ends the
 // pass only, so a bad row cannot stop the ticker.
+// hwStatusProbeFromEnv builds the mini call that decides a quiet minute, from
+// the measurement configuration the quality run already uses
+// (HW_QUALITY_BASE_URL and HW_QUALITY_API_KEY). It returns nil when that
+// configuration is missing, so an environment without a key keeps the route
+// check instead of reporting a false outage.
+func hwStatusProbeFromEnv() func(ctx context.Context, modelName string) bool {
+	options := HwQualityRunOptionsFromEnv()
+	if options.BaseURL == "" || options.APIKey == "" {
+		return nil
+	}
+	client := &http.Client{}
+	return func(ctx context.Context, modelName string) bool {
+		_, _, err := hwCallChat(ctx, client, options.BaseURL, options.APIKey, hwChatRequest{
+			Model:     modelName,
+			Messages:  []hwChatMessage{{Role: "user", Content: "ping"}},
+			MaxTokens: 1,
+		})
+		return err == nil
+	}
+}
+
 func runHwStatusOnceSafely(at time.Time) {
 	defer func() {
 		if r := recover(); r != nil {
