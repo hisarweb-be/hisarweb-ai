@@ -333,6 +333,19 @@ func writeH2TestResponse(framer *http2.Framer, streamID uint32) error {
 	return framer.WriteData(streamID, true, []byte(`{}`))
 }
 
+// closeH2TestConn ends the connection after the last frame was written. A plain
+// Close with unread client frames (SETTINGS acks, WINDOW_UPDATE) makes Windows
+// answer with a TCP reset that discards the GOAWAY or RST_STREAM before the
+// client reads it, so half-close and drain first.
+func closeH2TestConn(conn net.Conn) {
+	if tcp, ok := conn.(*net.TCPConn); ok {
+		_ = tcp.CloseWrite()
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(time.Second))
+	_, _ = io.Copy(io.Discard, conn)
+	_ = conn.Close()
+}
+
 func awaitH2ServerResult(t *testing.T, resultCh <-chan h2ServerResult) h2ServerResult {
 	t.Helper()
 	select {
@@ -361,7 +374,7 @@ func runResetOnFirstStreamServer(ln net.Listener, expectRetry bool) <-chan h2Ser
 			res.err = err
 			return
 		}
-		defer conn.Close()
+		defer closeH2TestConn(conn)
 
 	attempts:
 		for attempt := 0; ; attempt++ {
@@ -416,7 +429,7 @@ func runGoAwayAfterFirstRequestServer(ln net.Listener) <-chan h2ServerResult {
 
 			if attempt == 0 {
 				err = framer.WriteGoAway(0, http2.ErrCodeNo, nil)
-				conn.Close()
+				closeH2TestConn(conn)
 				if err != nil {
 					res.err = err
 					return
@@ -425,7 +438,7 @@ func runGoAwayAfterFirstRequestServer(ln net.Listener) <-chan h2ServerResult {
 			}
 
 			err = writeH2TestResponse(framer, streamID)
-			conn.Close()
+			closeH2TestConn(conn)
 			if err != nil {
 				res.err = err
 			}
