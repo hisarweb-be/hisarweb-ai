@@ -166,3 +166,75 @@ func hwPromptOverheadDB(t *testing.T) *gorm.DB {
 	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Log{}))
 	return db
 }
+
+// The corrected usage is a copy: the settlement bills on it while the caller's
+// raw usage keeps the supplier numbers for the admin log. Total tokens follow
+// the corrected prompt, and the canonical InputTokens (Anthropic shape, cache
+// included) lose the same tokens without going below zero.
+func TestHwCorrectUsagePromptOverheadCopiesAndKeepsCountsConsistent(t *testing.T) {
+	hwSetPromptOverheadOption(t, `{"*":800}`)
+	newInfo := func() *relaycommon.RelayInfo { return &relaycommon.RelayInfo{OriginModelName: "claude-sonnet-5-5"} }
+	newContext := func(tag string, estimate int) *gin.Context {
+		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+		HwNoteChannelTag(ctx, tag)
+		HwNoteLocalPromptEstimate(ctx, estimate)
+		return ctx
+	}
+
+	t.Run("applied", func(t *testing.T) {
+		raw := &dto.Usage{PromptTokens: 807, CompletionTokens: 5, TotalTokens: 812, InputTokens: 1000}
+		adjusted, correction := hwCorrectUsagePromptOverhead(newContext(HwProviderLumia, 0), newInfo(), raw)
+
+		assert.NotSame(t, raw, adjusted)
+		assert.Equal(t, 807, raw.PromptTokens, "the raw usage is not mutated")
+		assert.Equal(t, 812, raw.TotalTokens)
+		assert.Equal(t, 1000, raw.InputTokens)
+		assert.Equal(t, 7, adjusted.PromptTokens)
+		assert.Equal(t, 12, adjusted.TotalTokens)
+		assert.Equal(t, 200, adjusted.InputTokens, "the same 800 tokens leave the canonical count")
+		assert.Equal(t, hwPromptOverheadCorrection{Applied: true, Reported: 807, Overhead: 800, Billed: 7}, correction)
+	})
+
+	t.Run("input tokens never go negative and stay zero when absent", func(t *testing.T) {
+		small, _ := hwCorrectUsagePromptOverhead(newContext(HwProviderLumia, 0), newInfo(), &dto.Usage{PromptTokens: 807, InputTokens: 100})
+		assert.Equal(t, 0, small.InputTokens)
+		absent, _ := hwCorrectUsagePromptOverhead(newContext(HwProviderLumia, 0), newInfo(), &dto.Usage{PromptTokens: 807})
+		assert.Equal(t, 0, absent.InputTokens)
+	})
+
+	t.Run("nothing to correct", func(t *testing.T) {
+		raw := &dto.Usage{PromptTokens: 807, TotalTokens: 807}
+		for name, ctx := range map[string]*gin.Context{
+			"other supplier": newContext(HwProviderOpenRouter, 0),
+			"no tag":         newContext("", 0),
+		} {
+			same, correction := hwCorrectUsagePromptOverhead(ctx, newInfo(), raw)
+			assert.Same(t, raw, same, name)
+			assert.Equal(t, hwPromptOverheadCorrection{Reported: 807}, correction, name)
+		}
+		// The local estimate equals the reported count: the floor makes it a no-op.
+		same, correction := hwCorrectUsagePromptOverhead(newContext(HwProviderLumia, 807), newInfo(), raw)
+		assert.Same(t, raw, same)
+		assert.False(t, correction.Applied)
+
+		nilUsage, _ := hwCorrectUsagePromptOverhead(newContext(HwProviderLumia, 0), newInfo(), nil)
+		assert.Nil(t, nilUsage)
+		sameUsage, _ := hwCorrectUsagePromptOverhead(newContext(HwProviderLumia, 0), nil, raw)
+		assert.Same(t, raw, sameUsage)
+	})
+}
+
+func TestHwAppendPromptOverheadAdminInfoOnlyWhenApplied(t *testing.T) {
+	hwAppendPromptOverheadAdminInfo(nil, hwPromptOverheadCorrection{Applied: true})
+
+	other := model.LogOther{}
+	hwAppendPromptOverheadAdminInfo(&other, hwPromptOverheadCorrection{Reported: 807})
+	assert.NotContains(t, other.Snapshot(), "admin_info", "an unapplied correction leaves the log alone")
+
+	hwAppendPromptOverheadAdminInfo(&other, hwPromptOverheadCorrection{Applied: true, Reported: 807, Overhead: 800, Billed: 7})
+	admin, ok := other.Snapshot()["admin_info"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, 807, admin["prompt_tokens_upstream"])
+	assert.Equal(t, 800, admin["prompt_overhead_tokens"])
+	assert.Equal(t, 7, admin["prompt_tokens_billed"])
+}
