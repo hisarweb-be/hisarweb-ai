@@ -766,3 +766,43 @@ func TestHwTcmbFxDateAcceptsEitherFormat(t *testing.T) {
 		assert.Error(t, err, tc.date+"|"+tc.tarih)
 	}
 }
+
+// TestHwPriceRefreshPublishesTheEuroRateWithoutRiskingTheLiraRate proves the
+// two rates have different weights: the lira rate is what every order is priced
+// on, so a bulletin without a usable euro line still refreshes it, while a
+// bulletin with one publishes both.
+func TestHwPriceRefreshPublishesTheEuroRateWithoutRiskingTheLiraRate(t *testing.T) {
+	hwPricingTestSetup(t)
+	priceServer := hwStartTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(hwTestPriceListBody))
+	})
+	hwSetOption(t, HwOptionPriceListURL, priceServer.URL)
+	refreshWith := func(t *testing.T, fxBody string) {
+		t.Helper()
+		hwEurTestCleanOptions(t)
+		fxServer := hwStartTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(fxBody))
+		})
+		hwSetOption(t, HwOptionFxURL, fxServer.URL)
+		hwSetOption(t, HwOptionTryPerUsd, "")
+		hwSetOption(t, HwOptionTryPerUsdDate, "")
+		require.NoError(t, HwRefreshPriceSnapshot(context.Background(), priceServer.Client(), time.Date(2026, 10, 20, 6, 0, 0, 0, time.UTC)))
+	}
+
+	t.Run("a usable euro line is published next to the lira rate", func(t *testing.T) {
+		refreshWith(t, hwTestFxBodyWithEur)
+		assert.Equal(t, "49.5523", hwOptionValue(HwOptionTryPerUsd))
+		assert.Equal(t, "2026-10-19", hwOptionValue(HwOptionTryPerUsdDate))
+		assert.Equal(t, "0.861779", hwOptionValue(model.HwEurPerUsdOption), "the cross rate of the two lira rates")
+		assert.Equal(t, "2026-10-19", hwOptionValue(model.HwEurPerUsdDateOption))
+	})
+	t.Run("a bulletin without a euro line still refreshes the lira rate", func(t *testing.T) {
+		refreshWith(t, hwTestFxBody)
+		assert.Equal(t, "49.5523", hwOptionValue(HwOptionTryPerUsd))
+		assert.Equal(t, "2026-10-19", hwOptionValue(HwOptionTryPerUsdDate))
+		assert.Empty(t, hwOptionValue(model.HwEurPerUsdOption), "no euro rate is invented")
+		snapshot, err := model.HwLatestPriceSnapshot()
+		require.NoError(t, err)
+		assert.Empty(t, snapshot.EurPerUsd)
+	})
+}
