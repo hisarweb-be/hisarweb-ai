@@ -159,15 +159,12 @@ For commercial licensing, please contact support@quantumnous.com
   padding: 0.15rem 0.6rem;
   border-radius: 9999px;
   background: var(--hwp-best);
-  color: white;
+  color: oklch(0.18 0.03 155);
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   box-shadow: 0 6px 18px -6px var(--hwp-best);
-}
-.dark .hwp-best-label {
-  color: oklch(0.18 0.03 155);
 }
 .hwp-best-pill {
   display: inline-flex;

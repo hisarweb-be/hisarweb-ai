@@ -238,7 +238,7 @@ export function Pricing() {
               className='hover-scrollbar sticky top-20 hidden max-h-[calc(100dvh-6rem)] self-start overflow-y-auto xl:block'
             />
 
-            <main className='min-w-0 space-y-4'>
+            <div className='min-w-0 space-y-4'>
               <PricingToolbar
                 filteredCount={filteredModels.length}
                 totalCount={models?.length}
@@ -271,7 +271,7 @@ export function Pricing() {
               />
 
               {renderPricingContent()}
-            </main>
+            </div>
           </div>
 
           {selectedModel && (
