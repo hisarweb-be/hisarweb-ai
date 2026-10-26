@@ -33,32 +33,34 @@ export function AuthLayout({ children }: AuthLayoutProps) {
 
   return (
     <div className='relative flex min-h-svh max-w-none flex-col'>
-      <Link
-        to='/'
-        className='absolute top-4 left-4 z-10 flex items-center gap-2 transition-opacity hover:opacity-80 sm:top-8 sm:left-8'
-      >
-        <div className='relative h-8 w-8'>
+      <main className='relative flex flex-1 flex-col'>
+        <Link
+          to='/'
+          className='absolute top-4 left-4 z-10 flex items-center gap-2 transition-opacity hover:opacity-80 sm:top-8 sm:left-8'
+        >
+          <div className='relative h-8 w-8'>
+            {loading ? (
+              <Skeleton className='absolute inset-0 rounded-full' />
+            ) : (
+              <img
+                src={logo}
+                alt={t('Logo')}
+                className='h-8 w-8 rounded-full object-cover'
+              />
+            )}
+          </div>
           {loading ? (
-            <Skeleton className='absolute inset-0 rounded-full' />
+            <Skeleton className='h-6 w-24' />
           ) : (
-            <img
-              src={logo}
-              alt={t('Logo')}
-              className='h-8 w-8 rounded-full object-cover'
-            />
+            <h1 className='text-xl font-medium'>{systemName}</h1>
           )}
+        </Link>
+        <div className='container flex flex-1 items-center pt-16 sm:pt-0'>
+          <div className='mx-auto flex w-full flex-col justify-center space-y-2 px-4 py-8 sm:w-[480px] sm:p-8'>
+            {children}
+          </div>
         </div>
-        {loading ? (
-          <Skeleton className='h-6 w-24' />
-        ) : (
-          <h1 className='text-xl font-medium'>{systemName}</h1>
-        )}
-      </Link>
-      <div className='container flex flex-1 items-center pt-16 sm:pt-0'>
-        <div className='mx-auto flex w-full flex-col justify-center space-y-2 px-4 py-8 sm:w-[480px] sm:p-8'>
-          {children}
-        </div>
-      </div>
+      </main>
       {/* The shared footer also carries the AGPL-3.0 section 13 source link. */}
       <Footer variant='compact' className='border-t-0' />
     </div>
