@@ -126,7 +126,7 @@ afterEach(async () => {
 
 it('applies the selected mobile date range directly and resets pagination while retaining filters', async () => {
   const router = await renderMobileFilter()
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   await user.click(
     screen.getByRole('button', { name: /^[0-9]{2}[.][0-9]{2}[.][0-9]{4}/ })
   )
@@ -150,7 +150,7 @@ it('applies the selected mobile date range directly and resets pagination while 
 
 it('applies mobile drawer filters only when Search is pressed', async () => {
   const router = await renderMobileFilter()
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   await user.click(screen.getByRole('button', { name: 'Filter' }))
   const dialog = await screen.findByRole('dialog', { name: 'Filter' })
   await user.type(
@@ -174,7 +174,7 @@ it('applies mobile drawer filters only when Search is pressed', async () => {
 
 it('keeps all quick actions visible without opening a menu', async () => {
   await renderMobileFilter()
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   for (const name of ['Hide', 'Filter', 'Search', 'Export', 'View']) {
     expect(screen.getByRole('button', { name })).toBeVisible()
   }
@@ -215,7 +215,7 @@ it('keeps Search visible while loading and prevents repeated searches', async ()
     matches: query === '(max-width: 640px)',
   }))
   const onSearch = vi.fn()
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   const view = render(<LoadingFixture loading onSearch={onSearch} />)
   const search = screen.getByRole('button', { name: 'Search' })
   expect(search).toBeVisible()
@@ -256,7 +256,7 @@ it('places the end action between Search and View on desktop', () => {
 
 it('collapses only date and statistics while keeping the right-hand quick actions visible', async () => {
   await renderMobileFilter()
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   const date =
     screen
       .getByRole('button', { name: /^[0-9]{2}[.][0-9]{2}[.][0-9]{4}/ })
@@ -295,7 +295,7 @@ it.each([
     vi.setSystemTime(new Date(2026, 8, 8, 12))
     i18next.addResourceBundle(language, 'translation', resources, true, true)
     await i18next.changeLanguage(language)
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     const onChange = vi.fn()
     render(
       <CompactDateTimeRangePicker
@@ -318,7 +318,7 @@ it.each([
 )
 
 it('keeps the seconds of the current range when it is confirmed again', async () => {
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   const onChange = vi.fn()
   render(
     <CompactDateTimeRangePicker
