@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
+
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -44,13 +46,17 @@ func TestHwAssistantRecordHitDatabaseMatrix(t *testing.T) {
 			sqlDB, err := db.DB()
 			require.NoError(t, err)
 			sqlDB.SetMaxOpenConns(1)
-			previousDB := DB
+			previousDB, previousType := DB, common.MainDatabaseType()
 			DB = db
+			common.SetMainDatabaseType(common.DatabaseType(dialect))
+			initCol()
 			prefix := "q:matrix " + dialect
 			key := prefix + " teller"
 			t.Cleanup(func() {
-				DB = previousDB
 				require.NoError(t, db.Where(commonKeyCol+" = ?", key).Delete(&HwAssistantHit{}).Error)
+				DB = previousDB
+				common.SetMainDatabaseType(previousType)
+				initCol()
 				require.NoError(t, sqlDB.Close())
 			})
 			require.NoError(t, db.AutoMigrate(&HwAssistantHit{}))
