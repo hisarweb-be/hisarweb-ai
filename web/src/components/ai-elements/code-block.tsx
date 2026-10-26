@@ -330,7 +330,7 @@ function CodeMirrorCodeView({
   const initialValueRef = useRef(value)
   const onChangeRef = useRef(onChange)
   const onKeyDownRef = useRef(onKeyDown)
-  const editorMinHeight = `${Math.max(4, rows) * 1.5 + 2}rem`
+  const editorMinHeight = `${Math.max(1, rows) * 1.5 + 2}rem`
   // onKeyDown is delivered through a ref so a new handler identity from the
   // parent (recreated on every keystroke-driven render) does not invalidate
   // the extensions and tear down the EditorView, which would reset the cursor
@@ -521,7 +521,7 @@ export const CodeBlock = ({
               <div className='from-muted/20 to-background pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-linear-to-b' />
             )}
             {!showToolbar && children && (
-              <div className='absolute top-2 right-2 flex items-center gap-1'>
+              <div className='bg-background/80 absolute top-2 right-2 flex items-center gap-1 rounded-md backdrop-blur-sm'>
                 {children}
               </div>
             )}
@@ -587,7 +587,7 @@ export const CodeBlock = ({
           }
           language={language}
           readOnly
-          rows={Math.min(Math.max(lineCount, 4), maxExpandedLines ?? lineCount)}
+          rows={Math.min(lineCount, maxExpandedLines ?? lineCount)}
           showLineNumbers={showLineNumbers}
           value={code}
         />
@@ -626,7 +626,7 @@ export const CodeBlockEditor = ({
         onChange={onChange}
         onKeyDown={onKeyDown}
         placeholder={placeholder}
-        rows={rows}
+        rows={Math.max(4, rows)}
         showLineNumbers
         value={value}
       />
