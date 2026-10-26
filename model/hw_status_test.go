@@ -324,14 +324,18 @@ func TestHwStatusPurgeFalseIdleOutages(t *testing.T) {
 	lonely := HwIncident{StartedAt: base + 7200, Kind: HwStatusIncidentRelay}
 	require.NoError(t, DB.Create(&lonely).Error)
 	hwStatusTestSample(t, base+7260, false, HwStatusReasonRelayFailures)
+	// An outage older than the sample retention has lost its evidence, not its truth.
+	oldStart := time.Now().Unix() - hwStatusSampleRetentionSeconds - 24*3600
+	old := hwStatusTestIncident(t, oldStart, 600)
 
 	removed, err := HwPurgeFalseIdleOutages()
 	require.NoError(t, err)
 	assert.Equal(t, 2, removed)
 	var left []HwIncident
-	require.NoError(t, DB.Find(&left).Error)
-	require.Len(t, left, 1)
+	require.NoError(t, DB.Order("id").Find(&left).Error)
+	require.Len(t, left, 2)
 	assert.Equal(t, real1.Id, left[0].Id)
+	assert.Equal(t, old.Id, left[1].Id)
 	assert.NotEqual(t, false1.Id, left[0].Id)
 	var idle int64
 	require.NoError(t, DB.Model(&HwStatusSample{}).Where("reason = ?", HwStatusReasonMeasurement).Count(&idle).Error)
