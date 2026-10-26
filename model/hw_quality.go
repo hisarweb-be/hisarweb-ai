@@ -143,13 +143,10 @@ func HwReadQualityTraffic(from int64, to int64, models []string) ([]HwQualityLat
 		return nil, nil, err
 	}
 
-	// The served request ids of the window. An empty id cannot be matched, so
-	// it is left out here and below; a NULL inside NOT IN would drop every row.
-	served := LOG_DB.Model(&Log{}).
-		Select("request_id").
-		Where("type = ?", LogTypeConsume).
-		Where("created_at >= ? AND created_at < ?", from, to).
-		Where("request_id IS NOT NULL AND request_id <> ''")
+	// A failed request has no served attempt in the window. An empty id cannot
+	// be matched, so it is left out. NOT EXISTS looks each error row up on the
+	// request id index instead of building the set of every served id of up to
+	// thirty days first.
 	failed := make([]HwQualityFailedRequests, 0)
 	if err := LOG_DB.Model(&Log{}).
 		Select("model_name, COUNT(DISTINCT request_id) AS failed").
@@ -157,7 +154,8 @@ func HwReadQualityTraffic(from int64, to int64, models []string) ([]HwQualityLat
 		Where("created_at >= ? AND created_at < ?", from, to).
 		Where(customer).
 		Where("request_id IS NOT NULL AND request_id <> ''").
-		Where("request_id NOT IN (?)", served).
+		Where("NOT EXISTS (SELECT 1 FROM logs AS served WHERE served.request_id = logs.request_id"+
+			" AND served.type = ? AND served.created_at >= ? AND served.created_at < ?)", LogTypeConsume, from, to).
 		Group("model_name").
 		Scan(&failed).Error; err != nil {
 		return nil, nil, err
