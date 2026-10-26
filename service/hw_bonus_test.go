@@ -182,3 +182,42 @@ func TestHwAdminRefundTakesTheBonusBack(t *testing.T) {
 	assert.False(t, again.Refunded)
 	assert.Zero(t, hwOrderTestQuota(t, buyer.Id))
 }
+
+// TestHwBonusRulesAnnounceWhatTheOrderPays proves the rules shown before the
+// customer pays are the rules the order books: every payable currency in a
+// fixed order, a half-configured rule counts as no bonus, and a rate that
+// cannot be trusted never produces credit.
+func TestHwBonusRulesAnnounceWhatTheOrderPays(t *testing.T) {
+	hwOrderTestSetup(t)
+	hwBonusTestEnable(t)
+
+	assert.Equal(t, []HwBonusRule{
+		{Currency: model.HwCurrencyTRY, Min: 500, Amount: 50},
+		{Currency: model.HwCurrencyUSD, Min: 10, Amount: 1},
+		{Currency: model.HwCurrencyEUR, Min: 10, Amount: 1},
+	}, HwBonusRules())
+
+	t.Run("a rule with only one half set is switched off", func(t *testing.T) {
+		hwSetOption(t, model.HwBonusUsdMinOption, "0")
+		assert.Equal(t, HwBonusRule{Currency: model.HwCurrencyUSD}, HwBonusRuleFor("USD"), "a threshold of zero would pay the bonus on everything")
+		hwSetOption(t, model.HwBonusUsdMinOption, "10")
+		hwSetOption(t, model.HwBonusUsdAmountOption, "-5")
+		assert.Equal(t, HwBonusRule{Currency: model.HwCurrencyUSD}, HwBonusRuleFor("USD"), "a negative amount is not a bonus")
+		hwSetOption(t, model.HwBonusUsdAmountOption, "1")
+		assert.Equal(t, HwBonusRule{Currency: model.HwCurrencyUSD, Min: 10, Amount: 1}, HwBonusRuleFor("  usd "), "the currency is matched without case and spaces")
+	})
+	t.Run("a rate that cannot be trusted pays no bonus", func(t *testing.T) {
+		for _, rate := range []decimal.Decimal{decimal.Zero, decimal.NewFromInt(-40)} {
+			quota, minor, err := hwTopUpBonus(model.HwCurrencyTRY, 500, rate)
+			require.NoError(t, err)
+			assert.Zero(t, quota, rate.String())
+			assert.Zero(t, minor, rate.String())
+		}
+	})
+	t.Run("a currency without a rule pays no bonus", func(t *testing.T) {
+		quota, minor, err := hwTopUpBonus("GBP", 5000, decimal.NewFromInt(40))
+		require.NoError(t, err)
+		assert.Zero(t, quota)
+		assert.Zero(t, minor)
+	})
+}
