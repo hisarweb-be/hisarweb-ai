@@ -2,14 +2,17 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -392,4 +395,131 @@ func TestHwCustomerModelPrefersTheRouteModel(t *testing.T) {
 
 	c.Set(hwRouteContextKey, hwPolicyRoute(nil, nil))
 	assert.Equal(t, "claude-sonnet-4-5", HwCustomerModel(c))
+}
+
+func hwStreamCutInfo(endReason relaycommon.StreamEndReason, received int) *relaycommon.RelayInfo {
+	status := relaycommon.NewStreamStatus()
+	status.RequireTerminal()
+	status.SetEndReason(endReason, nil)
+	return &relaycommon.RelayInfo{IsStream: true, StreamStatus: status, ReceivedResponseCount: received}
+}
+
+// A supplier stream that stops without its terminal event is an interruption.
+// Once the customer saw output it is final (skip retry, so two answers are never
+// spliced); before any output the route may continue with the next supplier.
+func TestHwStreamCutShortSeparatesVisibleFromEarlyCuts(t *testing.T) {
+	newContext := func() (*gin.Context, *HwRouteState) {
+		c := hwClientErrorContext("")
+		state := hwPolicyRoute([]*model.Channel{hwPolicyChannel(1, HwProviderLumia, "")}, nil)
+		c.Set(hwRouteContextKey, state)
+		return c, state
+	}
+
+	t.Run("cut after output is final", func(t *testing.T) {
+		c, state := newContext()
+		info := hwStreamCutInfo(relaycommon.StreamEndReasonEOF, 3)
+		apiErr := HwStreamCutShort(c, info)
+		require.NotNil(t, apiErr)
+		assert.Equal(t, HwErrorCodeStreamInterrupted, apiErr.GetErrorCode())
+		assert.Equal(t, http.StatusBadGateway, apiErr.StatusCode)
+		assert.True(t, types.IsSkipRetryError(apiErr))
+		assert.True(t, state.streamCut)
+		assert.False(t, HwStreamCutBeforeOutput(c, info))
+	})
+
+	t.Run("output the writer saw counts as visible", func(t *testing.T) {
+		c, state := newContext()
+		HwNoteStreamWrite(c)
+		apiErr := HwStreamCutShort(c, hwStreamCutInfo(relaycommon.StreamEndReasonScannerErr, 0))
+		require.NotNil(t, apiErr)
+		assert.True(t, types.IsSkipRetryError(apiErr))
+		assert.Equal(t, 1, state.streamWrites)
+	})
+
+	t.Run("cut before the first chunk may retry", func(t *testing.T) {
+		c, state := newContext()
+		info := hwStreamCutInfo(relaycommon.StreamEndReasonTimeout, 0)
+		apiErr := HwStreamCutShort(c, info)
+		require.NotNil(t, apiErr)
+		assert.Equal(t, HwErrorCodeStreamInterrupted, apiErr.GetErrorCode())
+		assert.False(t, types.IsSkipRetryError(apiErr))
+		assert.False(t, state.streamCut)
+		assert.True(t, HwStreamCutBeforeOutput(c, info))
+		assert.True(t, hwIsOutageError(apiErr), "the early cut earns the outage retry")
+	})
+
+	t.Run("not a supplier cut", func(t *testing.T) {
+		c, _ := newContext()
+		done := hwStreamCutInfo(relaycommon.StreamEndReasonDone, 2)
+		clientGone := hwStreamCutInfo(relaycommon.StreamEndReasonClientGone, 2)
+		completed := hwStreamCutInfo(relaycommon.StreamEndReasonEOF, 2)
+		completed.StreamStatus.MarkCompleted()
+		noTerminal := &relaycommon.RelayInfo{IsStream: true, StreamStatus: relaycommon.NewStreamStatus()}
+		noTerminal.StreamStatus.SetEndReason(relaycommon.StreamEndReasonEOF, nil)
+		nonStream := hwStreamCutInfo(relaycommon.StreamEndReasonEOF, 2)
+		nonStream.IsStream = false
+
+		for name, info := range map[string]*relaycommon.RelayInfo{
+			"done": done, "client gone": clientGone, "completed": completed,
+			"terminal not expected": noTerminal, "not a stream": nonStream, "nil info": nil,
+		} {
+			assert.Nil(t, HwStreamCutShort(c, info), name)
+			assert.False(t, HwStreamCutBeforeOutput(c, info), name)
+		}
+		assert.Nil(t, HwStreamCutShort(hwClientErrorContext(""), hwStreamCutInfo(relaycommon.StreamEndReasonEOF, 2)), "no route")
+	})
+}
+
+// The route keeps the facts the admin log reports: how often the mask rewrote
+// something, which upstream ids were seen (blank and repeats dropped, capped)
+// and the prompt tokens of abandoned attempts.
+func TestHwRouteNotesFeedTheAdminLog(t *testing.T) {
+	c := hwClientErrorContext("")
+	state := hwPolicyRoute(nil, nil)
+	c.Set(hwRouteContextKey, state)
+
+	HwNoteMaskAlert(c)
+	HwNoteMaskAlert(c)
+	HwNoteAbandonedAttempt(c, 40)
+	HwNoteAbandonedAttempt(c, 0)
+	HwNoteAbandonedAttempt(c, 2)
+	HwNoteUpstreamIdentity(c, "  ")
+	HwNoteUpstreamIdentity(c, " chatcmpl-1 ")
+	HwNoteUpstreamIdentity(c, "chatcmpl-1")
+	for i := 2; i <= hwMaxUpstreamIDs+3; i++ {
+		HwNoteUpstreamIdentity(c, fmt.Sprintf("chatcmpl-%d", i))
+	}
+
+	assert.Equal(t, 2, state.maskAlerts)
+	assert.Equal(t, 42, state.abandonedPrompt)
+	require.Len(t, state.upstreamIDs, hwMaxUpstreamIDs)
+	assert.Equal(t, "chatcmpl-1", state.upstreamIDs[0])
+
+	// Without a route nothing panics and nothing is recorded.
+	bare := hwClientErrorContext("")
+	HwNoteMaskAlert(bare)
+	HwNoteStreamWrite(bare)
+	HwNoteAbandonedAttempt(bare, 5)
+	HwNoteUpstreamIdentity(bare, "x")
+	assert.Nil(t, HwRoute(bare))
+}
+
+// An exhausted route reports the fork's own service-busy error for supplier
+// outages only; client mistakes, own codes and skip-retry errors keep theirs.
+func TestHwTerminalErrorHidesSupplierOutagesOnly(t *testing.T) {
+	c := hwClientErrorContext("")
+	c.Set(hwRouteContextKey, hwPolicyRoute(nil, nil))
+	stop := PolicyDecision{Action: "stop"}
+	outage := hwPolicyError(http.StatusBadGateway, types.ErrorCodeBadResponseStatusCode)
+
+	replaced := HwTerminalError(c, outage, stop)
+	require.NotNil(t, replaced)
+	assert.Equal(t, HwErrorCodeServiceBusy, replaced.GetErrorCode())
+
+	assert.Nil(t, HwTerminalError(c, outage, PolicyDecision{Action: "retry"}), "a retrying route keeps the error")
+	assert.Nil(t, HwTerminalError(c, nil, stop))
+	assert.Nil(t, HwTerminalError(c, hwPolicyError(http.StatusBadRequest, "invalid_request"), stop), "a client error is no outage")
+	assert.Nil(t, HwTerminalError(c, hwPolicyError(http.StatusBadGateway, HwErrorCodeStreamInterrupted), stop), "own code survives")
+	assert.Nil(t, HwTerminalError(c, hwPolicyError(http.StatusBadGateway, "other", types.ErrOptionWithSkipRetry()), stop))
+	assert.Nil(t, HwTerminalError(hwClientErrorContext(""), outage, stop), "no route")
 }
