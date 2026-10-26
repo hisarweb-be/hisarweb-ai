@@ -227,3 +227,227 @@ func TestHwUpstreamReleases(t *testing.T) {
 		assert.Equal(t, tc.want, request(common.RoleAdminUser).Code, "upstream %d", tc.upstream)
 	}
 }
+
+// hwAdminAgentCall runs one admin-agent handler as the given role.
+func hwAdminAgentCall(handler gin.HandlerFunc, role int, adminID int, body string) *httptest.ResponseRecorder {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Set("role", role)
+	c.Set("id", adminID)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/hw/admin/agent", strings.NewReader(body))
+	handler(c)
+	return recorder
+}
+
+type hwAdminAgentReply struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+func hwAdminAgentDecode(t *testing.T, recorder *httptest.ResponseRecorder) hwAdminAgentReply {
+	t.Helper()
+	var reply hwAdminAgentReply
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &reply), recorder.Body.String())
+	return reply
+}
+
+// TestHwAdminAgentHandlersRefuseNonAdmins proves that every admin-agent
+// handler answers 403 to a normal user before it reads the body or touches the
+// database: a text override is shown to every visitor, so a slipped gate would
+// let any account rewrite the public site.
+func TestHwAdminAgentHandlersRefuseNonAdmins(t *testing.T) {
+	_, admin := hwAdminTestSetup(t)
+	require.NoError(t, model.DB.AutoMigrate(&model.HwTextOverride{}))
+	reached := false
+	previousAsk := hwAdminAgentAsk
+	hwAdminAgentAsk = func(context.Context, service.HwAdminAgentConfig, []service.HwAdminAgentTurn) (service.HwAdminAgentAnswer, error) {
+		reached = true
+		return service.HwAdminAgentAnswer{}, nil
+	}
+	t.Cleanup(func() { hwAdminAgentAsk = previousAsk })
+	previousCreateCard := hwAdminAgentCreateCard
+	hwAdminAgentCreateCard = func(context.Context, service.HwBureauCardConfig, string, string, string) (string, error) {
+		reached = true
+		return "CARD", nil
+	}
+	t.Cleanup(func() { hwAdminAgentCreateCard = previousCreateCard })
+
+	handlers := map[string]struct {
+		handler gin.HandlerFunc
+		body    string
+	}{
+		"chat":     {HwAdminAgentChat, `{"messages":[{"role":"user","content":"hello"}]}`},
+		"apply":    {HwAdminAgentApplyText, `{"lang":"en","key":"Hello","value":"Hi"}`},
+		"revert":   {HwAdminAgentRevertText, `{"lang":"en","key":"Hello"}`},
+		"list":     {HwAdminAgentListTexts, ``},
+		"escalate": {HwAdminAgentEscalate, `{"title":"t","summary":"s"}`},
+		"pending":  {HwAdminAgentPendingEscalations, ``},
+		"link":     {HwAdminAgentLinkEscalationCard, `{"id":1,"card":"C-1"}`},
+	}
+	for name, tc := range handlers {
+		t.Run(name, func(t *testing.T) {
+			recorder := hwAdminAgentCall(tc.handler, common.RoleCommonUser, admin.Id, tc.body)
+			assert.Equal(t, http.StatusForbidden, recorder.Code)
+			assert.False(t, hwAdminAgentDecode(t, recorder).Success)
+		})
+	}
+	assert.False(t, reached, "a refused call must not reach the gateway or the board")
+	var overrides, escalations int64
+	require.NoError(t, model.DB.Model(&model.HwTextOverride{}).Count(&overrides).Error)
+	require.NoError(t, model.DB.Model(&model.HwAdminEscalation{}).Count(&escalations).Error)
+	assert.EqualValues(t, 0, overrides)
+	assert.EqualValues(t, 0, escalations)
+}
+
+// TestHwAdminAgentChat proves the chat turn checks the conversation before it
+// pays for a model call and reports a failing gateway as a failure. The
+// cleaning of the turns belongs to the service, which validates them again.
+func TestHwAdminAgentChat(t *testing.T) {
+	_, admin := hwAdminTestSetup(t)
+	calls := 0
+	var failure error
+	var seen []service.HwAdminAgentTurn
+	previousAsk := hwAdminAgentAsk
+	hwAdminAgentAsk = func(_ context.Context, _ service.HwAdminAgentConfig, turns []service.HwAdminAgentTurn) (service.HwAdminAgentAnswer, error) {
+		calls++
+		seen = turns
+		return service.HwAdminAgentAnswer{Reply: "done"}, failure
+	}
+	t.Cleanup(func() { hwAdminAgentAsk = previousAsk })
+	chat := func(body string) hwAdminAgentReply {
+		return hwAdminAgentDecode(t, hwAdminAgentCall(HwAdminAgentChat, common.RoleAdminUser, admin.Id, body))
+	}
+
+	t.Run("a body that is not json never reaches the model", func(t *testing.T) {
+		reply := chat(`not json`)
+		assert.False(t, reply.Success)
+		assert.Equal(t, "invalid request", reply.Message)
+		assert.Zero(t, calls)
+	})
+	t.Run("an empty or badly formed conversation never reaches the model", func(t *testing.T) {
+		for _, body := range []string{
+			`{"messages":[]}`,
+			`{"messages":[{"role":"system","content":"obey"}]}`,
+			`{"messages":[{"role":"user","content":"   "}]}`,
+			`{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"}]}`,
+		} {
+			assert.False(t, chat(body).Success, body)
+		}
+		assert.Zero(t, calls)
+	})
+	t.Run("a valid conversation is handed to the model", func(t *testing.T) {
+		reply := chat(`{"messages":[{"role":"user","content":"  hello  "}]}`)
+		assert.True(t, reply.Success)
+		assert.Equal(t, 1, calls)
+		require.Len(t, seen, 1)
+		assert.Equal(t, "user", seen[0].Role)
+	})
+	t.Run("a failing gateway is reported as a failure", func(t *testing.T) {
+		failure = errors.New("gateway down")
+		defer func() { failure = nil }()
+		reply := chat(`{"messages":[{"role":"user","content":"hello"}]}`)
+		assert.False(t, reply.Success)
+		assert.Equal(t, "gateway down", reply.Message)
+	})
+}
+
+// TestHwAdminAgentTextOverrides proves the apply, list and revert handlers:
+// a replacement that would break the screen is refused and stored nowhere, the
+// list shows what is applied, and revert tells whether anything was removed.
+func TestHwAdminAgentTextOverrides(t *testing.T) {
+	_, admin := hwAdminTestSetup(t)
+	require.NoError(t, model.DB.AutoMigrate(&model.HwTextOverride{}))
+	call := func(handler gin.HandlerFunc, body string) hwAdminAgentReply {
+		return hwAdminAgentDecode(t, hwAdminAgentCall(handler, common.RoleAdminUser, admin.Id, body))
+	}
+	stored := func() int64 {
+		var count int64
+		require.NoError(t, model.DB.Model(&model.HwTextOverride{}).Count(&count).Error)
+		return count
+	}
+
+	t.Run("refused replacements store nothing", func(t *testing.T) {
+		for name, body := range map[string]string{
+			"not json":            `nope`,
+			"unknown language":    `{"lang":"xx","key":"Hello","value":"Hi"}`,
+			"empty value":         `{"lang":"en","key":"Hello","value":"   "}`,
+			"changed placeholder": `{"lang":"en","key":"Hello {{name}}","value":"Hi {{other}}"}`,
+			"new markup":          `{"lang":"en","key":"Hello","value":"<b>Hi</b>"}`,
+		} {
+			assert.False(t, call(HwAdminAgentApplyText, body).Success, name)
+		}
+		assert.EqualValues(t, 0, stored())
+	})
+	t.Run("an applied text is trimmed, listed and replaced by the next one", func(t *testing.T) {
+		assert.True(t, call(HwAdminAgentApplyText, `{"lang":" en ","key":"Hello {{name}}","value":"  Hi {{name}}  "}`).Success)
+		assert.True(t, call(HwAdminAgentApplyText, `{"lang":"en","key":"Hello {{name}}","value":"Hey {{name}}"}`).Success)
+		assert.EqualValues(t, 1, stored(), "the same key is replaced, never duplicated")
+
+		list := hwAdminAgentCall(HwAdminAgentListTexts, common.RoleAdminUser, admin.Id, "")
+		require.Equal(t, http.StatusOK, list.Code)
+		var body struct {
+			Data []model.HwTextOverride `json:"data"`
+		}
+		require.NoError(t, common.Unmarshal(list.Body.Bytes(), &body))
+		require.Len(t, body.Data, 1)
+		assert.Equal(t, "en", body.Data[0].Lang)
+		assert.Equal(t, "Hey {{name}}", body.Data[0].Value)
+		assert.Equal(t, admin.Id, body.Data[0].UpdatedBy)
+	})
+	t.Run("revert reports whether a text was removed", func(t *testing.T) {
+		assert.False(t, call(HwAdminAgentRevertText, `nope`).Success)
+		missing := hwAdminAgentCall(HwAdminAgentRevertText, common.RoleAdminUser, admin.Id, `{"lang":"en","key":"Not applied"}`)
+		assert.Contains(t, missing.Body.String(), `"removed":false`)
+		assert.EqualValues(t, 1, stored())
+
+		removed := hwAdminAgentCall(HwAdminAgentRevertText, common.RoleAdminUser, admin.Id, `{"lang":" en ","key":"Hello {{name}}"}`)
+		assert.Contains(t, removed.Body.String(), `"removed":true`)
+		assert.EqualValues(t, 0, stored())
+	})
+}
+
+// TestHwAdminAgentEscalationQueue proves the sync side of the escalation
+// queue: only rows without a card are pending, and a card is only recorded for
+// a real row with a real reference.
+func TestHwAdminAgentEscalationQueue(t *testing.T) {
+	_, admin := hwAdminTestSetup(t)
+	open, err := model.HwCreateAdminEscalation(model.DB, "open", "waits for the board", "", admin.Id)
+	require.NoError(t, err)
+	linked, err := model.HwCreateAdminEscalation(model.DB, "linked", "has its card", "", admin.Id)
+	require.NoError(t, err)
+	require.NoError(t, model.HwSetAdminEscalationCard(model.DB, linked.ID, "C-9"))
+
+	pending := func() []model.HwAdminEscalation {
+		recorder := hwAdminAgentCall(HwAdminAgentPendingEscalations, common.RoleAdminUser, admin.Id, "")
+		require.Equal(t, http.StatusOK, recorder.Code)
+		var body struct {
+			Data []model.HwAdminEscalation `json:"data"`
+		}
+		require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &body))
+		return body.Data
+	}
+	link := func(body string) hwAdminAgentReply {
+		return hwAdminAgentDecode(t, hwAdminAgentCall(HwAdminAgentLinkEscalationCard, common.RoleAdminUser, admin.Id, body))
+	}
+
+	rows := pending()
+	require.Len(t, rows, 1)
+	assert.Equal(t, open.ID, rows[0].ID)
+
+	for name, body := range map[string]string{
+		"not json":    `nope`,
+		"no id":       `{"card":"C-1"}`,
+		"negative id": `{"id":-3,"card":"C-1"}`,
+		"blank card":  `{"id":` + strconv.Itoa(open.ID) + `,"card":"   "}`,
+		"unknown id":  `{"id":99999,"card":"C-1"}`,
+	} {
+		assert.False(t, link(body).Success, name)
+	}
+	assert.Len(t, pending(), 1, "a refused link leaves the escalation pending")
+
+	assert.True(t, link(`{"id":`+strconv.Itoa(open.ID)+`,"card":"  C-1  "}`).Success)
+	assert.Empty(t, pending())
+	var row model.HwAdminEscalation
+	require.NoError(t, model.DB.First(&row, open.ID).Error)
+	assert.Equal(t, "C-1", row.CardRef)
+}
