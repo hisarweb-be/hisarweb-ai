@@ -404,6 +404,38 @@ func TestHwCurrencyRateAndRange(t *testing.T) {
 	assert.ErrorIs(t, err, ErrHwTopUpRateMissing, "no rate")
 }
 
+// The first-purchase discount cap is 1000 lira in every currency: the other
+// currencies convert it through the dollar, so a customer paying in euro gets the
+// same value, and a missing lira rate stops the conversion instead of guessing.
+func TestHwDiscountCapKeepsTheLiraValueInEveryCurrency(t *testing.T) {
+	now := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+	hwCurrencyTestOptions(t, map[string]string{
+		model.HwTryPerUsdOption:     "40",
+		model.HwEurPerUsdOption:     "0.8",
+		model.HwEurPerUsdDateOption: "2026-10-24",
+	})
+
+	for currency, want := range map[string]string{"TRY": "1000", "USD": "25", "EUR": "20"} {
+		rate, err := hwCurrencyRate(currency, now)
+		require.NoError(t, err, currency)
+		capAmount, err := hwDiscountCap(currency, rate, now)
+		require.NoError(t, err, currency)
+		assert.Equal(t, want, capAmount.String(), currency)
+	}
+
+	hwCurrencyTestOptions(t, map[string]string{model.HwTryPerUsdOption: ""})
+	_, err := hwDiscountCap("EUR", decimal.RequireFromString("0.8"), now)
+	assert.ErrorIs(t, err, ErrHwTopUpRateMissing, "no lira rate")
+}
+
+func TestHwNormalizeCurrencyDefaultsToLira(t *testing.T) {
+	for input, want := range map[string]string{"": "TRY", "  ": "TRY", "eur": "EUR", " usd ": "USD", "TRY": "TRY", "gbp": "GBP"} {
+		assert.Equal(t, want, HwNormalizeCurrency(input), "%q", input)
+	}
+	assert.Equal(t, "EUR", HwRequestCurrency(HwTopUpRequest{Currency: "eur"}))
+	assert.Equal(t, "TRY", HwRequestCurrency(HwTopUpRequest{}))
+}
+
 func TestHwTidyFloorAndPresets(t *testing.T) {
 	for in, want := range map[string]int{
 		"7.9": 7, "19.99": 19, "20": 20, "22": 20, "97": 95, "99.9": 95, "100": 100,
