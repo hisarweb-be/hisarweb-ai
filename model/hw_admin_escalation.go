@@ -23,13 +23,18 @@ type HwAdminEscalation struct {
 	CreatedAt int64  `json:"created_at" gorm:"autoCreateTime"`
 }
 
+// hwAdminEscalationSummaryMaxRunes matches the description limit of the bureau
+// card (hwBureauCardMaxRunes in service), so the row never holds more than the
+// board shows.
+const hwAdminEscalationSummaryMaxRunes = 4000
+
 func HwCreateAdminEscalation(db *gorm.DB, title, summary, page string, adminID int) (*HwAdminEscalation, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {
 		return nil, errors.New("title is required")
 	}
 	row := &HwAdminEscalation{
-		Title: truncateRunes(title, 200), Summary: strings.TrimSpace(summary),
+		Title: truncateRunes(title, 200), Summary: truncateRunes(strings.TrimSpace(summary), hwAdminEscalationSummaryMaxRunes),
 		Page: truncateRunes(strings.TrimSpace(page), 300), CreatedBy: adminID,
 	}
 	return row, db.Create(row).Error
