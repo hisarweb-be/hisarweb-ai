@@ -166,7 +166,7 @@ const tr = {
   bonusRuleLine: '{min} ve üzeri yükleme: {amount} bonus',
   bonusValidityNote:
     'Bakiyeniz son yüklemeden itibaren {validityDays} gün geçerlidir.',
-  trustPayments: 'Ödemeler Stripe ile güvenli şekilde işlenir',
+  trustPayments: 'Ödemeler Revolut ve Stripe ile güvenli şekilde işlenir',
   trustFees:
     'Tüm işlem ücretlerini biz karşılıyoruz. Sadece kullandığınız kadar ödersiniz.',
   trustLogosLabel: 'Ödeme ortağı, kabul edilen kartlar ve güvenlik',
@@ -570,7 +570,7 @@ const en: Record<HwTextKey, string> = {
   bonusRuleLine: 'Top up {min} or more: {amount} bonus',
   bonusValidityNote:
     'Your balance is valid for {validityDays} days after your last top-up.',
-  trustPayments: 'Payments are processed securely by Stripe',
+  trustPayments: 'Payments are processed securely by Revolut and Stripe',
   trustFees: 'We cover all transaction fees. You only pay for what you use.',
   trustLogosLabel: 'Payment partner, accepted cards and security',
   trustAltStripe: 'Stripe logo',

@@ -32,11 +32,11 @@ beforeEach(() => useLanguage('tr'))
 afterEach(cleanup)
 
 describe('TrustBlock', () => {
-  it('says who processes the payments and that the fees are covered', () => {
+  it('names both payment processors (Revolut for TRY, Stripe for EUR and USD) and that the fees are covered', () => {
     render(<TrustBlock />)
 
     expect(
-      screen.getByText('Ödemeler Stripe ile güvenli şekilde işlenir')
+      screen.getByText('Ödemeler Revolut ve Stripe ile güvenli şekilde işlenir')
     ).toBeInTheDocument()
     expect(
       screen.getByText(
@@ -69,7 +69,9 @@ describe('TrustBlock', () => {
     await useLanguage('en')
     render(<TrustBlock />)
 
-    expect(screen.getByText(hwTexts.en.trustPayments)).toBeInTheDocument()
+    expect(
+      screen.getByText('Payments are processed securely by Revolut and Stripe')
+    ).toBeInTheDocument()
     expect(screen.getByText(hwTexts.en.trustFees)).toBeInTheDocument()
     expect(screen.getByRole('img', { name: 'Stripe logo' })).toBeInTheDocument()
   })
