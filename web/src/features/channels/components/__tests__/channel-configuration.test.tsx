@@ -226,7 +226,7 @@ function useWideScreen() {
 }
 
 test('changing built-in providers updates server-provided URL placeholders without replacing the draft address', async () => {
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness />)
   await user.click(screen.getByRole('option', { name: /^DeepSeek / }))
   const address = screen.getByRole('textbox', { name: 'Base URL' })
@@ -296,7 +296,7 @@ test.each([
     const put = vi
       .spyOn(api, 'put')
       .mockResolvedValue({ data: { success: true } })
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     render(<ConfigurationHarness currentRow={editingChannel} />)
     await screen.findByDisplayValue('Existing channel')
     if (type === 45) {
@@ -332,7 +332,7 @@ test('an unavailable default URL endpoint keeps the fallback placeholder and all
   const put = vi
     .spyOn(api, 'put')
     .mockResolvedValue({ data: { success: true } })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   const address = screen.getByRole('textbox', { name: 'Base URL' })
@@ -351,7 +351,7 @@ test('an unavailable default URL endpoint keeps the fallback placeholder and all
 })
 
 test('model mapping help opens on click, stays open after pointer exit, and closes without dismissing the channel', async () => {
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   await user.click(screen.getByRole('tab', { name: /Routing & Mapping/ }))
@@ -380,7 +380,7 @@ test('model mapping help opens on click, stays open after pointer exit, and clos
 test('model mapping help supports keyboard activation and wraps long model names within the viewport', async () => {
   editingChannel.model_mapping =
     '{"customer-production-reasoning-model-alias":"provider/region/deployment/production-reasoning-model-version"}'
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   await user.click(screen.getByRole('tab', { name: /Routing & Mapping/ }))
@@ -424,7 +424,7 @@ test('selecting a plugin opens a prefilled channel and creates its explicit bind
   const post = vi
     .spyOn(api, 'post')
     .mockResolvedValue({ data: { success: true } })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness />)
   expect(
     screen.getByRole('combobox', {
@@ -471,7 +471,7 @@ test('selecting a plugin opens a prefilled channel and creates its explicit bind
 })
 
 test('changing plugins preserves credentials and custom settings while applying existing model and address rules', async () => {
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness />)
   await user.click(await screen.findByRole('option', { name: /Video A/ }))
   fireEvent.change(screen.getByLabelText('API Key *'), {
@@ -503,7 +503,7 @@ test('changing plugins preserves credentials and custom settings while applying 
 })
 
 test('canceling provider selection or selecting the same provider preserves adjusted models', async () => {
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness />)
   await user.click(await screen.findByRole('option', { name: /Video A/ }))
   await user.click(screen.getByRole('button', { name: 'Clear All' }))
@@ -535,7 +535,7 @@ test('canceling provider selection or selecting the same provider preserves adju
 test.each(['Cancel', 'Escape'])(
   '%s while changing an existing provider returns to the same draft and category',
   async (action) => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     render(<ConfigurationHarness currentRow={editingChannel} />)
     await screen.findByDisplayValue('Existing channel')
     await user.click(screen.getByRole('tab', { name: /Routing & Mapping/ }))
@@ -563,7 +563,7 @@ test.each(['Cancel', 'Escape'])(
 
 test('submitting a missing plugin address focuses its field without leaving creation', async () => {
   const post = vi.spyOn(api, 'post')
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness />)
   await user.click(await screen.findByRole('option', { name: /No Address/ }))
   fireEvent.change(screen.getByLabelText('API Key *'), {
@@ -650,7 +650,7 @@ test('creating a migrated provider uses its plugin binding instead of the legacy
   const post = vi
     .spyOn(api, 'post')
     .mockResolvedValue({ data: { success: true } })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness />)
   const plugin = await screen.findByRole('option', { name: 'Sora Plugin sora' })
   expect(
@@ -705,7 +705,7 @@ test.each(['create', 'edit'])(
     const put = vi
       .spyOn(api, 'put')
       .mockResolvedValue({ data: { success: true } })
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     render(
       <ConfigurationHarness
         currentRow={mode === 'edit' ? editingChannel : undefined}
@@ -825,7 +825,7 @@ test('plugin model selection shares the field state, preserves other sources, an
     },
     { ...plugins[0], channelTypes: [1], models: ['custom-model', 'video-a-1'] },
   ]
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   const extensions = within(
     await screen.findByRole('group', { name: 'Plugin extensions' })
@@ -907,7 +907,7 @@ test('retrying extension metadata preserves the editable built-in draft and sele
     }
     return originalGet?.(url, config)
   })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   expect(await screen.findByText('Failed to load plugins')).toBeVisible()
@@ -941,7 +941,7 @@ test('loading a replacement plugin preserves an already selected legacy creation
   const post = vi
     .spyOn(api, 'post')
     .mockResolvedValue({ data: { success: true } })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness />)
   await user.click(screen.getByRole('option', { name: 'Sora Built-in #55' }))
   fireEvent.change(screen.getByLabelText('Name *'), {
@@ -990,7 +990,7 @@ test('loading a replacement plugin preserves an already selected legacy creation
 })
 
 test('an invalid setting in another category is revealed and focused on submission', async () => {
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness />)
   await user.click(await screen.findByRole('option', { name: /Video A/ }))
   fireEvent.change(screen.getByLabelText('API Key *'), {
@@ -1022,7 +1022,7 @@ test.each([
   const post = vi
     .spyOn(api, 'post')
     .mockResolvedValue({ data: { success: true } })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness />)
   await user.click(await screen.findByRole('option', { name: /Video A/ }))
   await user.click(screen.getByRole('combobox', { name: 'Add Mode' }))
@@ -1051,7 +1051,7 @@ test('a failed creation keeps its draft and prevents duplicate submission while 
     data: { success: boolean; message: string }
   }>()
   const post = vi.spyOn(api, 'post').mockReturnValue(reply.promise)
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness />)
   await user.click(await screen.findByRole('option', { name: /Video A/ }))
   fireEvent.change(screen.getByLabelText('API Key *'), {
@@ -1083,7 +1083,7 @@ test('model discovery discards a response for old credentials and retains manual
     .mockResolvedValueOnce({
       data: { success: true, data: ['current-upstream-model'] },
     })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness />)
   await user.click(screen.getByRole('option', { name: /^OpenAI / }))
   fireEvent.change(screen.getByLabelText('API Key *'), {
@@ -1120,7 +1120,7 @@ test('model discovery reports failures inline and allows an empty result to fall
       data: { success: false, message: 'Upstream rejected the key' },
     })
     .mockResolvedValueOnce({ data: { success: true, data: [] } })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness />)
   await user.click(screen.getByRole('option', { name: /^OpenAI / }))
   fireEvent.change(screen.getByLabelText('API Key *'), {
@@ -1153,7 +1153,7 @@ test('quick options and detailed settings share changes across tabs and save the
   const put = vi
     .spyOn(api, 'put')
     .mockResolvedValue({ data: { success: true } })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   const quick = within(screen.getByRole('group', { name: 'Quick options' }))
@@ -1259,7 +1259,7 @@ test.each(['stacked', 'inline'])(
         editingChannel = { ...editingChannel, ...(payload as Partial<Channel>) }
         return { data: { success: true } }
       })
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     render(<ConfigurationHarness currentRow={editingChannel} />)
     await screen.findByDisplayValue('Existing channel')
     const quick = within(screen.getByRole('group', { name: 'Quick options' }))
@@ -1329,7 +1329,7 @@ test.each(['stacked', 'inline'])(
 )
 
 test('quick options show only applicable shortcuts when the provider changes', async () => {
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness />)
   await user.click(screen.getByRole('option', { name: 'OpenAI Built-in #1' }))
   let quick = within(screen.getByRole('group', { name: 'Quick options' }))
@@ -1390,7 +1390,7 @@ test('editing opens the shared configuration and omits an unchanged key on updat
   const put = vi
     .spyOn(api, 'put')
     .mockResolvedValue({ data: { success: true } })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={channel} />)
   expect(await screen.findByDisplayValue('Existing channel')).toBeVisible()
   expect(screen.queryByLabelText('Type *')).not.toBeInTheDocument()
@@ -1427,7 +1427,7 @@ test('editing legacy channels retains the full provider list and saves the origi
   const put = vi
     .spyOn(api, 'put')
     .mockResolvedValue({ data: { success: true } })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   await user.click(screen.getByRole('button', { name: 'Change provider' }))
@@ -1468,7 +1468,7 @@ test('opening and reselecting an existing plugin preserves its saved configurati
     setting: '{"task_plugin_key":"video-a"}',
     priority: 7,
   }
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   expect(await screen.findByDisplayValue('Existing channel')).toBeVisible()
   expect(screen.getByDisplayValue('https://saved.example')).toBeVisible()
@@ -1525,7 +1525,7 @@ test('a failed detail request blocks updating until retry loads the saved channe
     }
     return originalGet?.(url, config)
   })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await waitFor(() =>
     expect(screen.getByText('Failed to load channel')).toBeVisible()
@@ -1540,7 +1540,7 @@ test('a failed detail request blocks updating until retry loads the saved channe
 
 test('restoring routing defaults clears the configured indicator for both the block and category', async () => {
   editingChannel = { ...editingChannel, auto_ban: 0 }
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   const tab = screen.getByRole('tab', { name: /Routing & Mapping/ })
@@ -1575,7 +1575,7 @@ test('request processing configuration does not mark the network category as con
     param_override: '{}',
     header_override: '{}',
   }
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   expect(
@@ -1609,7 +1609,7 @@ test.each([1, 57, 58, 59, 60])(
       type,
       setting: '{"responses_websocket_enabled":true}',
     }
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     render(<ConfigurationHarness currentRow={editingChannel} />)
     await screen.findByDisplayValue('Existing channel')
     const requestTab = screen.getByRole('tab', { name: /Request & Response/ })
@@ -1635,7 +1635,7 @@ test.each([
   'provider %s explains the native-route limit under the Responses WebSocket toggle: %s',
   async (type, shown) => {
     editingChannel = { ...editingChannel, type }
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     render(<ConfigurationHarness currentRow={editingChannel} />)
     await screen.findByDisplayValue('Existing channel')
     await user.click(screen.getByRole('tab', { name: /Request & Response/ }))
@@ -1686,7 +1686,7 @@ test('an Ollama channel marks a saved OpenAI-compatible chat setting in Request 
   const put = vi
     .spyOn(api, 'put')
     .mockResolvedValue({ data: { success: true } })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   const requestTab = screen.getByRole('tab', { name: /Request & Response/ })
@@ -1715,7 +1715,7 @@ test('a saved upstream TLS verification skip marks Other Settings and turning it
   const put = vi
     .spyOn(api, 'put')
     .mockResolvedValue({ data: { success: true } })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   const otherTab = screen.getByRole('tab', { name: /Other Settings/ })
@@ -1740,7 +1740,7 @@ test('turning on the upstream TLS verification skip saves it in the channel sett
   const put = vi
     .spyOn(api, 'put')
     .mockResolvedValue({ data: { success: true } })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   await user.click(screen.getByRole('tab', { name: /Other Settings/ }))
@@ -1758,7 +1758,7 @@ test('turning on the upstream TLS verification skip saves it in the channel sett
 })
 
 test('an invalid edit switches categories and replaces configured styling with the field error', async () => {
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   await user.click(screen.getByRole('tab', { name: /Other Settings/ }))
@@ -1793,7 +1793,7 @@ test('an invalid edit switches categories and replaces configured styling with t
 })
 
 test('ordinary edits discover models with saved settings and keep removed draft models available for reselection', async () => {
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   const post = vi.spyOn(api, 'post')
   const put = vi.spyOn(api, 'put')
   render(<ConfigurationHarness currentRow={editingChannel} />)
@@ -1871,7 +1871,7 @@ test('model configuration uses only the current form models and persists changes
   const put = vi
     .spyOn(api, 'put')
     .mockResolvedValue({ data: { success: true } })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   await user.click(screen.getByRole('button', { name: 'Fetch from Upstream' }))
@@ -1937,7 +1937,7 @@ test.each(['Cancel', 'Close', 'Escape'])(
   'model configuration discards changes on %s and restores focus to its trigger',
   async (action) => {
     editingChannel.models = 'gpt-one,gpt-two'
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     render(<ConfigurationHarness currentRow={editingChannel} />)
     await screen.findByDisplayValue('Existing channel')
     const trigger = screen.getByRole('button', { name: 'Configure Models' })
@@ -1971,7 +1971,7 @@ test.each(['Cancel', 'Close', 'Escape'])(
 
 test('model configuration keeps unchecked candidates searchable and supports category selection and applying an empty list', async () => {
   editingChannel.models = 'gpt-one,gpt-two,manual-model'
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   const trigger = screen.getByRole('button', { name: 'Configure Models' })
@@ -2019,7 +2019,7 @@ test('model configuration keeps unchecked candidates searchable and supports cat
 })
 
 test('model configuration is available for a plugin channel without upstream discovery and is disabled when its model list is empty', async () => {
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness />)
   await user.click(await screen.findByRole('option', { name: /Video A/ }))
   const trigger = screen.getByRole('button', { name: 'Configure Models' })
@@ -2057,7 +2057,7 @@ test('advanced custom edits preview draft connection settings with the saved key
   const post = vi
     .spyOn(api, 'post')
     .mockResolvedValue({ data: { success: true, data: ['preview-model'] } })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   fireEvent.change(screen.getByDisplayValue('https://saved.example'), {
@@ -2105,7 +2105,7 @@ test('an operator without sensitive write permission can discover saved models a
   const put = vi
     .spyOn(api, 'put')
     .mockResolvedValue({ data: { success: true } })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   expect(screen.getByRole('button', { name: 'Change provider' })).toBeDisabled()
@@ -2161,7 +2161,7 @@ test.each([
     const put = vi
       .spyOn(api, 'put')
       .mockResolvedValue({ data: { success: true } })
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     render(<ConfigurationHarness currentRow={editingChannel} />)
     await screen.findByDisplayValue('Existing channel')
     const strategy = screen.getByRole('combobox', {
@@ -2169,8 +2169,8 @@ test.each([
     })
     expect(strategy).toHaveTextContent(initialLabel)
     await user.click(strategy)
-    await user.click(screen.getByRole('option', { name: nextLabel }))
-    expect(strategy).toHaveTextContent(nextLabel)
+    await user.click(await screen.findByRole('option', { name: nextLabel }))
+    await waitFor(() => expect(strategy).toHaveTextContent(nextLabel))
     await user.click(screen.getByRole('button', { name: 'Update Channel' }))
     await waitFor(() => expect(put).toHaveBeenCalled())
     expect(put.mock.calls[0]?.[1]).toMatchObject({
@@ -2210,7 +2210,7 @@ test.each(['append', 'replace'])(
     const put = vi
       .spyOn(api, 'put')
       .mockResolvedValue({ data: { success: true } })
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     render(<ConfigurationHarness currentRow={editingChannel} />)
     await screen.findByDisplayValue('Existing channel')
     if (mode === 'replace') {
@@ -2237,7 +2237,7 @@ test('a failed update retains the draft through a background detail refetch', as
   vi.spyOn(api, 'put').mockResolvedValue({
     data: { success: false, message: 'Update failed' },
   })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   fireEvent.change(screen.getByLabelText('Name *'), {
@@ -2269,7 +2269,7 @@ test('switching edited channels discards a pending model list from the previous 
     }
     return originalGet?.(url, config)
   })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   const view = render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   await user.click(screen.getByRole('button', { name: 'Fetch from Upstream' }))
@@ -2302,7 +2302,7 @@ test('an unknown saved type remains editable without selecting a new provider', 
 })
 
 test('a background refresh updates untouched values without moving the selected category', async () => {
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   await user.click(screen.getByRole('tab', { name: /Routing & Mapping/ }))
@@ -2331,7 +2331,7 @@ test('closing an edited channel retains its left exit direction after the parent
     },
   })
   try {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     const view = render(
       <ConfigurationHarness currentRow={editingChannel} clearRowOnClose />
     )
@@ -2371,7 +2371,7 @@ test('the model list summarizes redirects, counts them on the routing tab, and j
     ...editingChannel,
     model_mapping: '{"custom-model":"upstream-model"}',
   }
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   expect(screen.getByText('1 model(s) redirected')).toBeVisible()
@@ -2389,7 +2389,7 @@ test('the model list summarizes redirects, counts them on the routing tab, and j
 })
 
 test('without mappings the model list offers to set up redirects and the routing tab shows no count', async () => {
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   const tab = screen.getByRole('tab', { name: /Routing & Mapping/ })
@@ -2407,7 +2407,7 @@ test('mapping guardrail alerts link to the tab that holds the fix', async () => 
     ...editingChannel,
     model_mapping: '{"alias":"custom-model"}',
   }
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   const routingTab = screen.getByRole('tab', { name: /Routing & Mapping/ })
@@ -2421,7 +2421,7 @@ test('mapping guardrail alerts link to the tab that holds the fix', async () => 
 })
 
 test('redirecting a model from the model picker publishes it, adds a mapping row, and focuses its upstream field', async () => {
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   await user.click(screen.getByRole('button', { name: 'Configure Models' }))
@@ -2451,7 +2451,7 @@ test('redirecting a model from the model picker publishes it, adds a mapping row
 
 test('fetched upstream models can be redirected in bulk with the model list synced', async () => {
   editingChannel.models = 'custom-model,upstream-model'
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   await user.click(screen.getByRole('button', { name: 'Fetch from Upstream' }))
@@ -2494,7 +2494,7 @@ test('fetched upstream models can be redirected in bulk with the model list sync
 })
 
 test('a fetched upstream model can be given a request name from its own row', async () => {
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   await user.click(screen.getByRole('button', { name: 'Fetch from Upstream' }))
@@ -2518,7 +2518,7 @@ test('a fetched upstream model can be given a request name from its own row', as
 
 test('on wide screens redirecting a fetched model opens the floating panel beside the drawer and syncs the model list as the alias is typed', async () => {
   useWideScreen()
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   await user.click(screen.getByRole('button', { name: 'Fetch from Upstream' }))
@@ -2593,7 +2593,7 @@ test.each(['current session', 'saved preference'])(
         })
       )
     }
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     render(<ConfigurationHarness currentRow={editingChannel} />)
     await screen.findByDisplayValue('Existing channel')
     await user.click(
@@ -2668,7 +2668,7 @@ test('redirecting a recognized upstream name opens an empty alias draft without 
     }
     return baseGet?.(url, ...rest)
   })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   await user.click(screen.getByRole('button', { name: 'Fetch from Upstream' }))
@@ -2706,7 +2706,7 @@ test('the redirect panel batch action starts empty and only applies explicitly s
     }
     return baseGet?.(url, ...rest)
   })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   await user.click(screen.getByRole('button', { name: 'Fetch from Upstream' }))
@@ -2764,7 +2764,7 @@ test('the redirect panel batch action starts empty and only applies explicitly s
 
 test('on wide screens the quick options move into the header as a compact toggle strip and leave the form', async () => {
   useWideScreen()
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   const quick = screen.getByRole('group', { name: 'Quick options' })
@@ -2806,7 +2806,7 @@ test('header passthrough quick option confirms before writing the wildcard rule 
   const put = vi
     .spyOn(api, 'put')
     .mockResolvedValue({ data: { success: true } })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   const quick = within(screen.getByRole('group', { name: 'Quick options' }))
@@ -2862,7 +2862,7 @@ test('header passthrough quick option confirms before writing the wildcard rule 
 })
 
 test('the header override passthrough template button confirms before filling the wildcard rule', async () => {
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={editingChannel} />)
   await screen.findByDisplayValue('Existing channel')
   await user.click(screen.getByRole('tab', { name: /Request & Response/ }))
@@ -2913,7 +2913,7 @@ test('a New API channel binds upstream task plugins and publishes their models',
   const put = vi
     .spyOn(api, 'put')
     .mockResolvedValue({ data: { success: true } })
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<ConfigurationHarness currentRow={channel} />)
   const extensions = within(
     await screen.findByRole('group', { name: 'Plugin extensions' })
@@ -2988,7 +2988,7 @@ test.each([
     const put = vi
       .spyOn(api, 'put')
       .mockResolvedValue({ data: { success: true } })
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     render(<ConfigurationHarness currentRow={editingChannel} />)
     const selector = await screen.findByRole('combobox', { name: 'AWS API' })
     await waitFor(() => expect(selector).toHaveTextContent(shown))

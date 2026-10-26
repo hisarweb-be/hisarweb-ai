@@ -228,7 +228,7 @@ it.each([false, true])(
     expect(screen.getByText('Enabled → Disabled')).toBeVisible()
     if (mobile) expect(screen.queryByRole('table')).not.toBeInTheDocument()
     else expect(screen.getByRole('table')).toBeVisible()
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     await user.click(screen.getByRole('button', { name: 'Details' }))
     const dialog = await screen.findByRole('dialog', { name: 'Log Details' })
     expect(
@@ -427,7 +427,7 @@ it('filters own access history by result, generation and time and resets paginat
     data: { success: true, data: { items: [], total: 45 } },
   })
   renderViewer()
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   await waitFor(() =>
     expect(
       screen.getByRole('button', { name: 'Go to next page' })
@@ -488,7 +488,7 @@ it('opens on the current token when asked and resets back to it', async () => {
       />
     </QueryClientProvider>
   )
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   await waitFor(() => expect(get).toHaveBeenCalled())
   expect(get.mock.calls[0]).toEqual([
     '/api/audit/self',
@@ -562,7 +562,7 @@ it('changing rows per page resets pagination and sends the selected page size', 
     data: { success: true, data: { items: [], total: 80 } },
   })
   renderViewer()
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   await waitFor(() =>
     expect(
       screen.getByRole('button', { name: 'Go to next page' })
@@ -775,7 +775,7 @@ it('mobile access history keeps pagination visible and puts result filters in a 
       data: { success: true, data: { items: [], total: 0 } },
     })
     renderViewer()
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     expect(
       screen.getByRole('button', { name: 'Go to next page' })
     ).toBeVisible()

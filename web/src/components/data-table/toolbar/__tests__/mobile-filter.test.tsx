@@ -91,7 +91,7 @@ afterEach(() => {
 
 it('hides the mobile filter group while keeping reset and quick actions accessible', async () => {
   setMobileViewport(true)
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<Fixture collapsibleOnMobile />)
 
   const collapse = screen.getByRole('button', { name: 'Collapse' })
@@ -118,7 +118,7 @@ it('hides the mobile filter group while keeping reset and quick actions accessib
 
 it('retains mobile search and filter values after expanding and resets them while collapsed', async () => {
   setMobileViewport(true)
-  const user = userEvent.setup()
+  const user = userEvent.setup({ delay: null })
   render(<Fixture collapsibleOnMobile />)
 
   await user.type(screen.getByPlaceholderText('Search channels'), 'production')
