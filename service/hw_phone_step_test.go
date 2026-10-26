@@ -46,6 +46,7 @@ func hwPhoneStepTestSetup(t *testing.T) {
 	} {
 		require.NoError(t, model.DB.Exec("DELETE FROM "+table).Error)
 	}
+	hwPhonePromptSent.Clear()
 	t.Cleanup(func() {
 		for _, table := range []string{
 			"hw_credit_packages", "hw_user_signals", "hw_first_purchase_claims",
@@ -279,6 +280,26 @@ func TestHwCompleteTelegramPhoneStepDoesNotWaitForThePrompt(t *testing.T) {
 			t.Fatal("the login did not ask the bot for the share-contact button")
 		}
 		releaseOnce.Do(func() { close(release) })
+	})
+
+	t.Run("a burst of logins on one account sends one prompt", func(t *testing.T) {
+		hwPhoneStepTestSetup(t)
+		var sends atomic.Int64
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			sends.Add(1)
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		}))
+		t.Cleanup(server.Close)
+		t.Setenv(hwTelegramAPIBaseEnv, server.URL)
+		t.Setenv(hwTelegramBotTokenEnv, "test-bot-token")
+		user := hwPhoneStepTestUser(t, "burst@example.com")
+
+		for i := 0; i < 10; i++ {
+			_, _, err := HwCompleteTelegramPhoneStep(user.Id, "800003")
+			require.NoError(t, err)
+		}
+		time.Sleep(200 * time.Millisecond)
+		assert.Equal(t, int64(1), sends.Load(), "ten logins inside the cooldown need one prompt")
 	})
 
 	t.Run("an account that already shared its number is not asked again", func(t *testing.T) {
