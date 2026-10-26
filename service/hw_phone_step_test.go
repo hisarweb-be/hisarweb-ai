@@ -1090,3 +1090,24 @@ func TestHwTelegramCallRefusesPlainHTTPBase(t *testing.T) {
 	}
 	require.Equal(t, []string{"https://api.telegram.org", "https://api.telegram.org", "http://127.0.0.1:8081", "http://localhost:8081"}, sent)
 }
+
+// The share-contact prompt leaves at most once a minute per chat, so a burst of
+// logins costs one outbound call; a second chat is independent and an entry
+// older than the cooldown no longer blocks.
+func TestHwPhonePromptDueAllowsOnePromptPerChatPerCooldown(t *testing.T) {
+	const chatA, chatB = "hw-prompt-test-chat-a", "hw-prompt-test-chat-b"
+	t.Cleanup(func() {
+		hwPhonePromptSent.Delete(chatA)
+		hwPhonePromptSent.Delete(chatB)
+	})
+	hwPhonePromptSent.Delete(chatA)
+	hwPhonePromptSent.Delete(chatB)
+
+	assert.True(t, hwPhonePromptDue(chatA))
+	assert.False(t, hwPhonePromptDue(chatA), "a burst of logins does not prompt twice")
+	assert.True(t, hwPhonePromptDue(chatB), "another chat is independent")
+
+	hwPhonePromptSent.Store(chatA, time.Now().Add(-2*hwPhonePromptCooldown))
+	assert.True(t, hwPhonePromptDue(chatA), "an expired entry lets the prompt go again")
+	assert.False(t, hwPhonePromptDue(chatA))
+}
