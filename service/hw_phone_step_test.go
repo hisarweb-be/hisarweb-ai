@@ -37,11 +37,12 @@ func hwPhoneStepTestSetup(t *testing.T) {
 		&model.HwCreditPackage{}, &model.HwUserSignal{}, &model.HwFirstPurchaseClaim{},
 		&model.HwFreeCreditClaim{}, &model.HwAccountFlag{}, &model.HwSignupIp{},
 		&model.HwTelegramUpdate{}, &model.HwTelegramLinkToken{}, &model.HwCreditExtension{},
+		&model.ExternalIdentityClaim{},
 	))
 	for _, table := range []string{
 		"hw_credit_packages", "hw_user_signals", "hw_first_purchase_claims",
 		"hw_free_credit_claims", "hw_account_flags", "hw_signup_ips",
-		"hw_telegram_updates", "hw_telegram_link_tokens", "users",
+		"hw_telegram_updates", "hw_telegram_link_tokens", "external_identity_claims", "users",
 	} {
 		require.NoError(t, model.DB.Exec("DELETE FROM "+table).Error)
 	}
@@ -49,7 +50,7 @@ func hwPhoneStepTestSetup(t *testing.T) {
 		for _, table := range []string{
 			"hw_credit_packages", "hw_user_signals", "hw_first_purchase_claims",
 			"hw_free_credit_claims", "hw_account_flags", "hw_signup_ips",
-			"hw_telegram_updates", "hw_telegram_link_tokens", "users",
+			"hw_telegram_updates", "hw_telegram_link_tokens", "external_identity_claims", "users",
 		} {
 			model.DB.Exec("DELETE FROM " + table)
 		}
