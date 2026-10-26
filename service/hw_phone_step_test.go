@@ -1059,6 +1059,64 @@ func TestHwRegisterTelegramWebhookFromTheSettingsToken(t *testing.T) {
 	assert.Equal(t, "explicit-secret", registered.SecretToken)
 }
 
+// TestHwTelegramBotConfiguredFollowsTheToken proves the dashboard link is only
+// offered when a token is set, from the environment or the settings, and that a
+// blank value counts as no token.
+func TestHwTelegramBotConfiguredFollowsTheToken(t *testing.T) {
+	previous := common.TelegramBotToken
+	t.Cleanup(func() { common.TelegramBotToken = previous })
+
+	for name, tc := range map[string]struct {
+		env, settings string
+		want          bool
+	}{
+		"nothing set":             {"", "", false},
+		"blank values":            {"  ", "	", false},
+		"environment token":       {"env-token", "", true},
+		"settings token":          {"", "settings-token", true},
+		"environment beats blank": {"env-token", " ", true},
+	} {
+		t.Setenv(hwTelegramBotTokenEnv, tc.env)
+		common.TelegramBotToken = tc.settings
+		assert.Equal(t, tc.want, HwTelegramBotConfigured(), name)
+	}
+}
+
+// TestHwRegisterTelegramWebhookInBackground proves the startup registration
+// stays silent without a token (no call leaves the host) and registers once
+// when a token is set.
+func TestHwRegisterTelegramWebhookInBackground(t *testing.T) {
+	calls := make(chan string, 4)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls <- r.URL.Path
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv(hwTelegramAPIBaseEnv, server.URL)
+	t.Setenv(hwTelegramBotTokenEnv, "")
+	t.Setenv(hwTelegramWebhookSecretEnv, "")
+	previousToken, previousAddress := common.TelegramBotToken, system_setting.ServerAddress
+	t.Cleanup(func() { common.TelegramBotToken, system_setting.ServerAddress = previousToken, previousAddress })
+	system_setting.ServerAddress = "https://api.example.test"
+
+	common.TelegramBotToken = ""
+	HwRegisterTelegramWebhookInBackground()
+	select {
+	case path := <-calls:
+		t.Fatalf("a bot without a token must not call Telegram, got %s", path)
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	common.TelegramBotToken = "background-token"
+	HwRegisterTelegramWebhookInBackground()
+	select {
+	case path := <-calls:
+		assert.Equal(t, "/botbackground-token/setWebhook", path)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the webhook was not registered")
+	}
+}
+
 type hwRoundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f hwRoundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
