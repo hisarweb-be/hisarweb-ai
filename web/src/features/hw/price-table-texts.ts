@@ -30,21 +30,22 @@ import { pickHwLanguage, useHwCurrencyText, type HwTextVars } from './texts'
 const tr = {
   title: 'Model fiyat tablosu',
   introWhat:
-    'Bu tablo, HisarWeb AI’de kullanabileceğiniz modellerin API fiyatını resmi sağlayıcının ve OpenRouter’ın fiyatıyla yan yana gösterir. Rakamlar belirtilen tarihte kaynaklarından okunmuştur.',
+    'Bu tablo, HisarWeb AI’de kullanabileceğiniz modellerin API fiyatını sağlayıcının kendi fiyatıyla ve OpenRouter’ın fiyatıyla yan yana gösterir. Rakamlar belirtilen tarihte kaynaklarından okunmuştur.',
   introToken:
     'Token, yapay zekânın metni işlediği küçük parçadır; İngilizce’de yaklaşık dörtte üç kelime eder, Türkçe metinde kelime başına daha çok token gider. “1M token” bir milyon token demektir. Girdi, modele gönderdiğiniz metindir; çıktı, modelin yazdığı yanıttır ve genellikle daha pahalıdır.',
   introWhy:
-    'Neden HisarWeb AI? Her modelin token fiyatı resmî liste fiyatının yarısıdır, her istekte ve anında. OpenRouter aynı modelleri resmî fiyattan veya daha pahalıya satar ve kredi alımında ayrıca hizmet bedeli alır. Anthropic’in kendi ön ödemeli kullanım kredileri en fazla %30 indirim verir ve peşin ödeme ister. HisarWeb AI’de taahhüt yok, ödeme {currencyName} ile ve ilk alışverişte {firstCap} değerine kadar ayrıca %50 hoş geldin indirimi var; bu ek indirim aşağıdaki yüzdelere dahil değildir.',
+    'Neden HisarWeb AI? Her modelin token fiyatı sağlayıcının liste fiyatının yarısıdır, her istekte ve anında. OpenRouter aynı modelleri sağlayıcının liste fiyatından veya daha pahalıya satar ve kredi alımında ayrıca hizmet bedeli alır. Anthropic’in kendi ön ödemeli kullanım kredileri en fazla %30 indirim verir ve peşin ödeme ister. HisarWeb AI’de taahhüt yok, ödeme {currencyName} ile ve ilk alışverişte {firstCap} değerine kadar ayrıca %50 hoş geldin indirimi var; bu ek indirim aşağıdaki yüzdelere dahil değildir.',
 
-  tableLabel: 'Model başına 1M token fiyatı: resmi, OpenRouter ve HisarWeb AI',
+  tableLabel:
+    'Model başına 1M token fiyatı: sağlayıcı, OpenRouter ve HisarWeb AI',
   colModel: 'Model',
-  colOfficial: 'Resmi fiyat',
+  colOfficial: 'Sağlayıcı fiyatı',
   colOpenRouter: 'OpenRouter fiyatı',
   colHisarweb: 'HisarWeb AI fiyatı',
   colSaving: 'Tasarruf (HisarWeb AI)',
   colInput: 'Girdi / 1M',
   colOutput: 'Çıktı / 1M',
-  colVsOfficial: 'Resmiye göre',
+  colVsOfficial: 'Sağlayıcıya göre',
   colVsOpenRouter: 'OpenRouter’a göre',
   missing: '—',
   savingNone: 'Tasarruf yok',
@@ -61,7 +62,7 @@ const tr = {
   noteSaving:
     'Tasarruf, 1M girdi + 1M çıktı toplam fiyatı üzerinden hesaplanır. “—”, o kaynakta modelin listelenmediği anlamına gelir.',
   noteContext:
-    'Resmi fiyatlar standart katman ve kısa bağlam içindir; sağlayıcılar çok uzun bağlamda daha yüksek fiyat uygulayabilir.',
+    'Sağlayıcı fiyatları standart katman ve kısa bağlam içindir; sağlayıcılar çok uzun bağlamda daha yüksek fiyat uygulayabilir.',
   noteOthers:
     'Anthropic toplu işlemede (Batch API) de %50 indirim verir, ancak yanıt 24 saate kadar gecikebilir. HisarWeb AI’deki %50 indirim her gerçek zamanlı istekte geçerlidir.',
   sourcesTitle: 'Kaynaklar',
@@ -98,8 +99,7 @@ const en: Record<PriceTableTextKey, string> = {
   bestPrice: 'Best price',
 
   notesTitle: 'Notes',
-  noteFxForeign:
-    'Amounts in {symbol} use 1 USD = {rate} {symbol}.',
+  noteFxForeign: 'Amounts in {symbol} use 1 USD = {rate} {symbol}.',
   noteFx:
     'Amounts in ₺ use 1 USD = {rate} ₺ ({date}) and exclude KDV (VAT); the calculator below shows amounts including KDV.',
   noteSaving:
