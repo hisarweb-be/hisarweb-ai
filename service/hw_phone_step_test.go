@@ -1037,3 +1037,35 @@ func TestHwRegisterTelegramWebhookFromTheSettingsToken(t *testing.T) {
 	require.NoError(t, HwRegisterTelegramWebhook(context.Background()))
 	assert.Equal(t, "explicit-secret", registered.SecretToken)
 }
+
+type hwRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f hwRoundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return f(request)
+}
+
+// TestHwTelegramCallRefusesPlainHTTPBase proves the bot token, which sits in
+// the URL path, never leaves the host over plain http: a non-loopback http
+// base is refused before any request, https and loopback test servers still work.
+func TestHwTelegramCallRefusesPlainHTTPBase(t *testing.T) {
+	var sent []string
+	previous := hwTelegramClient
+	hwTelegramClient = &http.Client{Transport: hwRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+		sent = append(sent, request.URL.Scheme+"://"+request.URL.Host)
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"ok":true}`)), Header: http.Header{}}, nil
+	})}
+	t.Cleanup(func() { hwTelegramClient = previous })
+	t.Setenv(hwTelegramBotTokenEnv, "test-bot-token")
+
+	for _, base := range []string{"http://telegram-proxy.internal", "HTTP://api.telegram.org/", "ftp://api.telegram.org"} {
+		t.Setenv(hwTelegramAPIBaseEnv, base)
+		require.ErrorIs(t, hwTelegramCall(context.Background(), "sendMessage", map[string]string{}), ErrHwTelegramDeliveryFailed, base)
+	}
+	require.Empty(t, sent, "no request may leave over plain http")
+
+	for _, base := range []string{"", "https://api.telegram.org", "http://127.0.0.1:8081", "http://localhost:8081"} {
+		t.Setenv(hwTelegramAPIBaseEnv, base)
+		require.NoError(t, hwTelegramCall(context.Background(), "sendMessage", map[string]string{}), base)
+	}
+	require.Equal(t, []string{"https://api.telegram.org", "https://api.telegram.org", "http://127.0.0.1:8081", "http://localhost:8081"}, sent)
+}

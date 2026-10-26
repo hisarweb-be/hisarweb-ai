@@ -9,7 +9,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -473,17 +475,40 @@ func HwRegisterTelegramWebhookInBackground() {
 // hwTelegramCall posts one Bot API method. The API base comes from
 // HW_TELEGRAM_API_BASE (a test double in tests). The URL carries the token, so
 // no error returned here quotes it.
+// hwTelegramAPIBase returns the Bot API base. The bot token travels in the URL
+// path, so only https leaves the host; plain http is accepted for a loopback
+// address only (a test server or a local Bot API server).
+func hwTelegramAPIBase() (string, bool) {
+	base := strings.TrimSuffix(strings.TrimSpace(os.Getenv(hwTelegramAPIBaseEnv)), "/")
+	if base == "" {
+		return hwTelegramDefaultAPIBase, true
+	}
+	parsed, err := url.Parse(base)
+	if err != nil || parsed.Host == "" {
+		return "", false
+	}
+	switch parsed.Scheme {
+	case "https":
+		return base, true
+	case "http":
+		host := parsed.Hostname()
+		ip := net.ParseIP(host)
+		return base, host == "localhost" || (ip != nil && ip.IsLoopback())
+	}
+	return "", false
+}
+
 func hwTelegramCall(ctx context.Context, method string, request any) error {
 	body, err := common.Marshal(request)
 	if err != nil {
 		return ErrHwTelegramDeliveryFailed
 	}
-	base := strings.TrimSuffix(strings.TrimSpace(os.Getenv(hwTelegramAPIBaseEnv)), "/")
-	if base == "" {
-		base = hwTelegramDefaultAPIBase
+	base, ok := hwTelegramAPIBase()
+	if !ok {
+		return ErrHwTelegramDeliveryFailed
 	}
-	url := base + "/bot" + hwTelegramBotToken() + "/" + method
-	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	endpoint := base + "/bot" + hwTelegramBotToken() + "/" + method
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return ErrHwTelegramDeliveryFailed
 	}
