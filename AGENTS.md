@@ -43,6 +43,12 @@ This is an AI API gateway/proxy built with Go. It aggregates 40+ upstream AI pro
 
 ## Rules
 
+### Merging Needs A Keuring Verdict
+
+CI groen is niet genoeg: samenvoegen mag alleen na een PR-reactie die met `KEURING: aanvaard` begint; zonder die regel weigert `ci-en-samenvoegen.sh`. Zelf samenvoegen op alleen groene CI vervalt.
+
+De poort leest de eerste regel van de nieuwste PR-reactie met een oordeel, dus het oordeel staat op zijn eigen eerste regel en de toelichting komt daaronder. `KEURING: afgekeurd` blokkeert de samenvoeging; een PR zonder oordeel wordt geweigerd met exitcode 1. Zie HIS-4861 voor het script en HIS-4853 voor het besluit.
+
 ### Common Code Quality
 
 - New code should stay direct and readable. Prefer early returns, clear branches, and well-named local variables to deep nesting or layered control flow.
