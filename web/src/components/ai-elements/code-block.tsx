@@ -27,6 +27,7 @@ import {
   EditorView,
   lineNumbers,
   placeholder as placeholderExtension,
+  ViewPlugin,
 } from '@codemirror/view'
 import { tags as highlightTags } from '@lezer/highlight'
 import {
@@ -308,6 +309,17 @@ function getCodeMirrorExtensions(options: {
       },
     }),
   ]
+
+  if (options.readOnly) {
+    // A read-only view has no focusable content, so the scroller takes focus
+    // for keyboard scrolling (axe scrollable-region-focusable).
+    extensions.push(
+      ViewPlugin.define((view) => {
+        view.scrollDOM.tabIndex = 0
+        return {}
+      })
+    )
+  }
 
   if (options.placeholder) {
     extensions.push(placeholderExtension(options.placeholder))

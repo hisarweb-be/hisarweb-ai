@@ -64,6 +64,38 @@ describe('CodeBlock accessibility', () => {
   })
 })
 
+describe('CodeBlock read-only scroller', () => {
+  test('the scrolling area of a read-only block can take keyboard focus', () => {
+    const { container } = render(
+      <CodeBlock code={'line\n'.repeat(40)} language='bash' />
+    )
+
+    // axe scrollable-region-focusable: the read-only content is not focusable,
+    // so the scroller itself has to be.
+    expect(container.querySelector('.cm-scroller')).toHaveAttribute(
+      'tabindex',
+      '0'
+    )
+  })
+
+  test('an editable editor keeps focus on its content, not on the scroller', () => {
+    const { container } = render(
+      <CodeBlockEditor
+        ariaLabel='Editor'
+        autoFocus={false}
+        language='markdown'
+        onChange={() => undefined}
+        value='hi'
+      />
+    )
+
+    expect(container.querySelector('.cm-scroller')).not.toHaveAttribute(
+      'tabindex',
+      '0'
+    )
+  })
+})
+
 describe('CodeBlockEditor', () => {
   test('keeps room for at least four lines when asked for fewer rows', () => {
     const { getByRole } = render(
