@@ -76,13 +76,16 @@ func hwRoutedModels() map[string]bool {
 // samples that counted a quiet minute as bad, and every outage that has no run
 // of three consecutive really bad minutes inside it (the rule that opens an
 // outage). Credit extensions that were already granted stay with the customer.
-// Running it twice changes nothing; it returns the number of outages removed.
+// Only outages inside the sample retention are judged: an older outage has lost
+// its samples to the cleanup, not its truth. Running it twice changes nothing;
+// it returns the number of outages removed.
 func HwPurgeFalseIdleOutages() (int, error) {
 	if err := DB.Where("reason = ?", HwStatusReasonMeasurement).Delete(&HwStatusSample{}).Error; err != nil {
 		return 0, err
 	}
 	var incidents []HwIncident
-	if err := DB.Find(&incidents).Error; err != nil {
+	since := time.Now().Unix() - hwStatusSampleRetentionSeconds
+	if err := DB.Where("started_at >= ?", since).Find(&incidents).Error; err != nil {
 		return 0, err
 	}
 	removed := 0
