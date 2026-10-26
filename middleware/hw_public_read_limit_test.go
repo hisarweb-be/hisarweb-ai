@@ -5,10 +5,13 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 
@@ -34,6 +37,18 @@ func hwPublicReadUseMemoryLimiter(t *testing.T) {
 	t.Cleanup(func() { common.RedisEnabled = previousRedis })
 }
 
+var hwPublicReadClientCounter atomic.Int32
+
+// hwPublicReadFreshClient returns an address nobody used before in this
+// process. The in-memory limiter keeps its counters for the life of the
+// process, so a fixed address would be spent by an earlier run of the same
+// test under -count or -shuffle.
+func hwPublicReadFreshClient() (string, string) {
+	n := hwPublicReadClientCounter.Add(1)
+	ip := fmt.Sprintf("198.19.%d.%d", n/250, n%250+1)
+	return ip, ip + ":41000"
+}
+
 func TestHwPublicReadRateLimitAllowsSixtyAndRejectsTheSixtyFirst(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	hwPublicReadUseMemoryLimiter(t)
@@ -46,7 +61,7 @@ func TestHwPublicReadRateLimitAllowsSixtyAndRejectsTheSixtyFirst(t *testing.T) {
 	// One address, the way a mobile carrier presents itself. The numbers are
 	// spelled out on purpose: sixty a minute is the promise to the visitor,
 	// not an implementation detail.
-	remoteAddr := "198.51.100.10:41000"
+	_, remoteAddr := hwPublicReadFreshClient()
 	for attempt := 1; attempt <= 60; attempt++ {
 		recorder := hwPublicReadRequest(engine, "/public", remoteAddr)
 		require.Equal(t, http.StatusOK, recorder.Code, "request %d must pass", attempt)
@@ -57,8 +72,8 @@ func TestHwPublicReadRateLimitAllowsSixtyAndRejectsTheSixtyFirst(t *testing.T) {
 	assert.Equal(t, strconv.Itoa(60), rejected.Header().Get("Retry-After"))
 
 	// Another address still has the full budget.
-	assert.Equal(t, http.StatusOK,
-		hwPublicReadRequest(engine, "/public", "198.51.100.11:41000").Code)
+	_, otherAddr := hwPublicReadFreshClient()
+	assert.Equal(t, http.StatusOK, hwPublicReadRequest(engine, "/public", otherAddr).Code)
 }
 
 func TestHwPublicReadRateLimitKeepsTheCriticalBudgetSeparate(t *testing.T) {
@@ -79,7 +94,7 @@ func TestHwPublicReadRateLimitKeepsTheCriticalBudgetSeparate(t *testing.T) {
 	engine.GET("/public", HwPublicReadRateLimit(), func(c *gin.Context) { c.Status(http.StatusOK) })
 	engine.GET("/critical", CriticalRateLimit(), func(c *gin.Context) { c.Status(http.StatusOK) })
 
-	remoteAddr := "198.51.100.20:41000"
+	_, remoteAddr := hwPublicReadFreshClient()
 	for attempt := 1; attempt <= 60; attempt++ {
 		require.Equal(t, http.StatusOK, hwPublicReadRequest(engine, "/public", remoteAddr).Code, attempt)
 	}
@@ -115,4 +130,37 @@ func TestHwPublicReadCacheMarksOnlySuccessfulAnswers(t *testing.T) {
 	own := hwPublicReadRequest(engine, "/own", "198.51.100.30:41000")
 	require.Equal(t, http.StatusOK, own.Code)
 	assert.Equal(t, "private, max-age=5", own.Header().Get("Cache-Control"))
+}
+
+// TestHwPublicReadRateLimitOnRedisSharesTheBudgetAcrossServers proves the
+// Redis path keeps the same promise as the memory path (sixty a minute, then a
+// rejection with the window as retry hint) in its own namespace, so two
+// servers behind one address count together and never touch the critical
+// budget.
+func TestHwPublicReadRateLimitOnRedisSharesTheBudgetAcrossServers(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	redisServer, _ := useRateLimitMiniRedis(t)
+
+	engine := gin.New()
+	require.NoError(t, engine.SetTrustedProxies(nil))
+	engine.GET("/public", HwPublicReadRateLimit(), func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	clientIP, remoteAddr := hwPublicReadFreshClient()
+	for attempt := 1; attempt <= 60; attempt++ {
+		require.Equal(t, http.StatusOK, hwPublicReadRequest(engine, "/public", remoteAddr).Code, "request %d must pass", attempt)
+	}
+
+	rejected := hwPublicReadRequest(engine, "/public", remoteAddr)
+	require.Equal(t, http.StatusTooManyRequests, rejected.Code)
+	assert.Equal(t, "60", rejected.Header().Get("Retry-After"))
+
+	key := redisIPRateLimitKey("HR", clientIP)
+	count, err := redisServer.Get(key)
+	require.NoError(t, err)
+	assert.Equal(t, "61", count, "the rejected request is counted in the shared window")
+	assert.Equal(t, 60*time.Second, redisServer.TTL(key))
+	assert.False(t, redisServer.Exists(redisIPRateLimitKey("CT", clientIP)), "the critical namespace stays untouched")
+
+	_, otherAddr := hwPublicReadFreshClient()
+	assert.Equal(t, http.StatusOK, hwPublicReadRequest(engine, "/public", otherAddr).Code, "another address keeps its own budget")
 }
