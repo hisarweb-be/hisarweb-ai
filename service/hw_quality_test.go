@@ -432,3 +432,42 @@ func TestHwQualityTrafficNowRefreshesAfterTenMinutes(t *testing.T) {
 	require.Len(t, refreshed.Windows[0].Models, 1)
 	assert.Equal(t, int64(1), refreshed.Windows[0].Models[0].Requests)
 }
+
+// TestHwQualityRunRefusesASecondRunWhileOneRuns keeps a double click or a second
+// admin from starting a parallel pass that doubles the gateway spend.
+func TestHwQualityRunRefusesASecondRunWhileOneRuns(t *testing.T) {
+	hwQualityTestSetup(t)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		once.Do(func() { close(started) })
+		<-release
+		http.Error(w, "stopped", http.StatusInternalServerError)
+	}))
+	t.Cleanup(server.Close)
+	opts := HwQualityRunOptions{
+		BaseURL:    server.URL,
+		APIKey:     "hw-test-key-not-a-real-secret",
+		JudgeModel: "hw-test-judge",
+		Models:     []string{"claude-sonnet-5-5"},
+		OutDir:     t.TempDir(),
+		Client:     server.Client(),
+	}
+	first := make(chan error, 1)
+	go func() {
+		_, err := HwRunQualityMeasurement(context.Background(), opts)
+		first <- err
+	}()
+	<-started
+
+	_, err := HwRunQualityMeasurement(context.Background(), opts)
+	assert.ErrorIs(t, err, ErrHwQualityRunBusy)
+
+	close(release)
+	require.Error(t, <-first)
+	// The slot is free again once the first run ended.
+	_, err = HwRunQualityMeasurement(context.Background(), HwQualityRunOptions{})
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, ErrHwQualityRunBusy)
+}

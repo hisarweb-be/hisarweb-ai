@@ -161,6 +161,10 @@ func HwQualityRun(c *gin.Context) {
 		return
 	}
 	run, err := service.HwRunQualityMeasurement(c.Request.Context(), opts)
+	if errors.Is(err, service.ErrHwQualityRunBusy) {
+		c.JSON(http.StatusConflict, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
 		return
