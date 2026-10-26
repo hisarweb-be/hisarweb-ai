@@ -86,7 +86,8 @@ func hwMailFormatMoney(lang string, amount decimal.Decimal, currency string) str
 }
 
 // hwMailFormatDate writes a date as the language writes it: "5 Kasım 2026" or
-// "5 November 2026". The timestamp is a Unix second count in UTC.
+// "5 November 2026". The timestamp is a Unix second count; the day is the one on
+// the Turkish clock (hwMailZone), not UTC.
 func hwMailFormatDate(lang string, unix int64) string {
 	at := time.Unix(unix, 0).In(hwMailZone)
 	months := hwMailMonths[hwLanguageTurkish]
