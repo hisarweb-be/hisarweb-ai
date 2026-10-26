@@ -11,10 +11,12 @@ package router
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -177,6 +179,16 @@ func TestHwStatusRouteIsPublicAndNamesNoSupplier(t *testing.T) {
 	assert.Empty(t, response.Header.Get("X-OpenRouter-Id"))
 }
 
+// hwRouteClientCounter hands out a client address no earlier run used: the
+// rate limiter keeps its counters for the life of the process, so a fixed
+// address would arrive already spent when the test runs a second time.
+var hwRouteClientCounter atomic.Int32
+
+func hwFreshRemoteAddr() string {
+	n := hwRouteClientCounter.Add(1)
+	return fmt.Sprintf("198.18.%d.%d:41000", n/250, n%250+1)
+}
+
 // TestHwStatusRouteCarriesThePublicReadBudget proves the budget the public
 // reads really use over HTTP: twenty-five polls in quick succession are not
 // rejected, the answer is cacheable for half a minute, and the budget still
@@ -184,7 +196,7 @@ func TestHwStatusRouteIsPublicAndNamesNoSupplier(t *testing.T) {
 // after twenty visits, but a runaway client is still stopped.
 func TestHwStatusRouteCarriesThePublicReadBudget(t *testing.T) {
 	engine := hwStatusRouteEnv(t)
-	remoteAddr := "198.51.100.40:41000"
+	remoteAddr := hwFreshRemoteAddr()
 	serve := func() *httptest.ResponseRecorder {
 		request := httptest.NewRequest(http.MethodGet, "/api/hw/status", nil)
 		request.RemoteAddr = remoteAddr
@@ -214,7 +226,7 @@ func TestHwStatusRouteCarriesThePublicReadBudget(t *testing.T) {
 // answer is cacheable; the comparator answer depends on the query and is not.
 func TestHwPublicReadRoutesShareTheRoomierBudget(t *testing.T) {
 	engine := hwStatusRouteEnv(t)
-	remoteAddr := "198.51.100.41:41000"
+	remoteAddr := hwFreshRemoteAddr()
 	get := func(target string) *httptest.ResponseRecorder {
 		request := httptest.NewRequest(http.MethodGet, target, nil)
 		request.RemoteAddr = remoteAddr
