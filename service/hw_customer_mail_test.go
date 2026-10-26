@@ -178,6 +178,34 @@ func TestHwCustomerMailExpiryOnDay25Only(t *testing.T) {
 	assert.Empty(t, *mails)
 }
 
+// A missing lira rate only skips the customers whose amounts are written in
+// lira; a dollar customer still gets the expiry mail of that day.
+func TestHwCustomerMailMissingTryRateSkipsOnlyLiraCustomers(t *testing.T) {
+	hwMailTestSetup(t)
+	mails := hwMailTestCapture(t)
+	quota := hwMailTestQuota(100)
+	created := hwMailTestNow - 25*hwMailTestDay
+	liraUser := hwMailTestUser(t, quota)
+	hwMailTestPackage(t, liraUser.Id, quota, created)
+	dollarUser := hwMailTestUser(t, quota)
+	hwMailTestPackage(t, dollarUser.Id, quota, created)
+	require.NoError(t, model.DB.Create(&model.HwOrder{
+		UserId: dollarUser.Id, MerchantRef: "mail-rate-usd", ListQuota: 1, ListValueTryMinor: 2000,
+		PayableTryMinor: 1000, Currency: model.HwCurrencyUSD, DiscountKind: model.HwDiscountReturning,
+		Language: "en", Status: model.HwOrderStatusPaid, CreatedAt: created,
+	}).Error)
+	common.OptionMapRWMutex.Lock()
+	delete(common.OptionMap, model.HwTryPerUsdOption)
+	common.OptionMapRWMutex.Unlock()
+
+	round, err := HwRunCustomerMails(time.Unix(hwMailTestNow, 0))
+	require.NoError(t, err)
+	assert.Equal(t, 1, round.Sent)
+	assert.Equal(t, 1, round.Failed)
+	require.Len(t, *mails, 1)
+	assert.Equal(t, dollarUser.Email, (*mails)[0].Receiver)
+}
+
 func TestHwCustomerMailExpiryNotRepeatedAfterRestart(t *testing.T) {
 	hwMailTestSetup(t)
 	mails := hwMailTestCapture(t)

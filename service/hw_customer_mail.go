@@ -58,8 +58,9 @@ type HwMailRound struct {
 }
 
 // HwRunCustomerMails sends every customer mail that is due at now. It returns
-// an error only for a round-wide failure (the user list or the exchange rate
-// could not be read); a mail that fails for one user does not stop the others.
+// an error only for a round-wide failure (the user list could not be read); a
+// mail that fails for one user does not stop the others. Without a usable lira
+// rate only the customers whose amounts are written in lira are skipped.
 func HwRunCustomerMails(now time.Time) (HwMailRound, error) {
 	var round HwMailRound
 	if now.IsZero() {
@@ -71,7 +72,8 @@ func HwRunCustomerMails(now time.Time) (HwMailRound, error) {
 	}
 	rate, err := hwTryPerUsd(now)
 	if err != nil {
-		return round, err
+		common.SysError("customer mail round has no usable lira rate; lira customers are skipped: " + err.Error())
+		rate = decimal.Zero
 	}
 	for _, userID := range userIDs {
 		sent, failed := hwRunCustomerMailsForUserSafely(userID, now.Unix(), rate)
@@ -120,6 +122,10 @@ func hwRunCustomerMailsForUser(userID int, now int64, rate decimal.Decimal) (int
 	link := hwMailTopUpLink()
 
 	currency, displayRate := hwMailCurrency(userID, time.Unix(now, 0), rate)
+	if !displayRate.IsPositive() {
+		common.SysError(common.LogText("customer mail round skipped user %d: no rate for the mail currency", userID))
+		return 0, 1
+	}
 
 	sent, failed := 0, 0
 	// The expiry mail is planned per package, so a customer who holds two
@@ -243,6 +249,9 @@ func hwLowBalanceThresholdQuota(userID int, rate decimal.Decimal) (int, error) {
 		threshold = int(math.Ceil(float64(lastGranted) * float64(percent) / 100))
 	}
 	if minTry > 0 && common.QuotaPerUnit > 0 {
+		if !rate.IsPositive() {
+			return 0, ErrHwTopUpRateMissing
+		}
 		minQuota := int(math.Ceil(float64(minTry) / rate.InexactFloat64() * common.QuotaPerUnit))
 		threshold = max(threshold, minQuota)
 	}
