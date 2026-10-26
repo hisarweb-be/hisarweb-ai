@@ -52,6 +52,14 @@ describe('TokenExplainer', () => {
     ).toBeInTheDocument()
   })
 
+  it('puts the calculator heading directly under the page title', () => {
+    renderExplainer()
+    // axe heading-order: an h3 straight after the page h1 skips a level.
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Bütçem ne kadar yeter?' })
+    ).toBeInTheDocument()
+  })
+
   it('shows hours and projects for the chosen budget, with the assumption and its source', () => {
     renderExplainer()
     expect(screen.getByText(HOURS_RESULT)).toBeInTheDocument()

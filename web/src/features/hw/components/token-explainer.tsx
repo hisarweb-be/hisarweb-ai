@@ -96,9 +96,9 @@ export function TokenExplainer(props: TokenExplainerProps) {
         </dl>
 
         <section aria-labelledby={`${id}-calc`} className='flex flex-col gap-3'>
-          <h3 id={`${id}-calc`} className='text-sm font-semibold'>
+          <h2 id={`${id}-calc`} className='text-sm font-semibold'>
             {hw('calcTitle')}
-          </h3>
+          </h2>
           <div className='flex flex-wrap items-end gap-4'>
             <div className='flex flex-col gap-1.5'>
               <span className='text-sm font-medium'>
