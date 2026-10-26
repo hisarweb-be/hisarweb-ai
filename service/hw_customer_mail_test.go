@@ -515,3 +515,15 @@ func TestHwMailPaymentAndRefundSentences(t *testing.T) {
 	_, turkish := hwMailRefundContent("tr", "Sam", "10,00 €", "0,59 €", "9,41 €", false)
 	assert.Contains(t, turkish, "iadeden düşülür")
 }
+
+// Mail dates follow the Turkish clock (UTC+3), not UTC: a package that expires
+// at 22:00 UTC on 5 November expires on 6 November for the customer.
+func TestHwMailFormatDateUsesTheTurkishDayAndLanguageMonths(t *testing.T) {
+	evening := time.Date(2026, time.November, 5, 22, 0, 0, 0, time.UTC).Unix()
+	afternoon := time.Date(2026, time.November, 5, 12, 0, 0, 0, time.UTC).Unix()
+
+	assert.Equal(t, "6 Kasım 2026", hwMailFormatDate(hwLanguageTurkish, evening))
+	assert.Equal(t, "6 November 2026", hwMailFormatDate(hwLanguageEnglish, evening))
+	assert.Equal(t, "5 Kasım 2026", hwMailFormatDate(hwLanguageTurkish, afternoon))
+	assert.Equal(t, "5 Kasım 2026", hwMailFormatDate("nl", afternoon), "an unknown language falls back to Turkish")
+}
