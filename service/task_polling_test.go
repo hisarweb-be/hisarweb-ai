@@ -514,7 +514,9 @@ func TestUpdateVideoTasksDefaultSleepDoesNotBlockOtherChannels(t *testing.T) {
 	GetTaskAdaptorFunc = func(constant.TaskPlatform) TaskPollingAdaptor { return adaptor }
 	t.Cleanup(func() { GetTaskAdaptorFunc = previousFactory })
 
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	// The deadline sits well under the one-second sleep between two tasks of a
+	// channel but leaves a cold run room for its first fetch.
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
 	err := UpdateVideoTasks(ctx, constant.TaskPlatform("kling"), map[int][]string{
