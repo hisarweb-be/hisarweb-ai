@@ -27,9 +27,11 @@ import i18next from 'i18next'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { useHwBonusStore } from '@/stores/hw-bonus-store'
+import { useHwCurrencyStore } from '@/stores/hw-currency-store'
 
 import { BonusExplainer } from '../../components/bonus-explainer'
 import { hwTexts } from '../../texts'
+import { HW_LEGACY_CURRENCY_CONFIG } from '../currency'
 import {
   FALLBACK_BONUS_RULES,
   FALLBACK_VALIDITY_DAYS,
@@ -40,6 +42,7 @@ import {
 } from '../hw-bonus'
 
 beforeEach(async () => {
+  useHwCurrencyStore.setState({ config: HW_LEGACY_CURRENCY_CONFIG })
   useHwBonusStore.setState({
     status: { rules: null, validityDays: null },
     packageRules: null,
@@ -180,6 +183,13 @@ describe('BonusExplainer', () => {
   })
 
   it('lists the fallback rules and 30 days without API data', () => {
+    // Rules only show for the currencies on sale.
+    useHwCurrencyStore.setState({
+      config: {
+        ...HW_LEGACY_CURRENCY_CONFIG,
+        currencies: ['TRY', 'EUR', 'USD'],
+      },
+    })
     render(<BonusExplainer />)
 
     expect(screen.getAllByRole('listitem')).toHaveLength(
