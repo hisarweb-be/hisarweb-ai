@@ -16,6 +16,7 @@ import { Route as DocsRouteImport } from './routes/docs'
 import { Route as DurumRouteImport } from './routes/durum'
 import { Route as FiyatKarsilastirmaRouteImport } from './routes/fiyat-karsilastirma'
 import { Route as KaliteRouteImport } from './routes/kalite'
+import { Route as PriceComparisonRouteImport } from './routes/price-comparison'
 import { Route as PrivacyPolicyRouteImport } from './routes/privacy-policy'
 import { Route as UserAgreementRouteImport } from './routes/user-agreement'
 import { Route as VibeKodlamaRouteImport } from './routes/vibe-kodlama'
@@ -110,6 +111,11 @@ const FiyatKarsilastirmaRoute = FiyatKarsilastirmaRouteImport.update({
 const KaliteRoute = KaliteRouteImport.update({
   id: '/kalite',
   path: '/kalite',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PriceComparisonRoute = PriceComparisonRouteImport.update({
+  id: '/price-comparison',
+  path: '/price-comparison',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyPolicyRoute = PrivacyPolicyRouteImport.update({
@@ -464,6 +470,7 @@ export interface FileRoutesByFullPath {
   '/durum': typeof DurumRoute
   '/fiyat-karsilastirma': typeof FiyatKarsilastirmaRoute
   '/kalite': typeof KaliteRoute
+  '/price-comparison': typeof PriceComparisonRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/user-agreement': typeof UserAgreementRoute
   '/vibe-kodlama': typeof VibeKodlamaRoute
@@ -533,6 +540,7 @@ export interface FileRoutesByTo {
   '/durum': typeof DurumRoute
   '/fiyat-karsilastirma': typeof FiyatKarsilastirmaRoute
   '/kalite': typeof KaliteRoute
+  '/price-comparison': typeof PriceComparisonRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/user-agreement': typeof UserAgreementRoute
   '/vibe-kodlama': typeof VibeKodlamaRoute
@@ -604,6 +612,7 @@ export interface FileRoutesById {
   '/durum': typeof DurumRoute
   '/fiyat-karsilastirma': typeof FiyatKarsilastirmaRoute
   '/kalite': typeof KaliteRoute
+  '/price-comparison': typeof PriceComparisonRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/user-agreement': typeof UserAgreementRoute
   '/vibe-kodlama': typeof VibeKodlamaRoute
@@ -675,6 +684,7 @@ export interface FileRouteTypes {
     | '/durum'
     | '/fiyat-karsilastirma'
     | '/kalite'
+    | '/price-comparison'
     | '/privacy-policy'
     | '/user-agreement'
     | '/vibe-kodlama'
@@ -744,6 +754,7 @@ export interface FileRouteTypes {
     | '/durum'
     | '/fiyat-karsilastirma'
     | '/kalite'
+    | '/price-comparison'
     | '/privacy-policy'
     | '/user-agreement'
     | '/vibe-kodlama'
@@ -814,6 +825,7 @@ export interface FileRouteTypes {
     | '/durum'
     | '/fiyat-karsilastirma'
     | '/kalite'
+    | '/price-comparison'
     | '/privacy-policy'
     | '/user-agreement'
     | '/vibe-kodlama'
@@ -886,6 +898,7 @@ export interface RootRouteChildren {
   DurumRoute: typeof DurumRoute
   FiyatKarsilastirmaRoute: typeof FiyatKarsilastirmaRoute
   KaliteRoute: typeof KaliteRoute
+  PriceComparisonRoute: typeof PriceComparisonRoute
   PrivacyPolicyRoute: typeof PrivacyPolicyRoute
   UserAgreementRoute: typeof UserAgreementRoute
   VibeKodlamaRoute: typeof VibeKodlamaRoute
@@ -951,6 +964,13 @@ declare module '@tanstack/react-router' {
       path: '/kalite'
       fullPath: '/kalite'
       preLoaderRoute: typeof KaliteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/price-comparison': {
+      id: '/price-comparison'
+      path: '/price-comparison'
+      fullPath: '/price-comparison'
+      preLoaderRoute: typeof PriceComparisonRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy-policy': {
@@ -1544,6 +1564,7 @@ const rootRouteChildren: RootRouteChildren = {
   DurumRoute: DurumRoute,
   FiyatKarsilastirmaRoute: FiyatKarsilastirmaRoute,
   KaliteRoute: KaliteRoute,
+  PriceComparisonRoute: PriceComparisonRoute,
   PrivacyPolicyRoute: PrivacyPolicyRoute,
   UserAgreementRoute: UserAgreementRoute,
   VibeKodlamaRoute: VibeKodlamaRoute,
