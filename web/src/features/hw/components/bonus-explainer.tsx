@@ -23,6 +23,7 @@ import { useTranslation } from 'react-i18next'
 import { toIntlLocale } from '@/i18n/languages'
 import { cn } from '@/lib/utils'
 
+import { useHwCurrency } from '../hooks/use-hw-currency'
 import { formatHwAmount } from '../lib/format'
 import { useHwBonusRules } from '../lib/hw-bonus'
 import { useHwText } from '../texts'
@@ -41,7 +42,10 @@ export function BonusExplainer(props: BonusExplainerProps) {
   const hw = useHwText()
   const { i18n } = useTranslation()
   const locale = toIntlLocale(i18n.resolvedLanguage ?? i18n.language)
-  const { rules } = useHwBonusRules()
+  const { rules: allRules } = useHwBonusRules()
+  const { currencies } = useHwCurrency()
+  // A rule for a currency the shop does not sell would promise a bonus nobody can earn.
+  const rules = allRules.filter((rule) => currencies.includes(rule.currency))
   const titleId = useId()
   const hasRules = rules.length > 0
 
