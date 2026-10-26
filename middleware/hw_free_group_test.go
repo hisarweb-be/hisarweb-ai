@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -40,6 +41,15 @@ func hwFreeGroupTestDB(t *testing.T) {
 		model.DB = nil
 		_ = sqlDB.Close()
 	})
+}
+
+var hwFreeGroupUserCounter atomic.Int64
+
+// hwFreeGroupFreshUser returns an account id nobody used before in this
+// process. The limiter keeps its counters per process, so a fixed id would be
+// spent by an earlier run of the same test under -count or -shuffle.
+func hwFreeGroupFreshUser() int {
+	return int(4000000 + hwFreeGroupUserCounter.Add(1))
 }
 
 // hwFreeGroupTestRouter serves a request as one user in one account group, with
@@ -87,12 +97,13 @@ func TestHwFreeGroupRateLimitCapsFreeAccounts(t *testing.T) {
 		return recorder.Code
 	}
 
-	assert.Equal(t, http.StatusOK, call("free", "free", 4101))
-	assert.Equal(t, http.StatusOK, call("free", "free", 4101))
-	assert.Equal(t, http.StatusTooManyRequests, call("free", "free", 4101), "the third request in a minute is refused")
-	assert.Equal(t, http.StatusOK, call("free", "free", 4102), "another account has its own budget")
+	firstUser, otherUser := hwFreeGroupFreshUser(), hwFreeGroupFreshUser()
+	assert.Equal(t, http.StatusOK, call("free", "free", firstUser))
+	assert.Equal(t, http.StatusOK, call("free", "free", firstUser))
+	assert.Equal(t, http.StatusTooManyRequests, call("free", "free", firstUser), "the third request in a minute is refused")
+	assert.Equal(t, http.StatusOK, call("free", "free", otherUser), "another account has its own budget")
 	for range 3 {
-		assert.Equal(t, http.StatusOK, call("paid", "paid", 4101), "a paid account is not capped here")
+		assert.Equal(t, http.StatusOK, call("paid", "paid", firstUser), "a paid account is not capped here")
 	}
 }
 
@@ -110,8 +121,8 @@ func TestHwFreeGroupRateLimitReadsTheAccountGroup(t *testing.T) {
 		router.ServeHTTP(recorder, request)
 		return recorder.Code
 	}
-	for index, tokenGroup := range []string{"default", "vip", "auto", "free"} {
-		userID := 4301 + index
+	for _, tokenGroup := range []string{"default", "vip", "auto", "free"} {
+		userID := hwFreeGroupFreshUser()
 		assert.Equal(t, http.StatusOK, call(userID, tokenGroup), "the first request of %s passes", tokenGroup)
 		assert.Equal(t, http.StatusTooManyRequests, call(userID, tokenGroup),
 			"a token group %s does not lift the free budget", tokenGroup)
@@ -151,11 +162,12 @@ func TestHwFreeGroupRateLimitCapsTheDay(t *testing.T) {
 	t.Setenv("HW_FREE_GROUP_PER_MINUTE", "100")
 	t.Setenv("HW_FREE_GROUP_PER_DAY", "1")
 	router := hwFreeGroupTestRouter(t)
+	dayUser := strconv.Itoa(hwFreeGroupFreshUser())
 
 	first := httptest.NewRecorder()
-	router.ServeHTTP(first, httptest.NewRequest(http.MethodPost, "/v1/chat/completions?user=4201&usergroup=free&group=free", nil))
+	router.ServeHTTP(first, httptest.NewRequest(http.MethodPost, "/v1/chat/completions?user="+dayUser+"&usergroup=free&group=free", nil))
 	second := httptest.NewRecorder()
-	router.ServeHTTP(second, httptest.NewRequest(http.MethodPost, "/v1/chat/completions?user=4201&usergroup=free&group=free", nil))
+	router.ServeHTTP(second, httptest.NewRequest(http.MethodPost, "/v1/chat/completions?user="+dayUser+"&usergroup=free&group=free", nil))
 
 	assert.Equal(t, http.StatusOK, first.Code)
 	assert.Equal(t, http.StatusTooManyRequests, second.Code, "the daily budget ends the day")
