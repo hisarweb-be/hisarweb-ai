@@ -436,3 +436,82 @@ func TestHwStatusServedFallbackIsNoFailure(t *testing.T) {
 	assert.Equal(t, int64(1), counts["claude-x"].Failed, "only the request no attempt served is a failure")
 	assert.Equal(t, int64(1), counts["claude-x"].Measured)
 }
+
+func TestHwStatusCodeAndAvailabilityPercent(t *testing.T) {
+	cases := []struct {
+		name    string
+		state   HwStatusModelState
+		code    string
+		percent float64
+	}{
+		{"no samples is not claimed healthy", HwStatusModelState{}, "operational", 0},
+		{"all good", HwStatusModelState{GoodMinutes: 60, TotalMinutes: 60}, "operational", 100},
+		{"recent bad minute is degraded", HwStatusModelState{BadRecent: true, GoodMinutes: 2, TotalMinutes: 3}, "degraded", 66.67},
+		{"open incident wins over degraded", HwStatusModelState{InOpenIncident: true, BadRecent: true, GoodMinutes: 1, TotalMinutes: 3}, "outage", 33.33},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.code, HwStatusCodeOf(tc.state))
+			assert.InDelta(t, tc.percent, HwStatusAvailabilityPercent(tc.state), 0.001)
+		})
+	}
+}
+
+func TestHwStatusMinuteOfRoundsDownToTheMinute(t *testing.T) {
+	at := time.Unix(1_800_000_059, 0)
+	assert.Equal(t, at.Unix()-at.Unix()%60, HwStatusMinuteOf(at))
+	assert.Equal(t, int64(0), HwStatusMinuteOf(at)%60)
+}
+
+func TestHwPurgeOldStatusSamplesKeepsTheWindowAndIsIdempotent(t *testing.T) {
+	hwStatusTestSetup(t)
+	now := int64(1_800_000_000)
+	oldMinute := now - hwStatusSampleRetentionSeconds - 120
+	keepMinute := now - hwStatusSampleRetentionSeconds + 120
+	hwStatusTestSample(t, oldMinute, true, "")
+	hwStatusTestSample(t, keepMinute, true, "")
+
+	require.Error(t, PurgeOldStatusSamples(0))
+	for i := 0; i < 2; i++ {
+		require.NoError(t, PurgeOldStatusSamples(now))
+		var count int64
+		require.NoError(t, DB.Model(&HwStatusSample{}).Count(&count).Error)
+		assert.Equal(t, int64(1), count)
+	}
+	var left HwStatusSample
+	require.NoError(t, DB.First(&left).Error)
+	assert.Equal(t, keepMinute, left.Minute)
+}
+
+func TestHwReadStatusSnapshotCountsWindowRecentBadAndOpenIncident(t *testing.T) {
+	hwStatusTestSetup(t)
+	now := int64(1_800_000_000)
+	_, err := HwReadStatusSnapshot(0, []string{"claude-sonnet-5-5"})
+	require.Error(t, err)
+
+	// Quiet meter: nothing sampled, nothing claimed.
+	snap, err := HwReadStatusSnapshot(now, []string{"claude-sonnet-5-5"})
+	require.NoError(t, err)
+	require.Len(t, snap.Models, 1)
+	assert.Equal(t, HwStatusModelState{Model: "claude-sonnet-5-5"}, snap.Models[0])
+	assert.Empty(t, snap.Incidents)
+
+	// Two good minutes long ago, then a bad one inside the recovery window, with
+	// an incident that is still open.
+	hwStatusTestSample(t, now-3600, true, "")
+	hwStatusTestSample(t, now-3540, true, "")
+	hwStatusTestSample(t, now-60, false, "relay")
+	require.NoError(t, DB.Create(&HwIncident{StartedAt: now - 120, Kind: HwStatusIncidentRelay}).Error)
+
+	snap, err = HwReadStatusSnapshot(now, []string{"claude-sonnet-5-5", "unsampled-model"})
+	require.NoError(t, err)
+	require.Len(t, snap.Models, 2)
+	got := snap.Models[0]
+	assert.Equal(t, int64(3), got.TotalMinutes)
+	assert.Equal(t, int64(2), got.GoodMinutes)
+	assert.True(t, got.BadRecent)
+	assert.True(t, got.InOpenIncident)
+	assert.Equal(t, "outage", HwStatusCodeOf(got))
+	assert.Equal(t, HwStatusModelState{Model: "unsampled-model"}, snap.Models[1])
+	assert.Len(t, snap.Incidents, 1)
+}

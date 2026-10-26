@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/gin-gonic/gin"
@@ -630,4 +631,35 @@ func TestHwRefundAndForfeitCountTheOutageExtension(t *testing.T) {
 		assert.Equal(t, want, hwTestPackageByOrderRef(t, freeRef).RetiredRemaining)
 		assert.Equal(t, 60-want, getUserQuotaFromDB(t, user.Id), "the balance drops by what the free package still held")
 	})
+}
+
+func TestHwUserHasActiveFreeCredit(t *testing.T) {
+	hwCreditTestSetup(t)
+	user := createHwTestUser(t, 0)
+	now := time.Now().Unix()
+
+	_, err := HwUserHasActiveFreeCredit(0)
+	require.ErrorIs(t, err, ErrHwInvalidCreditGrant)
+
+	has, err := HwUserHasActiveFreeCredit(user.Id)
+	require.NoError(t, err)
+	assert.False(t, has)
+
+	// A purchase package is not a free trial.
+	require.NoError(t, DB.Create(&HwCreditPackage{UserId: user.Id, Source: HwSourcePurchase, GrantedQuota: 100, CreatedAt: now, ExpiresAt: now + 3600, OrderRef: "order-a"}).Error)
+	has, err = HwUserHasActiveFreeCredit(user.Id)
+	require.NoError(t, err)
+	assert.False(t, has)
+
+	free := HwCreditPackage{UserId: user.Id, Source: HwSourceFree, GrantedQuota: 100, CreatedAt: now, ExpiresAt: now + 3600, OrderRef: "free-a"}
+	require.NoError(t, DB.Create(&free).Error)
+	has, err = HwUserHasActiveFreeCredit(user.Id)
+	require.NoError(t, err)
+	assert.True(t, has)
+
+	// A retired free package no longer counts, and another user's never does.
+	require.NoError(t, DB.Model(&free).Update("retired_at", now).Error)
+	has, err = HwUserHasActiveFreeCredit(user.Id)
+	require.NoError(t, err)
+	assert.False(t, has)
 }
