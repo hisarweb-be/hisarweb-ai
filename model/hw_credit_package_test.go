@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 // hwCreditTestSetup starts a test from an empty credit ledger. The shared test
@@ -662,4 +663,75 @@ func TestHwUserHasActiveFreeCredit(t *testing.T) {
 	has, err = HwUserHasActiveFreeCredit(user.Id)
 	require.NoError(t, err)
 	assert.False(t, has)
+}
+
+// TestHwGrantCreditPackageLeavesNothingBehindWhenTheBalanceCannotTakeIt proves
+// that a grant whose balance write fails rolls the package back with it: a
+// package without the quota it promises would later retire against a balance
+// that never received it.
+func TestHwGrantCreditPackageLeavesNothingBehindWhenTheBalanceCannotTakeIt(t *testing.T) {
+	now := int64(1_700_000_000)
+	packageCount := func(orderRef string) int64 {
+		var count int64
+		require.NoError(t, DB.Model(&HwCreditPackage{}).Where("order_ref = ?", orderRef).Count(&count).Error)
+		return count
+	}
+
+	t.Run("an account that does not exist", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		granted, err := GrantCreditPackage(nil, 987654321, 10, HwSourcePurchase, "order-ghost", now)
+		require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+		assert.False(t, granted)
+		assert.EqualValues(t, 0, packageCount("order-ghost"))
+	})
+
+	t.Run("a balance at the wallet limit", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		user := createHwTestUser(t, common.MaxWalletQuota-5)
+		granted, err := GrantCreditPackage(nil, user.Id, 10, HwSourcePurchase, "order-over", now)
+		require.ErrorIs(t, err, ErrWalletQuotaLimitExceeded)
+		assert.False(t, granted)
+		assert.EqualValues(t, 0, packageCount("order-over"))
+		assert.Equal(t, common.MaxWalletQuota-5, getUserQuotaFromDB(t, user.Id), "the balance is untouched")
+	})
+
+	t.Run("a grant that fills the wallet exactly is accepted", func(t *testing.T) {
+		hwCreditTestSetup(t)
+		user := createHwTestUser(t, common.MaxWalletQuota-10)
+		granted, err := GrantCreditPackage(nil, user.Id, 10, HwSourcePurchase, "order-exact", now)
+		require.NoError(t, err)
+		assert.True(t, granted)
+		assert.EqualValues(t, 1, packageCount("order-exact"))
+		assert.Equal(t, common.MaxWalletQuota, getUserQuotaFromDB(t, user.Id))
+	})
+}
+
+// TestHwRetireExpiredPackagesForUser proves the lazy path of one user: it
+// refuses a request it cannot place in time, and it retires only that user's
+// expired packages, leaving the balance of everybody else to the periodic job.
+func TestHwRetireExpiredPackagesForUser(t *testing.T) {
+	now := int64(1_700_000_000)
+	hwCreditTestSetup(t)
+
+	t.Run("an invalid user or time is refused", func(t *testing.T) {
+		require.ErrorIs(t, RetireExpiredPackagesForUser(0, now), ErrHwInvalidCreditGrant)
+		require.ErrorIs(t, RetireExpiredPackagesForUser(1, 0), ErrHwInvalidCreditGrant)
+	})
+
+	t.Run("only the named user is retired", func(t *testing.T) {
+		mine := createHwTestUser(t, 60)
+		other := createHwTestUser(t, 60)
+		for _, user := range []User{mine, other} {
+			_, err := GrantCreditPackage(nil, user.Id, 40, HwSourcePurchase, fmt.Sprintf("order-lazy-%d", user.Id), now)
+			require.NoError(t, err)
+		}
+		require.NoError(t, DB.Model(&HwCreditPackage{}).Where("user_id IN ?", []int{mine.Id, other.Id}).Update("expires_at", now-1).Error)
+
+		require.NoError(t, RetireExpiredPackagesForUser(mine.Id, now))
+		assert.Equal(t, 60, getUserQuotaFromDB(t, mine.Id), "the expired credit leaves the balance")
+		assert.Equal(t, 100, getUserQuotaFromDB(t, other.Id), "another user is left to the periodic job")
+
+		require.NoError(t, RetireExpiredPackagesForUser(mine.Id, now))
+		assert.Equal(t, 60, getUserQuotaFromDB(t, mine.Id), "a second call takes nothing more")
+	})
 }
