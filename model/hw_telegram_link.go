@@ -37,7 +37,7 @@ const (
 type HwTelegramLinkToken struct {
 	TokenHash string `json:"token_hash" gorm:"primaryKey;size:64"`
 	UserId    int    `json:"user_id" gorm:"index;not null"`
-	ExpiresAt int64  `json:"expires_at" gorm:"not null;default:0"`
+	ExpiresAt int64  `json:"expires_at" gorm:"index;not null;default:0"`
 	CreatedAt int64  `json:"created_at" gorm:"not null;default:0"`
 }
 
