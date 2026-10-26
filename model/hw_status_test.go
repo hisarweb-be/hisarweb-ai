@@ -307,6 +307,43 @@ func TestHwStatusQuietNightOpensNoOutage(t *testing.T) {
 	assert.EqualValues(t, 5, noRoute, "a model without an enabled route is bad")
 }
 
+// A quiet minute is decided by the mini call, not by the route: a model whose
+// upstream answers 503 keeps its enabled channel, so the route alone reported it
+// operational for days (24-26 Oct 2026). With a probe installed only a 200 is
+// good, and a model without a route but with a working upstream is good.
+func TestHwStatusQuietMinuteProbesTheUpstream(t *testing.T) {
+	hwStatusTestSetup(t)
+	require.NoError(t, DB.AutoMigrate(&Ability{}, &Log{}))
+	require.NoError(t, DB.Exec("DELETE FROM abilities").Error)
+	t.Cleanup(func() { DB.Exec("DELETE FROM abilities") })
+	require.NoError(t, DB.Create(&Ability{Group: HwPaidGroupName, Model: "claude-sonnet-5-5", ChannelId: 1, Enabled: true}).Error)
+	t.Cleanup(func() { SetHwStatusProbe(nil) })
+
+	base := int64(1_800_000_000)
+	models := []string{"claude-sonnet-5-5", "claude-unrouted"}
+
+	// The upstream of the routed model does not answer; the unrouted one does.
+	SetHwStatusProbe(func(ctx context.Context, modelName string) bool {
+		return modelName != "claude-sonnet-5-5"
+	})
+	for i := int64(1); i <= 5; i++ {
+		require.NoError(t, HwMeasureStatusOnce(time.Unix(base+i*60, 0), models))
+	}
+	var failed, good int64
+	require.NoError(t, DB.Model(&HwStatusSample{}).Where("model = ? AND ok = ? AND reason = ?", "claude-sonnet-5-5", false, HwStatusReasonProbeFailed).Count(&failed).Error)
+	require.NoError(t, DB.Model(&HwStatusSample{}).Where("model = ? AND ok = ?", "claude-unrouted", true).Count(&good).Error)
+	assert.EqualValues(t, 5, failed, "a model whose upstream fails is bad, whatever the route says")
+	assert.EqualValues(t, 5, good, "a model whose upstream answers is good, routed or not")
+
+	// Without a probe the route decides again, so an environment without a key
+	// never reports a false outage.
+	SetHwStatusProbe(nil)
+	require.NoError(t, HwMeasureStatusOnce(time.Unix(base+6*60, 0), models))
+	var probeFree int64
+	require.NoError(t, DB.Model(&HwStatusSample{}).Where("minute = ? AND model = ? AND ok = ?", base+6*60, "claude-sonnet-5-5", true).Count(&probeFree).Error)
+	assert.EqualValues(t, 1, probeFree, "without a probe the route decides, as before")
+}
+
 // The sweep removes an outage made only of quiet minutes and keeps a real one.
 func TestHwStatusPurgeFalseIdleOutages(t *testing.T) {
 	hwStatusTestSetup(t)
