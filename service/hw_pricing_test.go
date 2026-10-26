@@ -589,3 +589,62 @@ func hwStoredRatioOption(t *testing.T, key string) string {
 	require.NoError(t, model.DB.Where("key = ?", key).First(&stored).Error)
 	return stored.Value
 }
+
+func hwComparePriceSnapshot(t *testing.T, tryPerUsd string, prices map[string]model.HwModelPrice) *model.HwPriceSnapshot {
+	t.Helper()
+	encoded, err := common.Marshal(prices)
+	require.NoError(t, err)
+	return &model.HwPriceSnapshot{TryPerUsd: tryPerUsd, Models: string(encoded)}
+}
+
+func TestHwComparePriceIsExactAndRejectsUnusableInput(t *testing.T) {
+	prices := map[string]model.HwModelPrice{"claude-sonnet-5-5": {InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000}}
+	snapshot := hwComparePriceSnapshot(t, "40", prices)
+
+	got, err := HwComparePrice(snapshot, HwComparePriceInput{Model: "claude-sonnet-5-5", InputTokens: 1_000_000, OutputTokens: 1_000_000})
+	require.NoError(t, err)
+	// 1M input x $2 + 1M output x $10 = $12, x 40 TRY x 1.2 KDV = 576 TRY.
+	assert.True(t, got.OfficialUsd.Equal(decimal.NewFromInt(12)), got.OfficialUsd.String())
+	assert.True(t, got.OfficialTry.Equal(decimal.NewFromInt(576)), got.OfficialTry.String())
+	assert.True(t, got.TryPerUsd.Equal(decimal.NewFromInt(40)))
+	assert.True(t, got.FirstPurchaseTry.IsPositive())
+	assert.True(t, got.FirstPurchaseTry.LessThanOrEqual(got.RepeatPurchaseTry), "the first purchase is never dearer than a repeat")
+	assert.True(t, got.RepeatPurchaseTry.LessThan(got.OfficialTry), "our price is below the official price")
+	assert.True(t, got.SavingsFirstTry.Equal(got.OfficialTry.Sub(got.FirstPurchaseTry)))
+	assert.True(t, got.SavingsRepeatTry.Equal(got.OfficialTry.Sub(got.RepeatPurchaseTry)))
+
+	valid := HwComparePriceInput{Model: "claude-sonnet-5-5", InputTokens: 10, OutputTokens: 10}
+	for name, tc := range map[string]struct {
+		snapshot *model.HwPriceSnapshot
+		input    HwComparePriceInput
+		want     error
+	}{
+		"model not sold":   {snapshot, HwComparePriceInput{Model: "gpt-nothing", InputTokens: 1}, ErrHwModelNotSold},
+		"no snapshot":      {nil, valid, ErrHwNoPriceData},
+		"model missing":    {hwComparePriceSnapshot(t, "40", map[string]model.HwModelPrice{}), valid, ErrHwNoPriceData},
+		"zero price":       {hwComparePriceSnapshot(t, "40", map[string]model.HwModelPrice{"claude-sonnet-5-5": {InputMicroUsd: 0, OutputMicroUsd: 10}}), valid, ErrHwNoPriceData},
+		"invalid rate":     {hwComparePriceSnapshot(t, "0", prices), valid, ErrHwInvalidRate},
+		"unparseable rate": {hwComparePriceSnapshot(t, "abc", prices), valid, ErrHwInvalidRate},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := HwComparePrice(tc.snapshot, tc.input)
+			assert.ErrorIs(t, err, tc.want)
+		})
+	}
+
+	for name, input := range map[string]HwComparePriceInput{
+		"negative input":  {Model: "claude-sonnet-5-5", InputTokens: -1},
+		"negative output": {Model: "claude-sonnet-5-5", OutputTokens: -1},
+		"input too big":   {Model: "claude-sonnet-5-5", InputTokens: HwMaxTokensPerMonth + 1},
+		"output too big":  {Model: "claude-sonnet-5-5", OutputTokens: HwMaxTokensPerMonth + 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := HwComparePrice(snapshot, input)
+			require.Error(t, err)
+			assert.NotErrorIs(t, err, ErrHwModelNotSold)
+		})
+	}
+
+	_, err = HwComparePrice(&model.HwPriceSnapshot{TryPerUsd: "40", Models: "not json"}, valid)
+	require.Error(t, err, "an unreadable price list is an error, not an empty one")
+}
