@@ -451,3 +451,83 @@ func TestHwAdminAgentEscalationQueue(t *testing.T) {
 	require.NoError(t, model.DB.First(&row, open.ID).Error)
 	assert.Equal(t, "C-1", row.CardRef)
 }
+
+// TestHwAdminChannelRoutes proves the partner channel routes are admin only,
+// refuse a request that names no account, and that a grant can be repeated
+// without paying the channel credit twice.
+func TestHwAdminChannelRoutes(t *testing.T) {
+	partner, admin := hwAdminTestSetup(t)
+	previousRedis := common.RedisEnabled
+	common.RedisEnabled = false
+	t.Cleanup(func() { common.RedisEnabled = previousRedis })
+	require.NoError(t, model.DB.AutoMigrate(&model.HwUserSignal{}))
+	t.Setenv("HW_SIGNAL_SALT", strings.Repeat("s", 32))
+	grant := func(role int, body string) *httptest.ResponseRecorder {
+		return hwAdminAgentCall(HwAdminChannelGrant, role, admin.Id, body)
+	}
+
+	t.Run("a normal user reaches neither route", func(t *testing.T) {
+		assert.Equal(t, http.StatusForbidden, grant(common.RoleCommonUser, `{"user_id":`+strconv.Itoa(partner.Id)+`}`).Code)
+		assert.Equal(t, http.StatusForbidden, hwAdminAgentCall(HwAdminChannels, common.RoleCommonUser, admin.Id, "").Code)
+		var packages int64
+		require.NoError(t, model.DB.Model(&model.HwCreditPackage{}).Count(&packages).Error)
+		assert.EqualValues(t, 0, packages, "a refused grant credits nothing")
+	})
+	t.Run("a request without a usable account is refused", func(t *testing.T) {
+		for name, body := range map[string]string{
+			"not json":     `nope`,
+			"zero account": `{"user_id":0}`,
+			"negative":     `{"user_id":-4}`,
+			"no field":     `{}`,
+		} {
+			assert.False(t, hwAdminAgentDecode(t, grant(common.RoleAdminUser, body)).Success, name)
+		}
+		assert.False(t, hwAdminAgentDecode(t, grant(common.RoleAdminUser, `{"user_id":987654}`)).Success, "an account that does not exist")
+	})
+	t.Run("a grant pays once and the list shows the channel", func(t *testing.T) {
+		body := `{"user_id":` + strconv.Itoa(partner.Id) + `}`
+		first := grant(common.RoleAdminUser, body)
+		require.Equal(t, http.StatusOK, first.Code)
+		assert.Contains(t, first.Body.String(), `"success":true`)
+		assert.Contains(t, first.Body.String(), `"credit_granted":true`)
+
+		again := grant(common.RoleAdminUser, body)
+		assert.Contains(t, again.Body.String(), `"success":true`)
+		assert.Contains(t, again.Body.String(), `"credit_granted":false`, "the credit is not paid twice")
+		var packages int64
+		require.NoError(t, model.DB.Model(&model.HwCreditPackage{}).Where("user_id = ?", partner.Id).Count(&packages).Error)
+		assert.EqualValues(t, 1, packages)
+
+		list := hwAdminAgentCall(HwAdminChannels, common.RoleAdminUser, admin.Id, "")
+		require.Equal(t, http.StatusOK, list.Code)
+		assert.Contains(t, list.Body.String(), partner.Username)
+	})
+}
+
+// TestHwTextOverridesReadsOneLanguage proves the public read hands out the
+// overrides of the asked language only, and falls back to Turkish, the site's
+// own language, when none is asked for.
+func TestHwTextOverridesReadsOneLanguage(t *testing.T) {
+	_, admin := hwAdminTestSetup(t)
+	require.NoError(t, model.DB.AutoMigrate(&model.HwTextOverride{}))
+	for _, body := range []string{
+		`{"lang":"en","key":"Hello","value":"Hi"}`,
+		`{"lang":"tr","key":"Hello","value":"Merhaba"}`,
+	} {
+		require.True(t, hwAdminAgentDecode(t, hwAdminAgentCall(HwAdminAgentApplyText, common.RoleAdminUser, admin.Id, body)).Success)
+	}
+	read := func(query string) string {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Request = httptest.NewRequest(http.MethodGet, "/api/hw/texts"+query, nil)
+		HwTextOverrides(c)
+		return recorder.Body.String()
+	}
+
+	assert.Contains(t, read("?lang=en"), "Hi")
+	assert.NotContains(t, read("?lang=en"), "Merhaba")
+	assert.Contains(t, read(""), "Merhaba", "no language asked: Turkish")
+	assert.NotContains(t, read(""), `"Hi"`)
+	assert.Contains(t, read("?lang=%20en%20"), "Hi", "the language is trimmed")
+	assert.NotContains(t, read("?lang=fr"), "Hi", "a language without overrides gets none")
+}

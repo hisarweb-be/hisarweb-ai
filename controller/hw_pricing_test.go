@@ -228,3 +228,19 @@ func TestHwQualityLatestIsEmptyWithoutMeasurement(t *testing.T) {
 	assert.NotContains(t, lower, "lumia")
 	assert.NotContains(t, lower, "openrouter")
 }
+
+// TestHwQualityRunTakesNoEndpointOrKeyFromTheRequest proves an admin cannot
+// point the measurement at another endpoint or hand it a key through the query:
+// those come from the server environment, and the pass is refused before any
+// model is called.
+func TestHwQualityRunTakesNoEndpointOrKeyFromTheRequest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, query := range []string{"?base_url=http://evil.example", "?api_key=sk-test", "?models=a,b&base_url=http://evil.example"} {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/hw/quality/run"+query, nil)
+		HwQualityRun(c)
+		assert.Equal(t, http.StatusBadRequest, recorder.Code, query)
+		assert.Contains(t, recorder.Body.String(), "come from the server environment", query)
+	}
+}
