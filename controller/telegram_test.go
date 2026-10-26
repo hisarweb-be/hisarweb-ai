@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -558,4 +559,23 @@ func TestHwTelegramLinkStatus(t *testing.T) {
 
 	body = callHwTelegramLinkStatus(t, user.Id+1000)
 	assert.Equal(t, false, body["success"])
+}
+
+// TestHwTelegramLinkStatusQueryCount pins the cost of one poll of the link
+// dialog: the user, the phone signal and one count of the free package.
+func TestHwTelegramLinkStatusQueryCount(t *testing.T) {
+	user, _ := setupSecurityEnrollmentTest(t)
+	require.NoError(t, model.DB.AutoMigrate(&model.HwUserSignal{}, &model.HwCreditPackage{}, &model.HwCreditExtension{}))
+	granted, err := model.GrantCreditPackage(nil, user.Id, 100, model.HwSourceFree, "free:count", time.Now().Unix())
+	require.NoError(t, err)
+	require.True(t, granted)
+
+	var queries atomic.Int64
+	const callback = "hw_link_status_query_count"
+	require.NoError(t, model.DB.Callback().Query().After("gorm:query").Register(callback, func(*gorm.DB) { queries.Add(1) }))
+	t.Cleanup(func() { _ = model.DB.Callback().Query().Remove(callback) })
+
+	body := callHwTelegramLinkStatus(t, user.Id)
+	assert.Equal(t, map[string]any{"linked": false, "phone_shared": false, "bonus_granted": true}, body["data"])
+	assert.Equal(t, int64(3), queries.Load())
 }

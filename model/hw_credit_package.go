@@ -426,6 +426,20 @@ func ListUserCreditPackages(userID int) ([]HwPackageView, error) {
 	return HwPackageRemaining(userID, user.Quota, pkgs), nil
 }
 
+// HwUserHasActiveFreeCredit reports whether the user holds an active free
+// trial package, the same rule ListUserCreditPackages applies, in one count
+// instead of loading every package with its extensions.
+func HwUserHasActiveFreeCredit(userID int) (bool, error) {
+	if userID <= 0 {
+		return false, ErrHwInvalidCreditGrant
+	}
+	var count int64
+	err := DB.Model(&HwCreditPackage{}).
+		Where("user_id = ? AND source = ? AND retired_at = 0 AND granted_quota > 0", userID, HwSourceFree).
+		Count(&count).Error
+	return count > 0, err
+}
+
 // RetireExpiredPackages retires every expired active package and lowers the
 // owning balances by the quota those packages still hold. It returns the number
 // of retired packages. Running it twice changes nothing.

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"slices"
 	"strings"
 	"time"
 
@@ -110,15 +109,12 @@ func HwTelegramLinkStatus(c *gin.Context) {
 		common.ApiError(c, common.NewMessage("Failed to read the Telegram link status"))
 		return
 	}
-	packages, err := model.ListUserCreditPackages(userID)
+	bonusGranted, err := model.HwUserHasActiveFreeCredit(userID)
 	if err != nil {
-		logger.LogError(c.Request.Context(), common.LogText("listing credit packages failed"))
+		logger.LogError(c.Request.Context(), common.LogText("reading the free credit failed"))
 		common.ApiError(c, common.NewMessage("Failed to read the Telegram link status"))
 		return
 	}
-	bonusGranted := slices.ContainsFunc(packages, func(pkg model.HwPackageView) bool {
-		return pkg.Source == model.HwSourceFree
-	})
 	common.ApiSuccess(c, gin.H{
 		"linked":        strings.TrimSpace(user.TelegramId) != "",
 		"phone_shared":  phoneShared,
