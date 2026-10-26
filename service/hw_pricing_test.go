@@ -648,3 +648,13 @@ func TestHwComparePriceIsExactAndRejectsUnusableInput(t *testing.T) {
 	_, err = HwComparePrice(&model.HwPriceSnapshot{TryPerUsd: "40", Models: "not json"}, valid)
 	require.Error(t, err, "an unreadable price list is an error, not an empty one")
 }
+
+// Log lines carry the class and never the error text, because a transport error
+// can quote the URL with its query string.
+func TestHwPricingErrorClassNeverCarriesTheErrorText(t *testing.T) {
+	assert.Equal(t, "nil", hwPricingErrorClass(nil))
+	assert.Equal(t, "timeout", hwPricingErrorClass(context.DeadlineExceeded))
+	assert.Equal(t, "timeout", hwPricingErrorClass(context.Canceled))
+	assert.Equal(t, "timeout", hwPricingErrorClass(errors.Join(errors.New("get"), context.DeadlineExceeded)))
+	assert.Equal(t, "fetch", hwPricingErrorClass(errors.New(`Get "https://rates.example/?key=secret": EOF`)))
+}

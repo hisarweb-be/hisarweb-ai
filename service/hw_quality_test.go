@@ -471,3 +471,23 @@ func TestHwQualityRunRefusesASecondRunWhileOneRuns(t *testing.T) {
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, ErrHwQualityRunBusy)
 }
+
+// The measurement run refuses to start on missing values, so the environment
+// reader must trim the text values, keep the key as it was set and leave the
+// client to the runner's default.
+func TestHwQualityRunOptionsFromEnvTrimsAndLeavesMissingValuesEmpty(t *testing.T) {
+	t.Setenv(HwQualityBaseURLEnv, "  https://api.example.test  ")
+	t.Setenv(HwQualityAPIKeyEnv, "test-key")
+	t.Setenv(HwQualityJudgeModelEnv, " judge-model ")
+	t.Setenv(HwQualityOutDirEnv, "")
+
+	options := HwQualityRunOptionsFromEnv()
+
+	assert.Equal(t, "https://api.example.test", options.BaseURL)
+	assert.Equal(t, "test-key", options.APIKey)
+	assert.Equal(t, "judge-model", options.JudgeModel)
+	assert.Empty(t, options.OutDir)
+	assert.Empty(t, options.Models)
+	assert.Nil(t, options.Client)
+	assert.Nil(t, options.NowFunc)
+}
