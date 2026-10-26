@@ -621,3 +621,62 @@ func TestHwStartRouteBuildsTheRouteFromTaggedChannels(t *testing.T) {
 		assert.Nil(t, state.next(), "nothing is left to try, so the caller ends in service-busy")
 	})
 }
+
+// HwFirstChannel runs once for the first attempt: it leaves the stock pick
+// alone when the route claims it, swaps it for the route's own first channel
+// when the stock pick is foreign, and ends in the service-busy error when the
+// route has nothing left to offer.
+func TestHwFirstChannelKeepsClaimsAndReplacesForeignPicks(t *testing.T) {
+	setupChannelSelectAutoGroupsTest(t)
+	const modelName = "claude-sonnet-4-5"
+	hwRouteDBChannel(t, 4101, HwPaidGroup, modelName, "", constant.ChannelTypeOpenAI, "")
+	hwRouteDBChannel(t, 4102, HwPaidGroup, modelName, HwProviderLumia, constant.ChannelTypeOpenAI, "")
+	hwRouteDBChannel(t, 4201, "plain", modelName, "", constant.ChannelTypeOpenAI, "")
+	hwRouteDBChannel(t, 4301, "free", modelName, HwProviderOpenRouter, constant.ChannelTypeOpenAI, "")
+	model.InitChannelCache()
+
+	channelOf := func(id int) *model.Channel {
+		channel, err := model.CacheGetChannel(id)
+		require.NoError(t, err)
+		return channel
+	}
+
+	t.Run("untagged deployment is left alone", func(t *testing.T) {
+		replacement, apiErr := HwFirstChannel(hwClientErrorContext(""), channelOf(4201), "plain", modelName)
+		assert.Nil(t, replacement)
+		assert.Nil(t, apiErr)
+	})
+
+	t.Run("a claimed stock pick stays", func(t *testing.T) {
+		c := hwClientErrorContext("")
+		common.SetContextKey(c, constant.ContextKeyUserGroup, HwPaidGroup)
+		replacement, apiErr := HwFirstChannel(c, channelOf(4102), HwPaidGroup, modelName)
+		assert.Nil(t, replacement)
+		assert.Nil(t, apiErr)
+		state := HwRoute(c)
+		require.NotNil(t, state)
+		assert.Equal(t, 1, state.attempts)
+		assert.True(t, state.tried[4102])
+	})
+
+	t.Run("an untagged stock pick is replaced by the route", func(t *testing.T) {
+		c := hwClientErrorContext("")
+		common.SetContextKey(c, constant.ContextKeyUserGroup, HwPaidGroup)
+		replacement, apiErr := HwFirstChannel(c, channelOf(4101), HwPaidGroup, modelName)
+		assert.Nil(t, apiErr)
+		require.NotNil(t, replacement)
+		assert.Equal(t, 4102, replacement.Id)
+	})
+
+	t.Run("a route without channels ends in service-busy", func(t *testing.T) {
+		c := hwClientErrorContext("")
+		common.SetContextKey(c, constant.ContextKeyUserGroup, "free")
+		replacement, apiErr := HwFirstChannel(c, channelOf(4301), "free", modelName)
+		assert.Nil(t, replacement)
+		require.NotNil(t, apiErr)
+		assert.Equal(t, HwErrorCodeServiceBusy, apiErr.GetErrorCode())
+		state := HwRoute(c)
+		require.NotNil(t, state)
+		assert.True(t, state.finished)
+	})
+}
