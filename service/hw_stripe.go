@@ -481,6 +481,17 @@ func HwHandleStripeWebhook(ctx context.Context, rawBody []byte, signatureHeader 
 		return HwWebhookBadRequest
 	}
 	session := event.Data.Object
+	if strings.HasPrefix(event.Type, "charge.dispute.") {
+		// A dispute carries no client reference, so it cannot be matched to an
+		// order here. The credit stays where it is (reversing it is a decision
+		// for an admin); the line makes the dispute visible in the error log.
+		intentID := ""
+		if session.PaymentIntent != nil {
+			intentID = session.PaymentIntent.Id
+		}
+		common.SysError(common.LogText("stripe dispute event %s: dispute %s, payment intent %s; the credit is not reversed, an admin has to review it", event.Type, session.Id, intentID))
+		return HwWebhookIgnored
+	}
 	if !strings.HasPrefix(session.ClientReferenceId, "hw-") {
 		return HwWebhookIgnored
 	}

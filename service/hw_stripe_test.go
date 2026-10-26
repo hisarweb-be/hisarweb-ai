@@ -18,6 +18,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -834,4 +835,38 @@ func TestHwStripeLira500PaidEarnsBonusAndThirtyDays(t *testing.T) {
 	validity, err = model.HwUserValidity(buyer.Id, later.Unix())
 	require.NoError(t, err)
 	assert.Equal(t, 30, validity.DaysRemaining, "a top-up restarts the 30 days")
+}
+
+// A customer dispute carries no client reference: it must not change the
+// credit, and it must show up in the error log so an admin can review it.
+func TestHwStripeDisputeEventLogsAndLeavesTheCreditAlone(t *testing.T) {
+	fake := hwStripeTestSetup(t)
+	now := time.Now()
+	buyer := hwOrderTestUser(t, 0)
+	hwOrderTestIdentify(t, buyer.Id, "stripe-dispute")
+	order := hwOrderTestCreate(t, buyer.Id, 600)
+	fake.pay(order.MerchantRef)
+	session := fake.session(order.MerchantRef)
+	require.Equal(t, HwWebhookAccepted, hwStripeTestWebhook(t, "checkout.session.completed", session, now))
+	credited := hwOrderTestQuota(t, buyer.Id)
+	require.Positive(t, credited)
+
+	var output strings.Builder
+	previous := gin.DefaultErrorWriter
+	gin.DefaultErrorWriter = &output
+	t.Cleanup(func() { gin.DefaultErrorWriter = previous })
+
+	body, err := common.Marshal(map[string]any{
+		"id": "evt_dispute", "type": "charge.dispute.created",
+		"data": map[string]any{"object": map[string]any{
+			"id": "du_test_1", "payment_intent": "pi_" + session.id, "charge": "ch_" + session.id,
+		}},
+	})
+	require.NoError(t, err)
+	outcome := HwHandleStripeWebhook(context.Background(), body, hwStripeTestSign(body, hwStripeTestWebhookSecret, now), now)
+
+	assert.Equal(t, HwWebhookIgnored, outcome)
+	assert.Equal(t, credited, hwOrderTestQuota(t, buyer.Id), "a dispute must not reverse the credit by itself")
+	assert.Contains(t, output.String(), "du_test_1")
+	assert.Contains(t, output.String(), "pi_"+session.id)
 }
