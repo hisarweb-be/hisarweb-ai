@@ -1297,3 +1297,64 @@ func TestHwTopUpLogsNoSecrets(t *testing.T) {
 		assert.NotContains(t, logs, secret)
 	}
 }
+
+// TestHwGrantAffiliateAfterPayment proves what a settled payment does with the
+// affiliate reward: a working grant credits the inviter and queues nothing, a
+// permanent refusal queues nothing, and a failed grant is queued exactly once
+// so the retry round can still pay it.
+func TestHwGrantAffiliateAfterPayment(t *testing.T) {
+	hwOrderTestSetup(t)
+	now := time.Now()
+	listQuota := hwOrderTestListQuota(t, 600)
+	retryRows := func(ref string) int64 {
+		var rows int64
+		require.NoError(t, model.DB.Model(&model.HwAffiliateRetry{}).Where("order_ref = ?", ref).Count(&rows).Error)
+		return rows
+	}
+	buy := func(t *testing.T, buyer model.User, ref string) model.HwOrderSettlement {
+		t.Helper()
+		_, err := model.GrantCreditPackage(model.DB, buyer.Id, listQuota, model.HwSourcePurchase, ref, now.Unix())
+		require.NoError(t, err)
+		return model.HwOrderSettlement{UserId: buyer.Id, GrantedQuota: listQuota}
+	}
+
+	t.Run("a working grant credits the inviter and queues nothing", func(t *testing.T) {
+		inviter := hwOrderTestUser(t, 0)
+		hwOrderTestIdentify(t, inviter.Id, "after-pay-inviter")
+		buyer := hwOrderTestUser(t, inviter.Id)
+		hwOrderTestIdentify(t, buyer.Id, "after-pay-buyer")
+		settlement := buy(t, buyer, "hw-after-pay-ok")
+
+		hwGrantAffiliateAfterPayment(settlement, "hw-after-pay-ok", now)
+		assert.Positive(t, hwOrderTestQuota(t, inviter.Id), "the inviter got the reward")
+		assert.Zero(t, retryRows("hw-after-pay-ok"))
+	})
+	t.Run("a refused reward is not retried", func(t *testing.T) {
+		buyer := hwOrderTestUser(t, 0)
+		settlement := buy(t, buyer, "hw-after-pay-no-inviter")
+
+		hwGrantAffiliateAfterPayment(settlement, "hw-after-pay-no-inviter", now)
+		assert.Zero(t, retryRows("hw-after-pay-no-inviter"), "a buyer without an inviter is a final answer")
+	})
+	t.Run("a failed grant is queued once for the retry round", func(t *testing.T) {
+		// The buyer row is gone, so the grant fails on storage instead of
+		// being refused: that is the case the queue exists for.
+		settlement := model.HwOrderSettlement{UserId: 987654, GrantedQuota: listQuota}
+
+		hwGrantAffiliateAfterPayment(settlement, "hw-after-pay-failed", now)
+		assert.EqualValues(t, 1, retryRows("hw-after-pay-failed"))
+		var row model.HwAffiliateRetry
+		require.NoError(t, model.DB.Where("order_ref = ?", "hw-after-pay-failed").First(&row).Error)
+		assert.Equal(t, 987654, row.BuyerId)
+		assert.Equal(t, listQuota, row.ListQuota, "the retry keeps the quota the purchase granted")
+
+		hwGrantAffiliateAfterPayment(settlement, "hw-after-pay-failed", now)
+		assert.EqualValues(t, 1, retryRows("hw-after-pay-failed"), "a repeated webhook never queues a second reward")
+	})
+	t.Run("a failure that cannot be queued does not break the payment", func(t *testing.T) {
+		settlement := model.HwOrderSettlement{UserId: 987655}
+
+		assert.NotPanics(t, func() { hwGrantAffiliateAfterPayment(settlement, "hw-after-pay-unqueueable", now) })
+		assert.Zero(t, retryRows("hw-after-pay-unqueueable"), "an invalid grant has nothing worth retrying")
+	})
+}
