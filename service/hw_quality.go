@@ -278,12 +278,23 @@ type hwQualityFile struct {
 	Models         []hwQualityModelResult `json:"models"`
 }
 
+// ErrHwQualityRunBusy refuses a measurement pass while another one runs: a
+// second pass would call every model again and double the gateway spend.
+var ErrHwQualityRunBusy = errors.New("a quality measurement is already running")
+
+// hwQualityRunMu lets one measurement pass run at a time.
+var hwQualityRunMu sync.Mutex
+
 // HwRunQualityMeasurement runs the fixed task set over the configured models,
 // judges every answer blind, writes the JSON measurement file, and stores the
 // pass. The run refuses to start with an incomplete configuration and aborts
 // on the first failed call — a half-measured run would put made-up gaps into
 // the results, so nothing is persisted and no file is written then.
 func HwRunQualityMeasurement(ctx context.Context, opts HwQualityRunOptions) (*model.HwQualityRun, error) {
+	if !hwQualityRunMu.TryLock() {
+		return nil, ErrHwQualityRunBusy
+	}
+	defer hwQualityRunMu.Unlock()
 	if opts.BaseURL == "" || opts.APIKey == "" || opts.JudgeModel == "" || opts.OutDir == "" {
 		return nil, errors.New("quality measurement needs a base URL, an API key, a judge model, and an output directory")
 	}
