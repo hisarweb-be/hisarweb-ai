@@ -188,6 +188,15 @@ const tr = {
   topUpPackagesLoading: 'Paketler yükleniyor…',
   topUpPackagesError: 'Paketler okunamadı. Lütfen tekrar deneyin.',
 
+  orderHistoryTitle: 'Siparişleriniz',
+  orderHistoryLead: 'Ödediğiniz yüklemeler ve her birinin kazandırdığı bonus.',
+  orderHistoryLoading: 'Siparişler yükleniyor…',
+  orderHistoryError: 'Siparişler okunamadı. Lütfen tekrar deneyin.',
+  orderHistoryEmpty: 'Henüz siparişiniz yok.',
+  orderHistoryLine: '{date}: {amount} · {status}',
+  orderStatusPaid: 'Ödendi',
+  orderStatusRefunded: 'İade edildi',
+
   balanceTitle: 'Bakiyeniz',
   balanceTotal: 'Toplam: {amount}',
   balanceEmpty: 'Henüz bakiyeniz yok. Yukarıdan kredi yükleyebilirsiniz.',
@@ -581,6 +590,15 @@ const en: Record<HwTextKey, string> = {
     'The remaining balance and expiry date are shown per package.',
   topUpPackagesLoading: 'Loading the packages…',
   topUpPackagesError: 'The packages could not be loaded. Please try again.',
+
+  orderHistoryTitle: 'Your orders',
+  orderHistoryLead: 'The top-ups you paid for and the bonus each one earned.',
+  orderHistoryLoading: 'Loading the orders…',
+  orderHistoryError: 'The orders could not be loaded. Please try again.',
+  orderHistoryEmpty: 'You have no orders yet.',
+  orderHistoryLine: '{date}: {amount} · {status}',
+  orderStatusPaid: 'Paid',
+  orderStatusRefunded: 'Refunded',
 
   balanceTitle: 'Your balance',
   balanceTotal: 'Total: {amount}',

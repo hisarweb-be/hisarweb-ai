@@ -165,6 +165,64 @@ describe('top-up page', () => {
     expectNoVendorName()
   })
 
+  it('lists the paid orders from GET /api/user/hw/orders with the bonus each earned', async () => {
+    get.mockImplementation((url: string) =>
+      Promise.resolve({
+        data: {
+          success: true,
+          data:
+            url === '/api/user/hw/orders'
+              ? {
+                  orders: [
+                    {
+                      merchant_ref: 'hw-1',
+                      status: 'paid',
+                      currency: 'TRY',
+                      list_minor: 50_000,
+                      payable_minor: 50_000,
+                      bonus_minor: 5_000,
+                      bonus_quota: 0,
+                      created_at: 1_790_000_000,
+                      paid_at: 1_790_000_100,
+                    },
+                    {
+                      merchant_ref: 'hw-2',
+                      status: 'refunded',
+                      currency: 'TRY',
+                      list_minor: 10_000,
+                      payable_minor: 10_000,
+                      bonus_minor: 0,
+                      bonus_quota: 0,
+                      created_at: 1_780_000_000,
+                      paid_at: 1_780_000_100,
+                    },
+                  ],
+                }
+              : packagesAnswer,
+        },
+      })
+    )
+    await renderPage(false)
+
+    await screen.findByText(tr.orderHistoryTitle)
+    const paid = await screen.findByText(new RegExp(`${tr.orderStatusPaid}$`))
+    expect(paid).toHaveTextContent(/500/)
+    expect(
+      await screen.findByText(new RegExp(`${tr.orderStatusRefunded}$`))
+    ).toBeInTheDocument()
+    // Only the paid order earned a bonus, so only one badge is drawn.
+    expect(
+      screen.getAllByText(/bonus/i, { selector: '[data-slot=badge]' })
+    ).toHaveLength(1)
+    expect(get).toHaveBeenCalledWith('/api/user/hw/orders')
+  })
+
+  it('says so when there are no orders yet', async () => {
+    await renderPage(false)
+
+    expect(await screen.findByText(tr.orderHistoryEmpty)).toBeInTheDocument()
+  })
+
   it('sends a whole-lira amount to POST /api/user/hw/orders and opens the checkout URL', async () => {
     const user = userEvent.setup()
     post.mockResolvedValue({

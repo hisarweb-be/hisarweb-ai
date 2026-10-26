@@ -24,9 +24,11 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { toIntlLocale } from '@/i18n/languages'
 
+import { useHwOrderHistory } from '../hooks/use-hw-order-history'
 import { useHwPackages } from '../hooks/use-hw-packages'
 import { useHwText } from '../texts'
 import { CreditPackagesCard } from './credit-packages-card'
+import { OrderHistoryCard } from './order-history-card'
 import { TokenExplainer } from './token-explainer'
 import { TopUpForm } from './top-up-form'
 
@@ -47,10 +49,15 @@ export function PurchasePage(props: PurchasePageProps) {
   const locale = toIntlLocale(i18n.resolvedLanguage ?? i18n.language)
   const packages = useHwPackages()
   const refetchPackages = packages.refetch
+  const orders = useHwOrderHistory()
+  const refetchOrders = orders.refetch
 
   useEffect(() => {
-    if (props.returnedFromPayment) void refetchPackages()
-  }, [props.returnedFromPayment, refetchPackages])
+    if (props.returnedFromPayment) {
+      void refetchPackages()
+      void refetchOrders()
+    }
+  }, [props.returnedFromPayment, refetchPackages, refetchOrders])
 
   return (
     <SectionPageLayout>
@@ -85,6 +92,13 @@ export function PurchasePage(props: PurchasePageProps) {
             isLoading={packages.isLoading}
             isError={packages.isError}
             onRefresh={() => void refetchPackages()}
+            locale={locale}
+          />
+
+          <OrderHistoryCard
+            orders={orders.data}
+            isLoading={orders.isLoading}
+            isError={orders.isError}
             locale={locale}
           />
         </div>
