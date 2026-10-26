@@ -79,6 +79,12 @@ const (
 	// model did not get a 200: the upstream does not answer, whatever the route
 	// says (the invisible 503 of 24-26 Oct 2026).
 	HwStatusReasonProbeFailed = "probe_failed"
+	// HwStatusReasonProbeUnavailable marks a quiet minute in which the mini
+	// call could not measure the model at all: the route refused it with a
+	// quota or key answer (429, 401, 403). Such a minute is no evidence, so it
+	// is neither good nor bad: it is left out of the availability figure and it
+	// breaks the run of three bad minutes instead of opening a false outage.
+	HwStatusReasonProbeUnavailable = "probe_unavailable"
 	// HwStatusReasonMeasurement is the retired verdict of a minute without
 	// traffic. Until 23 Oct 2026 such a minute counted as bad, so every quiet
 	// night opened a false outage of the whole estate; the sweep in
@@ -199,6 +205,13 @@ func HwEvaluateStatusMinute(failedRequests int64, measuredRequests int64) HwStat
 func HwMinuteVerdicts(samples []HwStatusSample) map[int64]bool {
 	verdicts := make(map[int64]bool, len(samples))
 	for _, sample := range samples {
+		if sample.Reason == HwStatusReasonProbeUnavailable {
+			// The probe could not measure this model (quota or key refusal),
+			// so the minute carries no verdict: it neither opens nor closes an
+			// outage and it does not break a run of really bad minutes either,
+			// because there is no evidence to break or to build on.
+			continue
+		}
 		ok, seen := verdicts[sample.Minute]
 		if !seen {
 			verdicts[sample.Minute] = sample.Ok
@@ -503,7 +516,9 @@ func HwReadStatusSnapshot(now int64, models []string) (HwStatusSnapshot, error) 
 
 	var availability []hwStatusAvailabilityRow
 	if err := DB.Model(&HwStatusSample{}).
-		Select("model, COUNT(*) AS total, SUM(CASE WHEN ok = ? THEN 1 ELSE 0 END) AS good", commonTrueVal).
+		Select("model, SUM(CASE WHEN reason = ? THEN 0 ELSE 1 END) AS total, "+
+			"SUM(CASE WHEN ok = ? AND reason <> ? THEN 1 ELSE 0 END) AS good",
+			HwStatusReasonProbeUnavailable, commonTrueVal, HwStatusReasonProbeUnavailable).
 		Where("minute >= ?", now-HwStatusAvailabilityDays*24*3600).
 		Group("model").
 		Scan(&availability).Error; err != nil {
@@ -518,7 +533,7 @@ func HwReadStatusSnapshot(now int64, models []string) (HwStatusSnapshot, error) 
 
 	var badModels []string
 	if err := DB.Model(&HwStatusSample{}).
-		Where("minute > ? AND ok = ?", now-HwStatusRecoveryAfterGoodSeconds, commonFalseVal).
+		Where("minute > ? AND ok = ? AND reason <> ?", now-HwStatusRecoveryAfterGoodSeconds, commonFalseVal, HwStatusReasonProbeUnavailable).
 		Distinct().
 		Pluck("model", &badModels).Error; err != nil {
 		return HwStatusSnapshot{}, err
@@ -537,7 +552,7 @@ func HwReadStatusSnapshot(now int64, models []string) (HwStatusSnapshot, error) 
 	if err == nil {
 		var incidentModels []string
 		if err := DB.Model(&HwStatusSample{}).
-			Where("minute >= ? AND ok = ?", open.StartedAt, commonFalseVal).
+			Where("minute >= ? AND ok = ? AND reason <> ?", open.StartedAt, commonFalseVal, HwStatusReasonProbeUnavailable).
 			Distinct().
 			Pluck("model", &incidentModels).Error; err != nil {
 			return HwStatusSnapshot{}, err

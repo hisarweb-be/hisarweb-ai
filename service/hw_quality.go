@@ -181,6 +181,30 @@ type hwChatResponse struct {
 	Usage hwChatUsage `json:"usage"`
 }
 
+// hwChatStatusError is a non-200 answer of the customer route. The status code
+// is kept as a field so a caller can act on it: the status probe must not report
+// a quota or key refusal as a failing model.
+type hwChatStatusError struct {
+	StatusCode int
+}
+
+func (e *hwChatStatusError) Error() string {
+	return fmt.Sprintf("customer route returned status %d", e.StatusCode)
+}
+
+// hwChatStatusRefused reports whether the error is a refusal of the route
+// itself (quota exhausted, key rejected) instead of an answer about the model.
+// Such a call says nothing about the model.
+func hwChatStatusRefused(err error) bool {
+	var statusErr *hwChatStatusError
+	if !errors.As(err, &statusErr) {
+		return false
+	}
+	return statusErr.StatusCode == http.StatusTooManyRequests ||
+		statusErr.StatusCode == http.StatusUnauthorized ||
+		statusErr.StatusCode == http.StatusForbidden
+}
+
 // hwCallChat makes one chat completion call through the customer route and
 // returns the answer text with the token counts the route reported.
 func hwCallChat(ctx context.Context, client *http.Client, baseURL string, apiKey string, request hwChatRequest) (string, hwChatUsage, error) {
@@ -200,7 +224,10 @@ func hwCallChat(ctx context.Context, client *http.Client, baseURL string, apiKey
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", hwChatUsage{}, fmt.Errorf("customer route returned status %d", resp.StatusCode)
+		// The status travels in the error itself, so a caller can tell a route
+		// refusal (quota or key) from a model that does not answer. The text is
+		// unchanged, so the callers that only look at err != nil are unaffected.
+		return "", hwChatUsage{}, &hwChatStatusError{StatusCode: resp.StatusCode}
 	}
 	var answer hwChatResponse
 	if err := common.DecodeJson(resp.Body, &answer); err != nil {

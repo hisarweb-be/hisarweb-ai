@@ -201,19 +201,27 @@ func StartHwStatusJob() {
 // (HW_QUALITY_BASE_URL and HW_QUALITY_API_KEY). It returns nil when that
 // configuration is missing, so an environment without a key keeps the route
 // check instead of reporting a false outage.
-func hwStatusProbeFromEnv() func(ctx context.Context, modelName string) bool {
+func hwStatusProbeFromEnv() func(ctx context.Context, modelName string) model.HwStatusProbeOutcome {
 	options := HwQualityRunOptionsFromEnv()
 	if options.BaseURL == "" || options.APIKey == "" {
 		return nil
 	}
 	client := &http.Client{}
-	return func(ctx context.Context, modelName string) bool {
+	return func(ctx context.Context, modelName string) model.HwStatusProbeOutcome {
 		_, _, err := hwCallChat(ctx, client, options.BaseURL, options.APIKey, hwChatRequest{
 			Model:     modelName,
 			Messages:  []hwChatMessage{{Role: "user", Content: "ping"}},
 			MaxTokens: 1,
 		})
-		return err == nil
+		switch {
+		case err == nil:
+			return model.HwStatusProbeAnswered
+		case hwChatStatusRefused(err):
+			// A quota or key refusal is no evidence about the model.
+			return model.HwStatusProbeUnavailable
+		default:
+			return model.HwStatusProbeNoAnswer
+		}
 	}
 }
 
