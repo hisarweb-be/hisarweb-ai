@@ -23,6 +23,7 @@ import i18next from 'i18next'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createJSONStorage } from 'zustand/middleware'
 
+import { modelGuide } from '@/features/hw/data/model-guide'
 import { api } from '@/lib/api'
 import {
   DEFAULT_CURRENCY_CONFIG,
@@ -132,6 +133,27 @@ describe('model details in plain language', () => {
       expect(label.className).not.toMatch(/truncate|line-clamp/)
       expect(label.closest('button')?.className).toMatch(/whitespace-normal/)
     }
+  })
+
+  it('shows what a model is good for at the top when the database has no description', async () => {
+    await useTurkish()
+    renderDetails(pricingModel({ model_name: 'claude-sonnet-5-5' }))
+    const text = modelGuide('claude-sonnet-5-5')?.description.tr ?? ''
+    expect(text).not.toBe('')
+    expect(await screen.findByText(text)).toBeTruthy()
+  })
+
+  it('prefers the description from the database over the guide text', async () => {
+    renderDetails(
+      pricingModel({
+        model_name: 'claude-sonnet-5-5',
+        description: 'Written by the operator.',
+      })
+    )
+    expect(await screen.findByText('Written by the operator.')).toBeTruthy()
+    const guideEn = modelGuide('claude-sonnet-5-5')?.description.en ?? ''
+    expect(guideEn).not.toBe('')
+    expect(screen.queryByText(guideEn)).toBeNull()
   })
 
   it('shows the pay-as-you-go badge in Turkish', async () => {

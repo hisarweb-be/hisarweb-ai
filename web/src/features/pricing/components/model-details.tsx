@@ -51,6 +51,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Hint } from '@/features/hw/components/hint'
+import { guideText, modelGuide } from '@/features/hw/data/model-guide'
 import { getPerfMetrics } from '@/features/performance-metrics/api'
 import {
   formatLatency,
@@ -696,11 +697,16 @@ function ModelBackendDetailsSection(props: { model: PricingModel }) {
 // ----------------------------------------------------------------------------
 
 function ModelHeader(props: { model: PricingModel }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const model = props.model
   const modelIconKey = model.icon || model.vendor_icon
   const modelIcon = modelIconKey ? getLobeIcon(modelIconKey, 20) : null
-  const description = model.description || model.vendor_description || null
+  const guide = modelGuide(model.model_name)
+  const description =
+    model.description ||
+    (guide ? guideText(guide.description, i18n.language) : '') ||
+    model.vendor_description ||
+    null
 
   return (
     <header className='pb-4'>
