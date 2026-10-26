@@ -70,3 +70,37 @@ func TestHwAssistantAskRejectsEmptyAndLong(t *testing.T) {
 	assert.Contains(t, hwAssistantPost(engine, `{"question":"  "}`).Body.String(), `"success":false`)
 	assert.Contains(t, hwAssistantPost(engine, `{"question":"`+strings.Repeat("a", 400)+`"}`).Body.String(), `"success":false`)
 }
+
+// TestHwAssistantOpenQuestions proves only an admin sees which questions had no
+// fixed answer, most asked first, without the internal key prefix, and that the
+// answered (faq) counters never leak into that list.
+func TestHwAssistantOpenQuestions(t *testing.T) {
+	hwAssistantTestRouter(t)
+	for _, hit := range []struct {
+		key  string
+		hits int
+	}{{"q:how to refund", 1}, {"q:which models", 3}, {"faq:price", 9}} {
+		for range hit.hits {
+			require.NoError(t, model.HwAssistantRecordHit(model.DB, hit.key, 1000))
+		}
+	}
+	serve := func(role int) (int, string) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Set("role", role)
+		c.Request = httptest.NewRequest(http.MethodGet, "/api/hw/assistant/open", nil)
+		HwAssistantOpenQuestions(c)
+		return recorder.Code, recorder.Body.String()
+	}
+
+	code, _ := serve(common.RoleCommonUser)
+	assert.Equal(t, http.StatusForbidden, code)
+
+	code, body := serve(common.RoleAdminUser)
+	require.Equal(t, http.StatusOK, code)
+	assert.Contains(t, body, "which models")
+	assert.Contains(t, body, "how to refund")
+	assert.NotContains(t, body, "price", "an answered question is not an open one")
+	assert.NotContains(t, body, "q:", "the prefix is internal")
+	assert.Less(t, strings.Index(body, "which models"), strings.Index(body, "how to refund"), "most asked first")
+}
