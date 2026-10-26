@@ -49,7 +49,8 @@ const DASHBOARD_SECTIONS = [
 
 export type DashboardSectionId = (typeof DASHBOARD_SECTIONS)[number]['id']
 
-const ADMIN_ONLY_SECTIONS = new Set<string>(['users'])
+/** Sections whose data only has an admin endpoint (no `/self` variant). */
+export const ADMIN_ONLY_SECTIONS: ReadonlySet<string> = new Set(['users'])
 
 const dashboardRegistry = createSectionRegistry<
   DashboardSectionId,
