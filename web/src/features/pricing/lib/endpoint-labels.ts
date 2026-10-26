@@ -50,6 +50,13 @@ export function describeEndpoint(
           'Works with tools that speak the Anthropic format, such as Claude Code. You only change the address and the key in the tool.'
         ),
       }
+    case 'openai-response':
+      return {
+        label: t('OpenAI Responses (Codex)'),
+        hint: t(
+          'Works with tools that speak the OpenAI Responses format, such as Codex. You only change the address and the key in the tool.'
+        ),
+      }
     default:
       return {
         label: endpoint,

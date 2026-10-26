@@ -7419,6 +7419,8 @@
     "Apply this text": "Apply this text",
     "How long the list of numbers per text should be. A shorter list is cheaper to store.": "How long the list of numbers per text should be. A shorter list is cheaper to store.",
     "Anthropic-compatible (Claude Code)": "Anthropic-compatible (Claude Code)",
+    "OpenAI Responses (Codex)": "OpenAI Responses (Codex)",
+    "Works with tools that speak the OpenAI Responses format, such as Codex. You only change the address and the key in the tool.": "Works with tools that speak the OpenAI Responses format, such as Codex. You only change the address and the key in the tool.",
     "How smooth the video looks. 24 frames per second is the same as a film.": "How smooth the video looks. 24 frames per second is the same as a film.",
     "OpenAI-compatible (Cursor, Cline, Codex and more)": "OpenAI-compatible (Cursor, Cline, Codex and more)",
     "Paid": "Paid",
