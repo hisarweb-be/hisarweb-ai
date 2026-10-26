@@ -447,3 +447,57 @@ func TestHwBureauUsageHTTPCachesOneWindowForTheTTL(t *testing.T) {
 	require.Error(t, err, "the failure is cached too")
 	assert.Equal(t, 4, calls)
 }
+
+// The reserve and order settings come from the options table or the
+// environment, both free text. A value that cannot be trusted must fall back
+// instead of becoming a zero, negative or infinite limit.
+func TestHwSettingParsersFallBackOnUntrustworthyValues(t *testing.T) {
+	t.Run("environment float", func(t *testing.T) {
+		const name = "HW_TEST_ENV_FLOAT"
+		for value, want := range map[string]float64{
+			"":         0,
+			"  ":       0,
+			"12.5":     12.5,
+			" 3 ":      3,
+			"-4":       -4,
+			"abc":      0,
+			"NaN":      0,
+			"Inf":      0,
+			"-Inf":     0,
+			"1e999999": 0,
+		} {
+			t.Setenv(name, value)
+			assert.Equal(t, want, hwEnvFloat(name), "value %q", value)
+		}
+	})
+
+	t.Run("integer option", func(t *testing.T) {
+		const key = "HwTestIntOption"
+		assert.Equal(t, 7, hwIntOption(key, 7), "unset option")
+		for value, want := range map[string]int{
+			"":     7,
+			"15":   15,
+			" 20 ": 20,
+			"0":    7,
+			"-3":   7,
+			"2.5":  7,
+			"many": 7,
+		} {
+			hwReserveTestSetOption(t, key, value)
+			assert.Equal(t, want, hwIntOption(key, 7), "value %q", value)
+		}
+	})
+
+	t.Run("bool option", func(t *testing.T) {
+		const key = "HwTestBoolOption"
+		assert.True(t, hwBoolOption(key, true), "unset option")
+		assert.False(t, hwBoolOption(key, false), "unset option")
+		for value, want := range map[string]bool{"true": true, "TRUE": true, "1": true, "false": false, "False": false, "0": false} {
+			hwReserveTestSetOption(t, key, value)
+			assert.Equal(t, want, hwBoolOption(key, !want), "value %q", value)
+		}
+		hwReserveTestSetOption(t, key, "yes")
+		assert.True(t, hwBoolOption(key, true), "unknown word keeps the fallback")
+		assert.False(t, hwBoolOption(key, false), "unknown word keeps the fallback")
+	})
+}
