@@ -456,8 +456,9 @@ export function AssistantWidget() {
                   event.key !== 'Enter' ||
                   event.shiftKey ||
                   event.nativeEvent.isComposing
-                )
+                ) {
                   return
+                }
                 event.preventDefault()
                 void send()
               }}
