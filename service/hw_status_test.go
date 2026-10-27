@@ -1,10 +1,14 @@
 package service
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 
 	"github.com/stretchr/testify/assert"
@@ -89,4 +93,87 @@ func TestHwStatusTextsAreFixedAndSupplierFree(t *testing.T) {
 	ongoingTR, _ := hwStatusIncidentText(false)
 	endedTR, _ := hwStatusIncidentText(true)
 	assert.NotEqual(t, ongoingTR, endedTR)
+}
+
+// hwIncidentCardTestSetup gives the incident card a clean database and a board
+// that records every card it receives.
+func hwIncidentCardTestSetup(t *testing.T, status int) (HwBureauCardConfig, *[]hwBureauIssueRequest) {
+	t.Helper()
+	require.NoError(t, model.DB.AutoMigrate(&model.Option{}, &model.HwStatusSample{}, &model.HwIncident{}))
+	clean := func() {
+		model.DB.Exec("DELETE FROM hw_status_samples")
+		model.DB.Exec("DELETE FROM hw_incidents")
+		model.DB.Where("key = ?", HwOptionIncidentCardStartedAt).Delete(&model.Option{})
+		common.OptionMapRWMutex.Lock()
+		delete(common.OptionMap, HwOptionIncidentCardStartedAt)
+		common.OptionMapRWMutex.Unlock()
+		hwIncidentCardRetryAt = time.Time{}
+	}
+	clean()
+	t.Cleanup(clean)
+	cards := &[]hwBureauIssueRequest{}
+	board := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var card hwBureauIssueRequest
+		require.NoError(t, common.DecodeJson(r.Body, &card))
+		*cards = append(*cards, card)
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(`{"id":"x","identifier":"HIS-1"}`))
+	}))
+	t.Cleanup(board.Close)
+	return HwBureauCardConfig{BaseURL: board.URL, CompanyID: "c1"}, cards
+}
+
+func hwIncidentCardTestOutage(t *testing.T, startedAt int64, failing []string) {
+	t.Helper()
+	for _, name := range failing {
+		require.NoError(t, model.DB.Create(&model.HwStatusSample{
+			Minute: startedAt, Model: name, MeasuredAt: startedAt, Reason: model.HwStatusReasonProbeFailed,
+		}).Error)
+	}
+	require.NoError(t, model.DB.Create(&model.HwIncident{StartedAt: startedAt, Kind: model.HwStatusIncidentRelay}).Error)
+}
+
+// A new outage files exactly one card, with the role that matches what broke:
+// a few models down is a model or supplier route (Modelverkenner), every sold
+// model down is the gateway itself (Platformbeheerder). The minute job calls
+// this every minute, so the second call files nothing.
+func TestHwIncidentCardFilesOneCardPerOutageForTheRightRole(t *testing.T) {
+	config, cards := hwIncidentCardTestSetup(t, http.StatusCreated)
+	now := time.Unix(1_800_000_000, 0)
+
+	hwIncidentCardTestOutage(t, now.Unix()-180, []string{"claude-opus-5-5"})
+	require.NoError(t, hwCardNewIncident(context.Background(), config, now))
+	require.NoError(t, hwCardNewIncident(context.Background(), config, now.Add(time.Minute)))
+	require.Len(t, *cards, 1, "one card per outage, not one per minute")
+	assert.Equal(t, HwBureauAgentModelverkenner, (*cards)[0].AssigneeAgentID)
+	assert.Contains(t, (*cards)[0].Description, "claude-opus-5-5")
+
+	require.NoError(t, model.DB.Model(&model.HwIncident{}).Where("ended_at = 0").Update("ended_at", now.Unix()).Error)
+	later := now.Add(time.Hour)
+	hwIncidentCardTestOutage(t, later.Unix()-180, HwSoldModelNames())
+	require.NoError(t, hwCardNewIncident(context.Background(), config, later))
+	require.Len(t, *cards, 2)
+	assert.Equal(t, HwBureauAgentPlatformbeheerder, (*cards)[1].AssigneeAgentID)
+
+	// A restart forgets nothing: the carded outage is kept as an option.
+	hwIncidentCardRetryAt = time.Time{}
+	require.NoError(t, hwCardNewIncident(context.Background(), config, later.Add(time.Minute)))
+	assert.Len(t, *cards, 2)
+}
+
+// Without a board nothing is posted, and a refusing board neither fails the
+// minute job forever nor gets asked again every minute.
+func TestHwIncidentCardSkipsWithoutBoardAndBacksOffAfterAFailure(t *testing.T) {
+	config, cards := hwIncidentCardTestSetup(t, http.StatusInternalServerError)
+	now := time.Unix(1_800_000_000, 0)
+	hwIncidentCardTestOutage(t, now.Unix()-180, []string{"grok-4"})
+
+	require.NoError(t, hwCardNewIncident(context.Background(), HwBureauCardConfig{}, now))
+	assert.Empty(t, *cards)
+
+	assert.Error(t, hwCardNewIncident(context.Background(), config, now))
+	require.NoError(t, hwCardNewIncident(context.Background(), config, now.Add(time.Minute)))
+	assert.Len(t, *cards, 1, "a failed card is retried after the back-off, not every minute")
+	assert.Error(t, hwCardNewIncident(context.Background(), config, now.Add(hwIncidentCardRetryAfter)))
+	assert.Len(t, *cards, 2)
 }

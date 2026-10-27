@@ -19,14 +19,18 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Supplier routing. Customer traffic is served by the Lumia supplier first; the
-// alternative suppliers (Portix, Kie, OpenRouter) are reachable only for the
-// paying group and come after Lumia, cheapest first per model. The policy is
+// Supplier routing. Customer traffic is served by approved free routes first,
+// then by the Lumia supplier; the alternative suppliers (Portix, Kie, then
+// OpenRouter as the very last) are reachable only for the paying group and come
+// after Lumia. The policy is
 // intentionally a separate state machine: the existing relay loop and channel
 // selection keep their behaviour and only ask this file who goes next.
 const (
 	// HwProviderLumia is the tag of the primary supplier channel.
 	HwProviderLumia = "lumia"
+	// HwProviderFree is the tag of a free supplier channel. It is tried before
+	// Lumia, but only when HwFreeRouteKey approves it for customer data.
+	HwProviderFree = "free"
 	// HwProviderOpenRouter is the tag of the emergency supplier channel.
 	HwProviderOpenRouter = "openrouter"
 	// HwProviderPortix is the tag of the Portix reseller channel. Like the
@@ -45,6 +49,13 @@ const (
 	// customer model name when the channel does not rename it.
 	HwChannelCostKey = "hw_cost_per_m"
 
+	// HwFreeRouteKey is the other_info key that approves a free channel for
+	// customer traffic: {"approved": true, "data_class": "K", "region": "eu"}.
+	// Free tiers that may store or train on prompts (data class I) or that run
+	// in China never carry customer data, so anything else keeps the channel
+	// out of the route.
+	HwFreeRouteKey = "hw_free_route"
+
 	hwRouteContextKey = "hw_provider_route"
 	hwMaxUpstreamIDs  = 5
 )
@@ -62,6 +73,7 @@ type HwRouteState struct {
 	userGroup  string
 	model      string
 	family     string
+	free       []*model.Channel
 	lumia      []*model.Channel
 	alternates []*model.Channel
 	tried      map[int]bool
@@ -95,6 +107,9 @@ func HwChannelProvider(channel *model.Channel) string {
 	tag := strings.ToLower(strings.TrimSpace(channel.GetTag()))
 	if tag == HwProviderLumia {
 		return HwProviderLumia
+	}
+	if tag == HwProviderFree || strings.HasPrefix(tag, HwProviderFree+"-") {
+		return HwProviderFree
 	}
 	for _, provider := range hwAlternateProviders {
 		if tag == provider || strings.HasPrefix(tag, provider+"-") {
@@ -148,6 +163,39 @@ func hwChannelHostsProvider(baseURL, provider string) bool {
 // hwIsAlternateProvider reports whether provider is a supplier behind Lumia.
 func hwIsAlternateProvider(provider string) bool {
 	return provider == HwProviderOpenRouter || provider == HwProviderPortix || provider == HwProviderKie
+}
+
+// HwFreeRouteApproved reports whether a free channel may carry customer data:
+// approved by the quality check, data class K and a known region outside China.
+func HwFreeRouteApproved(channel *model.Channel) bool {
+	if channel == nil {
+		return false
+	}
+	route, ok := channel.GetOtherInfo()[HwFreeRouteKey].(map[string]any)
+	if !ok {
+		return false
+	}
+	approved, _ := route["approved"].(bool)
+	dataClass, _ := route["data_class"].(string)
+	region, _ := route["region"].(string)
+	region = strings.ToLower(strings.TrimSpace(region))
+	return approved && strings.EqualFold(strings.TrimSpace(dataClass), "K") && region != "" && !hwChineseRegions[region]
+}
+
+// hwChineseRegions are the region spellings that count as a Chinese step.
+var hwChineseRegions = map[string]bool{"cn": true, "china": true, "hk": true, "hong kong": true, "hongkong": true, "mo": true, "macau": true}
+
+// hwProviderTier orders the suppliers: free, Lumia, then the alternatives.
+func hwProviderTier(provider string) int {
+	switch {
+	case provider == HwProviderFree:
+		return 0
+	case provider == HwProviderLumia:
+		return 1
+	case hwIsAlternateProvider(provider):
+		return 2
+	}
+	return -1
 }
 
 // hwChannelCost returns the supplier cost of serving customerModel on channel:
@@ -301,31 +349,65 @@ func hwStartRoute(c *gin.Context, group, modelName string, filters []dto.Channel
 		if ok, _ := model.ChannelSatisfiesFilters(channel, modelName, filters); !ok {
 			continue
 		}
-		if hwIsAlternateProvider(provider) {
+		switch {
+		case provider == HwProviderFree:
+			if HwFreeRouteApproved(channel) {
+				state.free = append(state.free, channel)
+			}
+		case hwIsAlternateProvider(provider):
 			state.alternates = append(state.alternates, channel)
-		} else {
+		default:
 			state.lumia = append(state.lumia, channel)
 		}
 	}
-	// Cheapest alternative first for this model; the stable sort keeps the
-	// priority and id order of the candidates for equal or unknown prices.
-	sort.SliceStable(state.alternates, func(i, j int) bool {
-		return hwChannelCost(state.alternates[i], modelName) < hwChannelCost(state.alternates[j], modelName)
-	})
+	hwSortAlternates(state.alternates, modelName)
 	c.Set(hwRouteContextKey, state)
 	return state
 }
 
+// hwSortAlternates puts the alternative suppliers in route order: OpenRouter
+// always last, whatever it costs; among the others the cheapest for this model
+// goes first. The stable sort keeps the priority and id order of the
+// candidates for equal or unknown prices.
+func hwSortAlternates(alternates []*model.Channel, customerModel string) {
+	sort.SliceStable(alternates, func(i, j int) bool {
+		lastI := HwChannelProvider(alternates[i]) == HwProviderOpenRouter
+		lastJ := HwChannelProvider(alternates[j]) == HwProviderOpenRouter
+		if lastI != lastJ {
+			return lastJ
+		}
+		return hwChannelCost(alternates[i], customerModel) < hwChannelCost(alternates[j], customerModel)
+	})
+}
+
 // claim marks channel as this attempt's channel when it belongs to the route.
 // It reports false when the route has to pick a channel itself, which happens
-// when the stock selection landed on an untagged or foreign-family channel.
+// when the stock selection landed on an untagged or foreign-family channel, or
+// on a later supplier while an earlier one (free before Lumia before the
+// alternatives) is still untried.
 func (s *HwRouteState) claim(channel *model.Channel) bool {
 	if s == nil || channel == nil {
 		return false
 	}
 	provider := HwChannelProvider(channel)
-	if provider != HwProviderLumia && !hwIsAlternateProvider(provider) {
+	tier := hwProviderTier(provider)
+	if tier < 0 {
 		return false
+	}
+	if provider == HwProviderFree && !HwFreeRouteApproved(channel) {
+		return false
+	}
+	if tier > 0 && s.peekFree() != nil {
+		return false
+	}
+	if tier > 1 && s.peekLumia() != nil {
+		return false
+	}
+	// OpenRouter stays last even when the stock selection lands on it first.
+	if provider == HwProviderOpenRouter {
+		if next := s.peekAlternate(); next != nil && HwChannelProvider(next) != HwProviderOpenRouter {
+			return false
+		}
 	}
 	if !HwChannelAllowedForGroup(channel, s.group, s.userGroup) {
 		return false
@@ -359,7 +441,7 @@ func (s *HwRouteState) hasNext() bool {
 		// splice two different answers together.
 		return false
 	}
-	if next := s.peekLumia(); next != nil {
+	if s.peekFree() != nil || s.peekLumia() != nil {
 		return true
 	}
 	if s.outageRetryPending() {
@@ -375,6 +457,15 @@ func (s *HwRouteState) hasNext() bool {
 func (s *HwRouteState) outageRetryPending() bool {
 	return s.outage && !s.lumiaRetried && s.lastChannel != nil &&
 		HwChannelProvider(s.lastChannel) == HwProviderLumia
+}
+
+func (s *HwRouteState) peekFree() *model.Channel {
+	for _, channel := range s.free {
+		if !s.tried[channel.Id] && HwFreeRouteApproved(channel) {
+			return channel
+		}
+	}
+	return nil
 }
 
 func (s *HwRouteState) peekLumia() *model.Channel {
@@ -397,14 +488,20 @@ func (s *HwRouteState) peekAlternate() *model.Channel {
 
 // next returns the next channel to try, or nil when the route is exhausted.
 //
-// Order: every Lumia alias of the requested family once, then exactly one extra
-// Lumia attempt after an outage (after the fixed pause), then the alternative
-// suppliers for the paying group (Portix, Kie, OpenRouter), the cheapest for
-// this model first, then nothing at all. Another family is never part of the
-// route.
+// Order: every approved free channel of the requested family once (a 429 or
+// quota error there moves on at once, without the Lumia pause), then every
+// Lumia alias once, then exactly one extra Lumia attempt after a Lumia outage
+// (after the fixed pause), then the alternative suppliers for the paying group,
+// Portix and Kie cheapest first and OpenRouter last, then nothing at all.
+// Another family is never part of the route.
 func (s *HwRouteState) next() *model.Channel {
 	if s == nil || s.finished {
 		return nil
+	}
+	if channel := s.peekFree(); channel != nil {
+		s.tried[channel.Id] = true
+		s.recordAttempt(channel, HwProviderFree)
+		return channel
 	}
 	if channel := s.peekLumia(); channel != nil {
 		s.tried[channel.Id] = true
@@ -510,7 +607,9 @@ func HwDecideRetry(c *gin.Context, apiErr *types.NewAPIError) (PolicyDecision, b
 		state.finished = true
 		return hwPolicyDecision("stop", "hw_terminal_error"), true
 	}
-	if hwIsOutageError(apiErr) {
+	// Only a Lumia outage earns the paused extra Lumia attempt; a free tier
+	// running out of quota simply moves on to the next supplier.
+	if hwIsOutageError(apiErr) && HwChannelProvider(state.lastChannel) == HwProviderLumia {
 		state.outage = true
 	}
 	if state.streamWrites > 0 {

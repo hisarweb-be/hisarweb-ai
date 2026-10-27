@@ -115,10 +115,10 @@ var hwRetiredModels = map[string]string{
 	// and cheaper than the name it replaces. The gpt 6 family itself is sold
 	// again, so the successors stay inside gpt; only terra, which has no 6.x
 	// namesake, points at the sold model of its price tier.
-	"gpt-5.6-luna": "gpt-6-luna",
-	"gpt-5.6-sol":  "gpt-6.1-sol",
+	"gpt-5.6-luna":  "gpt-6-luna",
+	"gpt-5.6-sol":   "gpt-6.1-sol",
 	"gpt-5.6-terra": "gpt-6.1-sol",
-	"gpt-6":        "gpt-6.1-sol",
+	"gpt-6":         "gpt-6.1-sol",
 }
 
 // HwRetiredModelSuccessor returns the model that replaces a retired model name.
@@ -465,35 +465,42 @@ func hwFetchURL(ctx context.Context, client *http.Client, url string) ([]byte, e
 // failure is an error; the caller then keeps the previous snapshot and marks it
 // stale. No value is ever filled in from memory.
 func HwFetchPriceSnapshot(ctx context.Context, client *http.Client, priceListURL string, fxURL string, now time.Time) (*model.HwPriceSnapshot, error) {
+	snapshot, _, err := hwFetchPriceSnapshotAndList(ctx, client, priceListURL, fxURL, now)
+	return snapshot, err
+}
+
+// hwFetchPriceSnapshotAndList is HwFetchPriceSnapshot that also returns the
+// parsed price list, so the daily refresh can look for new models in it.
+func hwFetchPriceSnapshotAndList(ctx context.Context, client *http.Client, priceListURL string, fxURL string, now time.Time) (*model.HwPriceSnapshot, map[string]hwPriceListEntry, error) {
 	if client == nil {
 		client = &http.Client{Timeout: hwPriceFetchTimeout}
 	}
 	priceBody, err := hwFetchURL(ctx, client, priceListURL)
 	if err != nil {
-		return nil, fmt.Errorf("price list fetch failed: %w", err)
+		return nil, nil, fmt.Errorf("price list fetch failed: %w", err)
 	}
 	fxBody, err := hwFetchURL(ctx, client, fxURL)
 	if err != nil {
-		return nil, fmt.Errorf("rate fetch failed: %w", err)
+		return nil, nil, fmt.Errorf("rate fetch failed: %w", err)
 	}
 	list, err := hwParsePriceList(priceBody)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	prices, err := hwExtractSoldModelPrices(list)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(prices) == 0 {
-		return nil, errors.New("price list contains none of the sold models")
+		return nil, nil, errors.New("price list contains none of the sold models")
 	}
 	rate, fxDate, err := hwParseTcmbFx(fxBody)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	modelsJSON, err := common.Marshal(prices)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// The EUR cross rate is optional: when it cannot be read, TRY keeps working
 	// and the EUR option stays as it was.
@@ -512,14 +519,14 @@ func HwFetchPriceSnapshot(ctx context.Context, client *http.Client, priceListURL
 		TryPerUsd:      rate.String(),
 		Models:         string(modelsJSON),
 		ListedCount:    len(list),
-	}, nil
+	}, list, nil
 }
 
 // HwRefreshPriceSnapshot runs one fetch cycle: fetch, store, and publish the
 // rate option. On a failed fetch the previous snapshot stays and is marked
 // stale, so the site can show the old prices together with their date.
 func HwRefreshPriceSnapshot(ctx context.Context, client *http.Client, now time.Time) error {
-	snapshot, err := HwFetchPriceSnapshot(ctx, client, HwPriceListURL(), HwFxURL(), now)
+	snapshot, list, err := hwFetchPriceSnapshotAndList(ctx, client, HwPriceListURL(), HwFxURL(), now)
 	if err != nil {
 		if markErr := model.HwMarkPriceSnapshotsStale(now.Unix()); markErr != nil {
 			common.SysError(common.LogText("failed to mark the price snapshot stale after a failed refresh (class %s)", hwPricingErrorClass(markErr)))
@@ -548,6 +555,10 @@ func HwRefreshPriceSnapshot(ctx context.Context, client *http.Client, now time.T
 		} else if eurErr := hwApplyEurRateOption(eur, snapshot.FxDate); eurErr != nil {
 			common.SysError(common.LogText("EUR rate not applied (class %s)", hwPricingErrorClass(eurErr)))
 		}
+	}
+	// A failing new-model card never fails the price refresh.
+	if err := hwReportNewModels(ctx, HwBureauCardConfigFromEnv(), list); err != nil {
+		common.SysError(common.LogText("new-model card not filed (class %s); retried on the next refresh", hwPricingErrorClass(err)))
 	}
 	return nil
 }

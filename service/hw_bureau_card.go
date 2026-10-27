@@ -45,7 +45,18 @@ type hwBureauIssueRequest struct {
 	Description string `json:"description"`
 	Priority    string `json:"priority"`
 	Status      string `json:"status"`
+	// AssigneeAgentID hands the card to one role on the board; empty leaves
+	// the card to the board's own triage.
+	AssigneeAgentID string `json:"assigneeAgentId,omitempty"`
 }
+
+// Agent ids of the Bureau V2 roles the gateway files cards for
+// (D:/paperclip/kennis/agents/): a broken model or supplier route belongs to
+// the Modelverkenner, the gateway itself down to the Platformbeheerder.
+const (
+	HwBureauAgentModelverkenner    = "6f978d02-e253-49f7-b47a-031b0dc0c4f8"
+	HwBureauAgentPlatformbeheerder = "34770caa-4e0c-4231-930e-6301a68c750e"
+)
 
 type hwBureauIssueResponse struct {
 	ID         string `json:"id"`
@@ -67,12 +78,21 @@ func HwBureauCreateCard(ctx context.Context, config HwBureauCardConfig, title, s
 		description += "Pagina: " + page + "\n"
 	}
 	description += "\n" + summary
-	if runes := []rune(description); len(runes) > hwBureauCardMaxRunes {
-		description = string(runes[:hwBureauCardMaxRunes])
-	}
-	body, err := common.Marshal(hwBureauIssueRequest{
+	return hwBureauPostIssue(ctx, config, hwBureauIssueRequest{
 		Title: "Admin-agent: " + title, Description: description, Priority: "medium", Status: "todo",
 	})
+}
+
+// hwBureauPostIssue posts one prepared card and returns its identifier. The
+// token only travels in the Authorization header; no error text quotes it.
+func hwBureauPostIssue(ctx context.Context, config HwBureauCardConfig, issue hwBureauIssueRequest) (string, error) {
+	if config.BaseURL == "" || config.CompanyID == "" {
+		return "", errors.New("the bureau board is not connected")
+	}
+	if runes := []rune(issue.Description); len(runes) > hwBureauCardMaxRunes {
+		issue.Description = string(runes[:hwBureauCardMaxRunes])
+	}
+	body, err := common.Marshal(issue)
 	if err != nil {
 		return "", err
 	}
@@ -97,12 +117,12 @@ func HwBureauCreateCard(ctx context.Context, config HwBureauCardConfig, title, s
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return "", fmt.Errorf("the bureau board returned status %d", resp.StatusCode)
 	}
-	var issue hwBureauIssueResponse
-	if err := common.DecodeJson(resp.Body, &issue); err != nil {
+	var created hwBureauIssueResponse
+	if err := common.DecodeJson(resp.Body, &created); err != nil {
 		return "", fmt.Errorf("the bureau board returned an unreadable body: %w", err)
 	}
-	if issue.Identifier != "" {
-		return issue.Identifier, nil
+	if created.Identifier != "" {
+		return created.Identifier, nil
 	}
-	return issue.ID, nil
+	return created.ID, nil
 }
