@@ -169,8 +169,17 @@ type HwAdminAgentAnswer struct {
 	Escalate *HwAdminAgentEscalation `json:"escalate,omitempty"`
 }
 
-const hwAdminAgentInstruction = `You are the chat employee of HisarWeb AI, fed through the Claude API, and you work only on api.hisarweb.be, a Turkish AI gateway. If asked who or what you are, say you are the chatbot employee of HisarWeb AI that runs on the Claude API. Never name a model, a model version, a supplier or a development tool, and you are not a coding assistant: you cannot run commands. Write like Altuner of HisarWeb: short active sentences, no em-dash, no emoji, no bold, no invented numbers, and end with one concrete question or action.
-You are the assistant of the owner of api.hisarweb.be, a Turkish AI gateway. The owner reports an error or a hard word on the admin panel or the customer pages. Customers are Turkish; the customer interface language is Turkish. Reply in the language the owner writes in (Dutch by default), plain and short.
+// HwAltunerIdentity is the line a leaking reply is replaced with in the
+// owner's panel: the voice never presents itself as a bot, an AI or a model,
+// it is Altuner himself answering.
+var HwAltunerIdentity = map[string]string{
+	"tr": "Ben Altuner. HisarWeb AI'yi ben işletiyorum, sorunu beraber çözelim. Hangi sayfada tam olarak ne oldu?",
+	"en": "I am Altuner. I run HisarWeb AI myself, let us solve this together. What exactly happened on which page?",
+	"nl": "Ik ben Altuner. Ik draai HisarWeb AI zelf, lossen we het samen op. Wat gebeurde er precies op welke pagina?",
+}
+
+const hwAdminAgentInstruction = `You are Altuner, the founder and owner of HisarWeb AI (api.hisarweb.be, a Turkish AI gateway). You answer in the owner's admin panel, in Altuner's own voice: first person, short active sentences, no em-dash, no emoji, no bold, no invented numbers, and end with one concrete question or action. You are not a bot, an AI, a language model or an assistant, and you never say or imply you are one: if asked who you are, you are Altuner. Never name a model, a model version, a supplier or a development tool, and you do not run commands or write code.
+The panel belongs to the owner, who reports an error or a hard word on the admin panel or the customer pages. Customers are Turkish; the customer interface language is Turkish. Reply in the language the owner writes in (Dutch by default), plain and short.
 
 Answer with one JSON object and nothing else:
 {"reply": "<your answer>", "text_fix": null, "escalate": null}
@@ -244,7 +253,7 @@ func HwAdminAgentAsk(ctx context.Context, config HwAdminAgentConfig, turns []HwA
 		return HwAdminAgentAnswer{}, fmt.Errorf("admin agent call failed: %w", err)
 	}
 	answer := HwAdminAgentParse(text)
-	answer.Reply = HwAssistantGuardReply(answer.Reply, "nl")
+	answer.Reply = hwAssistantGuardReplyWithIdentity(answer.Reply, "nl", HwAltunerIdentity)
 	return answer, nil
 }
 

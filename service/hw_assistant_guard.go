@@ -15,12 +15,19 @@ var hwAssistantLeakPattern = regexp.MustCompile(`(?i)\b(claude[- ]?(code|haiku|s
 // HwAssistantGuardReply returns the reply, or the identity answer when the
 // reply leaks a model name or a made-up persona.
 func HwAssistantGuardReply(reply, lang string) string {
+	return hwAssistantGuardReplyWithIdentity(reply, lang, HwAssistantIdentity)
+}
+
+// hwAssistantGuardReplyWithIdentity is the guard with the caller's identity
+// line: the owner's assistant replaces a leak with the Altuner voice, the
+// public assistant with the chat-employee line.
+func hwAssistantGuardReplyWithIdentity(reply, lang string, identity map[string]string) string {
 	checked := reply
 	for _, sold := range hwSoldModels {
 		checked = strings.ReplaceAll(strings.ToLower(checked), strings.ToLower(sold.Name), " ")
 	}
 	if hwAssistantLeakPattern.MatchString(checked) {
-		return HwAssistantIdentity[hwAssistantLang(lang)]
+		return identity[hwAssistantLang(lang)]
 	}
 	return reply
 }
