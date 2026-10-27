@@ -2,8 +2,10 @@ package service
 
 import (
 	"errors"
+	"math"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -18,19 +20,30 @@ import (
 )
 
 // Supplier routing. Customer traffic is served by the Lumia supplier first; the
-// emergency supplier (OpenRouter) is reachable only for the paying group. The
-// policy is intentionally a separate state machine: the existing relay loop and
-// channel selection keep their behaviour and only ask this file who goes next.
+// alternative suppliers (Portix, Kie, OpenRouter) are reachable only for the
+// paying group and come after Lumia, cheapest first per model. The policy is
+// intentionally a separate state machine: the existing relay loop and channel
+// selection keep their behaviour and only ask this file who goes next.
 const (
 	// HwProviderLumia is the tag of the primary supplier channel.
 	HwProviderLumia = "lumia"
 	// HwProviderOpenRouter is the tag of the emergency supplier channel.
 	HwProviderOpenRouter = "openrouter"
+	// HwProviderPortix is the tag of the Portix reseller channel. Like the
+	// emergency supplier it is an alternative route for the paying group only.
+	HwProviderPortix = "portix"
+	// HwProviderKie is the tag of the Kie reseller channel (paying group only).
+	HwProviderKie = "kie"
 	// HwProviderInternal marks channels without a supplier tag. They are not
 	// part of supplier routing and are never chosen or blocked by this policy.
 	HwProviderInternal = "internal"
-	// HwPaidGroup is the only group allowed to reach the emergency supplier.
+	// HwPaidGroup is the only group allowed to reach the alternative suppliers.
 	HwPaidGroup = "paid"
+	// HwChannelCostKey is the other_info key that holds the supplier cost per
+	// model of a channel: {"<model>": {"in": <USD per 1M>, "out": <USD per 1M>}}.
+	// The model is the upstream name after the channel's model mapping, or the
+	// customer model name when the channel does not rename it.
+	HwChannelCostKey = "hw_cost_per_m"
 
 	hwRouteContextKey = "hw_provider_route"
 	hwMaxUpstreamIDs  = 5
@@ -50,7 +63,7 @@ type HwRouteState struct {
 	model      string
 	family     string
 	lumia      []*model.Channel
-	openRouter []*model.Channel
+	alternates []*model.Channel
 	tried      map[int]bool
 
 	outage          bool
@@ -70,31 +83,51 @@ type HwRouteState struct {
 }
 
 // HwChannelProvider maps a channel onto its supplier role. The tag is the
-// primary signal, but an emergency supplier must also be recognised without an
+// primary signal, but an alternative supplier must also be recognised without an
 // exact tag: a channel of the OpenRouter type, a tag that merely prefixes the
 // supplier name (openrouter-eu) and a base URL that points at the supplier host
-// all count. Missing one of those would let a free account reach the emergency
+// all count. Missing one of those would let a free account reach an alternative
 // supplier, so the check is deliberately broad.
 func HwChannelProvider(channel *model.Channel) string {
 	if channel == nil {
 		return ""
 	}
 	tag := strings.ToLower(strings.TrimSpace(channel.GetTag()))
-	switch {
-	case tag == HwProviderLumia:
+	if tag == HwProviderLumia {
 		return HwProviderLumia
-	case tag == HwProviderOpenRouter, strings.HasPrefix(tag, HwProviderOpenRouter+"-"):
+	}
+	for _, provider := range hwAlternateProviders {
+		if tag == provider || strings.HasPrefix(tag, provider+"-") {
+			return provider
+		}
+	}
+	if channel.Type == constant.ChannelTypeOpenRouter {
 		return HwProviderOpenRouter
 	}
-	if channel.Type == constant.ChannelTypeOpenRouter || hwChannelHostsOpenRouter(channel.GetBaseURL()) {
-		return HwProviderOpenRouter
+	baseURL := channel.GetBaseURL()
+	for _, provider := range hwAlternateProviders {
+		if hwChannelHostsProvider(baseURL, provider) {
+			return provider
+		}
 	}
 	return HwProviderInternal
 }
 
-// hwChannelHostsOpenRouter reports whether a channel base URL points at the
-// emergency supplier's host.
-func hwChannelHostsOpenRouter(baseURL string) bool {
+// hwAlternateProviders are the suppliers that come after Lumia. All of them are
+// reachable for the paying group only.
+var hwAlternateProviders = []string{HwProviderOpenRouter, HwProviderPortix, HwProviderKie}
+
+// hwProviderDomains maps an alternative supplier onto the domains whose hosts
+// (and subdomains) count as that supplier.
+var hwProviderDomains = map[string][]string{
+	HwProviderOpenRouter: {"openrouter.ai"},
+	HwProviderPortix:     {"portixapi.com"},
+	HwProviderKie:        {"kie.ai"},
+}
+
+// hwChannelHostsProvider reports whether a channel base URL points at the host
+// of an alternative supplier.
+func hwChannelHostsProvider(baseURL, provider string) bool {
 	trimmed := strings.TrimSpace(baseURL)
 	if trimmed == "" {
 		return false
@@ -104,18 +137,64 @@ func hwChannelHostsOpenRouter(baseURL string) bool {
 		return false
 	}
 	host := strings.ToLower(parsed.Hostname())
-	return host == "openrouter.ai" || strings.HasSuffix(host, ".openrouter.ai")
+	for _, domain := range hwProviderDomains[provider] {
+		if host == domain || strings.HasSuffix(host, "."+domain) {
+			return true
+		}
+	}
+	return false
 }
 
-// HwChannelAllowedForGroup enforces the hard rule that the emergency supplier
-// is only reachable for the paying group. Both the group the token uses and the
+// hwIsAlternateProvider reports whether provider is a supplier behind Lumia.
+func hwIsAlternateProvider(provider string) bool {
+	return provider == HwProviderOpenRouter || provider == HwProviderPortix || provider == HwProviderKie
+}
+
+// hwChannelCost returns the supplier cost of serving customerModel on channel:
+// input plus output price per 1M tokens in USD. A channel without cost metadata
+// for the model returns +Inf, so it sorts behind every channel with a known
+// price instead of being preferred on a guess.
+func hwChannelCost(channel *model.Channel, customerModel string) float64 {
+	if channel == nil {
+		return math.Inf(1)
+	}
+	costs, ok := channel.GetOtherInfo()[HwChannelCostKey].(map[string]any)
+	if !ok {
+		return math.Inf(1)
+	}
+	names := []string{customerModel}
+	if mappingJSON := channel.GetModelMapping(); mappingJSON != "" && mappingJSON != "{}" {
+		mapping := make(map[string]string)
+		if err := common.UnmarshalJsonStr(mappingJSON, &mapping); err == nil {
+			if mapped := strings.TrimSpace(mapping[customerModel]); mapped != "" {
+				names = []string{mapped, customerModel}
+			}
+		}
+	}
+	for _, name := range names {
+		entry, ok := costs[name].(map[string]any)
+		if !ok {
+			continue
+		}
+		input, inOK := entry["in"].(float64)
+		output, outOK := entry["out"].(float64)
+		if !inOK || !outOK || input < 0 || output < 0 || math.IsNaN(input) || math.IsNaN(output) {
+			continue
+		}
+		return input + output
+	}
+	return math.Inf(1)
+}
+
+// HwChannelAllowedForGroup enforces the hard rule that the alternative suppliers
+// (OpenRouter, Portix, Kie) are only reachable for the paying group. Both the group the token uses and the
 // group of the account must be paying: a free account whose token stands on the
-// paid group must not reach the emergency supplier either. It is checked while
+// paid group must not reach an alternative supplier either. It is checked while
 // building the route and again whenever a channel is picked, so a wrongly
 // tagged channel in a free group can never be used even if the route was built
 // from stale data.
 func HwChannelAllowedForGroup(channel *model.Channel, usingGroup, userGroup string) bool {
-	if HwChannelProvider(channel) != HwProviderOpenRouter {
+	if !hwIsAlternateProvider(HwChannelProvider(channel)) {
 		return true
 	}
 	return usingGroup == HwPaidGroup && userGroup == HwPaidGroup
@@ -211,7 +290,7 @@ func hwStartRoute(c *gin.Context, group, modelName string, filters []dto.Channel
 			continue
 		}
 		if !HwChannelAllowedForGroup(channel, group, userGroup) {
-			// Wrongly tagged emergency channel in a non-paying group: filtered
+			// Wrongly tagged alternative channel in a non-paying group: filtered
 			// out here and again at pick time.
 			continue
 		}
@@ -222,12 +301,17 @@ func hwStartRoute(c *gin.Context, group, modelName string, filters []dto.Channel
 		if ok, _ := model.ChannelSatisfiesFilters(channel, modelName, filters); !ok {
 			continue
 		}
-		if provider == HwProviderOpenRouter {
-			state.openRouter = append(state.openRouter, channel)
+		if hwIsAlternateProvider(provider) {
+			state.alternates = append(state.alternates, channel)
 		} else {
 			state.lumia = append(state.lumia, channel)
 		}
 	}
+	// Cheapest alternative first for this model; the stable sort keeps the
+	// priority and id order of the candidates for equal or unknown prices.
+	sort.SliceStable(state.alternates, func(i, j int) bool {
+		return hwChannelCost(state.alternates[i], modelName) < hwChannelCost(state.alternates[j], modelName)
+	})
 	c.Set(hwRouteContextKey, state)
 	return state
 }
@@ -240,7 +324,7 @@ func (s *HwRouteState) claim(channel *model.Channel) bool {
 		return false
 	}
 	provider := HwChannelProvider(channel)
-	if provider != HwProviderLumia && provider != HwProviderOpenRouter {
+	if provider != HwProviderLumia && !hwIsAlternateProvider(provider) {
 		return false
 	}
 	if !HwChannelAllowedForGroup(channel, s.group, s.userGroup) {
@@ -281,7 +365,7 @@ func (s *HwRouteState) hasNext() bool {
 	if s.outageRetryPending() {
 		return true
 	}
-	return s.peekOpenRouter() != nil
+	return s.peekAlternate() != nil
 }
 
 // outageRetryPending reports whether the single extra Lumia attempt after an
@@ -302,8 +386,8 @@ func (s *HwRouteState) peekLumia() *model.Channel {
 	return nil
 }
 
-func (s *HwRouteState) peekOpenRouter() *model.Channel {
-	for _, channel := range s.openRouter {
+func (s *HwRouteState) peekAlternate() *model.Channel {
+	for _, channel := range s.alternates {
 		if !s.tried[channel.Id] && HwChannelAllowedForGroup(channel, s.group, s.userGroup) {
 			return channel
 		}
@@ -314,9 +398,10 @@ func (s *HwRouteState) peekOpenRouter() *model.Channel {
 // next returns the next channel to try, or nil when the route is exhausted.
 //
 // Order: every Lumia alias of the requested family once, then exactly one extra
-// Lumia attempt after an outage (after the fixed pause), then the emergency
-// supplier for the paying group, then nothing at all. Another family is never
-// part of the route.
+// Lumia attempt after an outage (after the fixed pause), then the alternative
+// suppliers for the paying group (Portix, Kie, OpenRouter), the cheapest for
+// this model first, then nothing at all. Another family is never part of the
+// route.
 func (s *HwRouteState) next() *model.Channel {
 	if s == nil || s.finished {
 		return nil
@@ -332,9 +417,9 @@ func (s *HwRouteState) next() *model.Channel {
 		s.recordAttempt(s.lastChannel, HwProviderLumia)
 		return s.lastChannel
 	}
-	if channel := s.peekOpenRouter(); channel != nil {
+	if channel := s.peekAlternate(); channel != nil {
 		s.tried[channel.Id] = true
-		s.recordAttempt(channel, HwProviderOpenRouter)
+		s.recordAttempt(channel, HwChannelProvider(channel))
 		return channel
 	}
 	return nil
