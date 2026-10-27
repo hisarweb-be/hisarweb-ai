@@ -124,7 +124,7 @@ func TestHwAdminAgentChatReachesTheGatewayForAnAdmin(t *testing.T) {
 	assert.Contains(t, response.Body.String(), "Beter: Kaydet")
 	assert.Contains(t, response.Body.String(), `"proposed":"Kaydet"`)
 	assert.Equal(t, "Bearer agent-test-key", gotAuth)
-	assert.Equal(t, "claude-haiku-5-5", gotModel, "the cheapest capable model is the default")
+	assert.Equal(t, "gpt-6-luna", gotModel, "the cheapest capable model is the default")
 }
 
 func TestHwAdminAgentEscalationQueuesWhenBoardIsUnreachable(t *testing.T) {

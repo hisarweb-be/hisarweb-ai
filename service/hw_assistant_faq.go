@@ -156,11 +156,49 @@ func HwAssistantFold(text string) string {
 	return strings.Join(strings.Fields(folded), " ")
 }
 
+// hwAssistantLanguageHints are everyday words that betray the language a
+// question is written in, independent of any FAQ keyword. They are folded the
+// same way as the question, so the Turkish ı is a plain i here.
+var hwAssistantLanguageHints = map[string][]string{
+	"tr": {"nasil", "yapabilirim", "kullanirim", "kullanabilirim", "icin", "hangi", "nedir", "beni", "kac", "nerede"},
+	"en": {"how", "can", "the", "you", "what", "my", "do", "does", "use", "install"},
+	"nl": {"hoe", "kan", "ik", "dit", "die", "op", "mijn", "wat", "een", "je", "jullie", "gebruik", "installeren"},
+}
+
+// hwAssistantQuestionLanguage guesses the language of the question from its
+// own words. It decides only when one language clearly leads, so a bare
+// keyword ("api") stays with the panel preference.
+func hwAssistantQuestionLanguage(folded string) string {
+	best, bestHits := "", 0
+	tied := false
+	for _, lang := range HwAssistantLanguages {
+		hits := 0
+		for _, word := range strings.Fields(folded) {
+			for _, hint := range hwAssistantLanguageHints[lang] {
+				if word == hint {
+					hits++
+					break
+				}
+			}
+		}
+		if hits > bestHits {
+			best, bestHits, tied = lang, hits, false
+		} else if hits == bestHits && hits > 0 {
+			tied = true
+		}
+	}
+	if bestHits == 0 || tied {
+		return ""
+	}
+	return best
+}
+
 // HwAssistantMatch returns the entry that best matches the question and the
 // language the matched keyword belongs to, or nil. The keyword that is longest
 // wins, so "sen kimsin" beats a single word. A keyword that lives in several
-// languages ("api") counts for the preferred one, so the chips keep answering
-// in the panel language, while a keyword of one language ("fiyat") answers in
+// languages ("api") is answered in the language the question itself is written
+// in, and only a question without any everyday words falls back to the
+// preferred panel language. A keyword of one language ("fiyat") answers in
 // that language whatever the panel shows.
 func HwAssistantMatch(question, preferred string) (*HwAssistantFAQ, string) {
 	folded := HwAssistantFold(question)
@@ -175,13 +213,30 @@ func HwAssistantMatch(question, preferred string) (*HwAssistantFAQ, string) {
 	}
 	var best *HwAssistantFAQ
 	bestLang := ""
+	bestKeyword := ""
 	bestScore := 0
 	for index := range hwAssistantFAQs {
 		for _, lang := range order {
 			for _, keyword := range hwAssistantFAQs[index].Keywords[lang] {
 				if strings.Contains(folded, HwAssistantFold(keyword)) && len(keyword) > bestScore {
-					best, bestLang, bestScore = &hwAssistantFAQs[index], lang, len(keyword)
+					best, bestLang, bestKeyword, bestScore = &hwAssistantFAQs[index], lang, keyword, len(keyword)
 				}
+			}
+		}
+	}
+	if best != nil {
+		shared := 0
+		for _, lang := range HwAssistantLanguages {
+			for _, keyword := range best.Keywords[lang] {
+				if HwAssistantFold(keyword) == HwAssistantFold(bestKeyword) {
+					shared++
+					break
+				}
+			}
+		}
+		if shared > 1 {
+			if questionLang := hwAssistantQuestionLanguage(folded); questionLang != "" {
+				bestLang = questionLang
 			}
 		}
 	}
@@ -209,8 +264,10 @@ func HwAssistantFAQList(lang string, hits map[string]int) []HwAssistantFAQView {
 
 // HwAssistantAnswerFor returns the fixed answer for a question, if any. The
 // answer is written in the language of the question itself: the language the
-// matched keyword belongs to, not the language of the panel or of the Telegram
-// account, so "sen kimsin" is answered in Turkish everywhere.
+// matched keyword belongs to, or, when the keyword lives in several languages,
+// the language the question's own words betray, so "sen kimsin" is answered
+// in Turkish everywhere and a Dutch sentence with the word "api" is answered
+// in Dutch even on a Turkish panel.
 func HwAssistantAnswerFor(question, lang string) (id, answer string, ok bool) {
 	entry, matched := HwAssistantMatch(question, lang)
 	if entry == nil {

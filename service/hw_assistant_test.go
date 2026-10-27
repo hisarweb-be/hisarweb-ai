@@ -85,9 +85,19 @@ func TestHwAssistantAnswerFollowsTheQuestionLanguage(t *testing.T) {
 	require.True(t, ok)
 	assert.Contains(t, answer, "lijstprijs")
 
-	// A keyword that lives in several languages answers in the preferred one.
+	// A keyword that lives in several languages follows the language of the
+	// question's own words; only a bare keyword without any everyday words
+	// falls back to the preferred panel language.
 	_, answer, _ = HwAssistantAnswerFor("api", "nl")
 	assert.Contains(t, answer, "API-sleutel")
+
+	_, answer, ok = HwAssistantAnswerFor("Hoe kan ik dit api op mijn cli installeren", "tr")
+	require.True(t, ok, "a Dutch sentence with the shared word api must match the api entry")
+	assert.Contains(t, answer, "API-sleutel", "a Dutch sentence is answered in Dutch on a Turkish panel")
+
+	_, answer, ok = HwAssistantAnswerFor("bu apiyi nasil kullanirim", "nl")
+	require.True(t, ok)
+	assert.Contains(t, answer, "anahtar", "a Turkish sentence is answered in Turkish on a Dutch panel")
 }
 
 func TestHwAssistantFAQAnswersFromCatalogAndStyle(t *testing.T) {
