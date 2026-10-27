@@ -618,3 +618,89 @@ func TestHwReadStatusSnapshotCountsWindowRecentBadAndOpenIncident(t *testing.T) 
 	assert.Equal(t, HwStatusModelState{Model: "unsampled-model"}, snap.Models[1])
 	assert.Len(t, snap.Incidents, 1)
 }
+
+// A quota or key refusal (429, 401, 403) says nothing about the model: the
+// route refused the call before the upstream was asked. Such a minute must
+// carry no verdict at all, otherwise an exhausted quota turns the whole offer
+// into a false outage, the alarm HwPurgeFalseIdleOutages exists for. The test
+// pins all three consequences: the sample carries its own reason, the minute is
+// left out of the verdicts (so no incident opens) and it does not count as a
+// good minute in the availability figure.
+func TestHwStatusProbeRefusalIsNoEvidence(t *testing.T) {
+	hwStatusTestSetup(t)
+	require.NoError(t, DB.AutoMigrate(&Ability{}, &Log{}))
+	require.NoError(t, DB.Exec("DELETE FROM abilities").Error)
+	t.Cleanup(func() { DB.Exec("DELETE FROM abilities") })
+	require.NoError(t, DB.Create(&Ability{Group: HwPaidGroupName, Model: "claude-sonnet-5-5", ChannelId: 1, Enabled: true}).Error)
+	t.Cleanup(func() { SetHwStatusProbe(nil, 0) })
+
+	SetHwStatusProbe(func(ctx context.Context, modelName string) HwStatusProbeOutcome {
+		return HwStatusProbeUnavailable
+	}, 0)
+
+	base := int64(1_800_000_000)
+	models := []string{"claude-sonnet-5-5"}
+	for i := int64(1); i <= 5; i++ {
+		require.NoError(t, HwMeasureStatusOnce(time.Unix(base+i*60, 0), models))
+	}
+
+	var samples []HwStatusSample
+	require.NoError(t, DB.Where("model = ?", "claude-sonnet-5-5").Order("minute").Find(&samples).Error)
+	require.Len(t, samples, 5, "every quiet minute keeps a sample, refusal or not")
+	for _, sample := range samples {
+		assert.Equal(t, HwStatusReasonProbeUnavailable, sample.Reason, "a refusal has its own reason, not probe_failed")
+	}
+
+	assert.Empty(t, HwMinuteVerdicts(samples), "a refusal is neither a good nor a bad minute")
+	var opened int64
+	require.NoError(t, DB.Model(&HwIncident{}).Count(&opened).Error)
+	assert.Zero(t, opened, "an exhausted quota opens no outage")
+
+	now := base + 5*60 + 60
+	snapshot, err := HwReadStatusSnapshot(now, models)
+	require.NoError(t, err)
+	require.Len(t, snapshot.Models, 1)
+	state := snapshot.Models[0]
+	assert.Zero(t, state.TotalMinutes, "a refused minute is not measured")
+	assert.Zero(t, state.GoodMinutes, "a refusal is no good minute")
+	assert.False(t, state.BadRecent, "a refusal is not recent badness")
+	assert.False(t, state.InOpenIncident)
+	assert.Equal(t, "operational", HwStatusCodeOf(state))
+	assert.Zero(t, HwStatusAvailabilityPercent(state))
+}
+
+// The mini call is bounded: a quiet model is asked at most once per
+// hwStatusProbeIntervalSeconds. Ten quiet minutes on one model cost two calls
+// (minute one and minute six), while every minute still gets its own sample, so
+// the three-minute outage chain keeps working. Without the bound eight sold
+// models meant some 11 500 calls a day with real supplier cost and quota use.
+func TestHwStatusProbeCallsAreBounded(t *testing.T) {
+	hwStatusTestSetup(t)
+	require.NoError(t, DB.AutoMigrate(&Ability{}, &Log{}))
+	require.NoError(t, DB.Exec("DELETE FROM abilities").Error)
+	t.Cleanup(func() { DB.Exec("DELETE FROM abilities") })
+	require.NoError(t, DB.Create(&Ability{Group: HwPaidGroupName, Model: "claude-sonnet-5-5", ChannelId: 1, Enabled: true}).Error)
+	t.Cleanup(func() { SetHwStatusProbe(nil, 0) })
+
+	calls := 0
+	SetHwStatusProbe(func(ctx context.Context, modelName string) HwStatusProbeOutcome {
+		calls++
+		return HwStatusProbeAnswered
+	}, 0)
+
+	base := int64(1_800_000_000)
+	models := []string{"claude-sonnet-5-5"}
+	for i := int64(1); i <= 10; i++ {
+		require.NoError(t, HwMeasureStatusOnce(time.Unix(base+i*60, 0), models))
+	}
+
+	assert.Equal(t, 2, calls, "ten quiet minutes ask the upstream twice, not ten times")
+
+	var samples int64
+	require.NoError(t, DB.Model(&HwStatusSample{}).Where("model = ?", "claude-sonnet-5-5").Count(&samples).Error)
+	assert.EqualValues(t, 10, samples, "every minute keeps its verdict, so the three-minute chain still works")
+
+	var good int64
+	require.NoError(t, DB.Model(&HwStatusSample{}).Where("model = ? AND ok = ?", "claude-sonnet-5-5", true).Count(&good).Error)
+	assert.EqualValues(t, 10, good, "a reused answer is the same verdict as the answered minute")
+}
