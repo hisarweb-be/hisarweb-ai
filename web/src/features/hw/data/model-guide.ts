@@ -85,8 +85,8 @@ export const MODEL_GUIDE: Readonly<Record<string, ModelGuide>> = {
       en: 'OpenAI’s most powerful',
     },
     description: {
-      tr: 'OpenAI’nin amiral gemisi modeli. En zor araştırma sorunları, saatler süren çok adımlı görevler ve bir uygulamanın tamamını kapsayan büyük yeniden yazımlar için; Opus ile aynı fiyat sınıfında.',
-      en: 'OpenAI’s flagship model. For the hardest research problems, multi-step jobs that run for hours, and rewrites that span a whole app; priced in the same tier as Opus.',
+      tr: 'OpenAI’nin amiral gemisi modeli. En zor araştırma sorunları, saatler süren çok adımlı görevler ve bir uygulamanın tamamını kapsayan büyük yeniden yazımlar için.',
+      en: 'OpenAI’s flagship model. For the hardest research problems, multi-step jobs that run for hours, and rewrites that span a whole app.',
     },
   },
   'gpt-6.1-sol': {
