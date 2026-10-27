@@ -54,9 +54,12 @@ type BonusStep = {
 /**
  * Tells a new customer how to receive the start bonus: confirm the e-mail
  * address, link Telegram, share the phone number with the bot. It disappears
- * once the free credit package exists. When Telegram verification is not open
- * on this installation the card is not shown at all: the bonus cannot be
- * claimed then, and a promise that cannot be kept only confuses a customer.
+ * once the free credit package exists. Only a common user on the default
+ * group sees the card: the server refuses to grant the bonus to anyone else
+ * (administrators, users who already switched to the free or paid group).
+ * When Telegram verification is not open on this installation the card is
+ * not shown at all: the bonus cannot be claimed then, and a promise that
+ * cannot be kept only confuses a customer.
  */
 export function StartbonusCard() {
   const hw = useHwText()
@@ -99,6 +102,10 @@ export function StartbonusCard() {
   )
 
   if (!user || !packages.isSuccess) return null
+  // The server (model/hw_free_credit.go) grants the claim only to a common
+  // user on the default group; for anyone else the card promises what the
+  // backend will refuse.
+  if (user.role !== 1 || (user.group ?? 'default') !== 'default') return null
   const claimed = packages.data.packages.some((pkg) => pkg.source === 'free')
   // The dialog stays on screen to say the bonus arrived, even though the card
   // itself is no longer needed then.

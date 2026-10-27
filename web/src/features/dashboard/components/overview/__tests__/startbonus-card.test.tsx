@@ -202,6 +202,53 @@ describe('start bonus card', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('shows no card to an administrator even with telegram verification open', async () => {
+    status = {
+      telegram_oauth_configured: true,
+      telegram_bot_name: '@HisarWebAI_bot',
+    }
+    useAuthStore.getState().auth.setUser({
+      id: 1,
+      username: 'admin',
+      role: 10,
+      email: 'admin@example.com',
+    })
+    await renderCard()
+
+    await waitFor(() => {
+      expect(getCalls).toContain('/api/user/hw/packages')
+      expect(getCalls).toContain('/api/status')
+    })
+    await act(async () => {})
+    expect(
+      screen.queryByText(/başlangıç bonusunuzu alın/)
+    ).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('startbonus-title')).not.toBeInTheDocument()
+  })
+
+  it('shows no card to a user who already left the default group', async () => {
+    status = {
+      telegram_oauth_configured: true,
+      telegram_bot_name: '@HisarWebAI_bot',
+    }
+    useAuthStore.getState().auth.setUser({
+      id: 1,
+      username: 'paying-user',
+      role: 1,
+      group: 'paid',
+    })
+    await renderCard()
+
+    await waitFor(() => {
+      expect(getCalls).toContain('/api/user/hw/packages')
+      expect(getCalls).toContain('/api/status')
+    })
+    await act(async () => {})
+    expect(
+      screen.queryByText(/başlangıç bonusunuzu alın/)
+    ).not.toBeInTheDocument()
+  })
+
   it('opens the bot dialog from the phone step once telegram verification is open', async () => {
     status = {
       telegram_oauth_configured: true,
