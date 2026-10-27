@@ -2838,7 +2838,6 @@
     "This file is too large.": "Bu dosya çok büyük.",
     "Only images and text files can be attached.": "Yalnızca görsel ve metin dosyaları eklenebilir.",
     "Attach a file": "Dosya ekle",
-    "I have no ready answer for this yet. Pick one of the questions above or ask support. Which one fits?": "Buna henüz hazır bir yanıtım yok. Yukarıdaki sorulardan birini seçin ya da destekle iletişime geçin. Hangisi size uyuyor?",
     "Partner Channels": "Partner Kanalları",
     "Grant channel": "Kanal ver",
     "Granted at": "Verilme zamanı",
@@ -2849,6 +2848,11 @@
     "We could not load the channels.": "Kanallar yüklenemedi.",
     "We could not grant the channel.": "Kanal verilemedi.",
     "Channel granted.": "Kanal verildi.",
-    "Channel credit granted. The bonus follows once the account is verified.": "Kanal kredisi verildi. Hesap doğrulanınca bonus eklenir."
+    "Channel credit granted. The bonus follows once the account is verified.": "Kanal kredisi verildi. Hesap doğrulanınca bonus eklenir.",
+    "The answer is delayed. Please try again in a minute.": "Yanıt gecikti. Lütfen bir dakika sonra tekrar deneyin.",
+    "Helpful answer": "Yararlı yanıt",
+    "Not helpful": "Yararlı değil",
+    "Thanks for your feedback": "Geri bildiriminiz için teşekkürler",
+    "What should the answer have been?": "Yanıt ne olmalıydı?"
   }
 }

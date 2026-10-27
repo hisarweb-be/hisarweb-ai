@@ -41,27 +41,60 @@ export function assistantLanguage(language: string | undefined): string {
 
 export async function fetchAssistantFaq(lang: string): Promise<AssistantFaq[]> {
   const response = await api.get('/api/hw/assistant/faq', { params: { lang } })
-  return (requireServerSuccess(response.data).data as { faq: AssistantFaq[] }).faq
+  return (requireServerSuccess(response.data).data as { faq: AssistantFaq[] })
+    .faq
 }
 
-export async function askAssistantFaq(
-  question: string,
-  lang: string
+/** A clicked chip: counts the hit; the admin variant answers in Altuner's voice. */
+export async function askAssistantChip(
+  id: string,
+  lang: string,
+  admin: boolean
 ): Promise<AssistantAsk> {
-  const response = await api.post('/api/hw/assistant/ask', { question, lang })
+  const url = admin ? '/api/hw/admin/agent/ask' : '/api/hw/assistant/ask'
+  const response = await api.post(url, { id, lang })
   return requireServerSuccess(response.data).data as AssistantAsk
 }
 
-/** The owner's panel: the same fixed answers, with the Altuner identity. */
-export async function askAssistantFaqAdmin(
-  question: string,
+const MAX_CUSTOMER_TURNS = 12
+
+/** Customers send text only, the last 12 turns. */
+export function customerTurns(
+  messages: AgentTurn[]
+): Pick<AgentTurn, 'role' | 'content'>[] {
+  return messages
+    .slice(-MAX_CUSTOMER_TURNS)
+    .map(({ role, content }) => ({ role, content }))
+}
+
+/** Free typed text from a customer or a visitor goes to the model. */
+export async function askAssistantChat(
+  messages: AgentTurn[],
   lang: string
-): Promise<AssistantAsk> {
-  const response = await api.post('/api/hw/admin/agent/ask', {
-    question,
+): Promise<string> {
+  const response = await api.post('/api/hw/assistant/chat', {
+    messages: customerTurns(messages),
     lang,
   })
-  return requireServerSuccess(response.data).data as AssistantAsk
+  return (requireServerSuccess(response.data).data as { reply: string }).reply
+}
+
+export type AnswerFeedback = {
+  question: string
+  answer: string
+  rating: 1 | -1
+  lang: string
+  correction?: string
+}
+
+export async function sendAnswerFeedback(
+  feedback: AnswerFeedback,
+  admin: boolean
+): Promise<void> {
+  const url = admin
+    ? '/api/hw/admin/agent/feedback'
+    : '/api/hw/assistant/feedback'
+  requireServerSuccess((await api.post(url, feedback)).data)
 }
 
 export type AgentTextFix = { lang: string; shown: string; proposed: string }
@@ -74,8 +107,14 @@ export type AgentAnswer = {
   escalate?: AgentEscalation | null
 }
 
-export async function askAdminAgent(messages: AgentTurn[]): Promise<AgentAnswer> {
-  const response = await api.post('/api/hw/admin/agent/chat', { messages })
+export async function askAdminAgent(
+  messages: AgentTurn[],
+  lang: string
+): Promise<AgentAnswer> {
+  const response = await api.post('/api/hw/admin/agent/chat', {
+    messages,
+    lang,
+  })
   return requireServerSuccess(response.data).data as AgentAnswer
 }
 
