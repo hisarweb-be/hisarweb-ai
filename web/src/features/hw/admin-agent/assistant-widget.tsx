@@ -87,6 +87,12 @@ export function AssistantWidget() {
   const [busy, setBusy] = useState(false)
   const lastId = useRef(0)
   const fileInput = useRef<HTMLInputElement>(null)
+  const bottom = useRef<HTMLDivElement>(null)
+
+  // Like Telegram: the newest message and the typing bubble stay in view.
+  useEffect(() => {
+    bottom.current?.scrollIntoView?.({ block: 'end', behavior: 'smooth' })
+  }, [entries, busy, open])
 
   useEffect(() => {
     if (!open) return
@@ -354,6 +360,24 @@ export function AssistantWidget() {
                 )}
               </div>
             ))}
+            {busy && (
+              <div
+                role='status'
+                className='bg-muted text-muted-foreground mr-8 flex w-fit items-center gap-1 rounded-lg p-3 text-sm'
+              >
+                {t('typing')}
+                <span aria-hidden className='flex gap-0.5'>
+                  {[0, 150, 300].map((delay) => (
+                    <span
+                      key={delay}
+                      className='size-1 animate-bounce rounded-full bg-current'
+                      style={{ animationDelay: `${delay}ms` }}
+                    />
+                  ))}
+                </span>
+              </div>
+            )}
+            <div ref={bottom} />
           </div>
           {pending.length > 0 && (
             <div className='flex flex-wrap gap-2 px-4'>
@@ -426,6 +450,18 @@ export function AssistantWidget() {
             <Textarea
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                // Enter sends, Shift+Enter starts a new line.
+                if (
+                  event.key !== 'Enter' ||
+                  event.shiftKey ||
+                  event.nativeEvent.isComposing
+                )
+                  return
+                event.preventDefault()
+                void send()
+              }}
+              enterKeyHint='send'
               onPaste={(event) => {
                 const files = filesFromClipboard(event.clipboardData)
                 if (isAdmin && files.length > 0) {
