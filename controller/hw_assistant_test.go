@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -217,4 +218,35 @@ func TestHwAssistantFeedbackStoresAndSkipsPersonal(t *testing.T) {
 	assert.Equal(t, "widget", rows[0].Channel)
 	assert.Equal(t, 1, rows[0].Rating)
 	assert.Empty(t, rows[0].Correction, "the public endpoint ignores a correction")
+}
+
+func TestHwAssistantReviewFeedbackSetsVerdictForAdminsOnly(t *testing.T) {
+	engine := hwAssistantTestRouter(t)
+	role := common.RoleAdminUser
+	engine.Use(func(c *gin.Context) { c.Set("role", role) })
+	engine.POST("/review/:id", HwAssistantReviewFeedback)
+	engine.GET("/list", HwAssistantListFeedback)
+	_, err := model.HwAssistantStoreFeedback(model.DB, model.HwAssistantFeedback{Channel: "widget", Question: "how do I get a key", Answer: "Create a token.", Rating: 1, CreatedAt: 1})
+	require.NoError(t, err)
+	rows, err := model.HwAssistantRecentFeedback(model.DB, 1)
+	require.NoError(t, err)
+	id := strconv.Itoa(rows[0].ID)
+	call := func(method, path, body string) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(method, path, strings.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		engine.ServeHTTP(recorder, request)
+		return recorder
+	}
+
+	assert.Contains(t, call(http.MethodGet, "/list?review=open", "").Body.String(), `"how do I get a key"`)
+	assert.Contains(t, call(http.MethodGet, "/list?review=maybe", "").Body.String(), "invalid review")
+	assert.Contains(t, call(http.MethodPost, "/review/"+id, `{"verdict":"maybe"}`).Body.String(), "invalid verdict")
+	assert.Contains(t, call(http.MethodPost, "/review/999", `{"verdict":"approved"}`).Body.String(), "feedback not found")
+	assert.Contains(t, call(http.MethodPost, "/review/"+id, `{"verdict":"approved"}`).Body.String(), `"success":true`)
+	assert.NotContains(t, call(http.MethodGet, "/list?review=open", "").Body.String(), `"how do I get a key"`)
+	assert.Contains(t, call(http.MethodGet, "/list?review=approved", "").Body.String(), `"how do I get a key"`)
+
+	role = common.RoleCommonUser
+	assert.Equal(t, http.StatusForbidden, call(http.MethodPost, "/review/"+id, `{"verdict":"abuse"}`).Code)
 }

@@ -22,6 +22,17 @@ const (
 	HwAssistantFeedbackMaxRecent          = 300
 	HwAssistantFeedbackMaxList            = 200
 	hwAssistantOwnHost                    = "api.hisarweb.be"
+
+	// Review verdicts on customer rows (widget, Telegram), set by the bureau
+	// (Paperclip). Approved rows teach like admin rows; rejected and abuse
+	// rows never do. An empty review means not yet reviewed.
+	HwAssistantReviewApproved = "approved"
+	HwAssistantReviewRejected = "rejected"
+	HwAssistantReviewAbuse    = "abuse"
+	// HwAssistantReviewOpen is the list filter for customer rows without a
+	// verdict.
+	HwAssistantReviewOpen   = "open"
+	hwAssistantAdminChannel = "admin"
 )
 
 type HwAssistantFeedback struct {
@@ -33,6 +44,7 @@ type HwAssistantFeedback struct {
 	Rating     int    `json:"rating"`
 	Correction string `json:"correction" gorm:"type:text"`
 	UserID     int    `json:"user_id" gorm:"index"`
+	Review     string `json:"review" gorm:"size:16;default:'';index"`
 	CreatedAt  int64  `json:"created_at" gorm:"index"`
 }
 
@@ -91,26 +103,55 @@ func HwAssistantStoreFeedback(db *gorm.DB, row HwAssistantFeedback) (bool, error
 
 // HwAssistantRecentFeedback returns the newest rows, one bounded query.
 func HwAssistantRecentFeedback(db *gorm.DB, limit int) ([]HwAssistantFeedback, error) {
-	return HwAssistantListFeedback(db, 0, limit)
+	return HwAssistantListFeedback(db, 0, "", limit)
 }
 
-// HwAssistantRecentChannelFeedback returns the newest rows of one channel,
-// one bounded query.
-func HwAssistantRecentChannelFeedback(db *gorm.DB, channel string, limit int) ([]HwAssistantFeedback, error) {
+// HwAssistantLearnableFeedback returns the newest rows that may teach the
+// assistant: admin rows and customer rows the bureau approved. One bounded
+// query.
+func HwAssistantLearnableFeedback(db *gorm.DB, limit int) ([]HwAssistantFeedback, error) {
 	var rows []HwAssistantFeedback
-	err := db.Where("channel = ?", channel).Order("created_at DESC, id DESC").
-		Limit(min(max(limit, 1), HwAssistantFeedbackMaxRecent)).Find(&rows).Error
+	err := db.Where("channel = ? OR review = ?", hwAssistantAdminChannel, HwAssistantReviewApproved).
+		Order("created_at DESC, id DESC").Limit(min(max(limit, 1), HwAssistantFeedbackMaxRecent)).Find(&rows).Error
 	return rows, err
 }
 
 // HwAssistantListFeedback returns the newest rows, optionally only those with
-// the given rating (1 or -1; 0 means all).
-func HwAssistantListFeedback(db *gorm.DB, rating int, limit int) ([]HwAssistantFeedback, error) {
+// the given rating (1 or -1; 0 means all) and review ("" means all,
+// HwAssistantReviewOpen the customer rows without a verdict, else that
+// verdict).
+func HwAssistantListFeedback(db *gorm.DB, rating int, review string, limit int) ([]HwAssistantFeedback, error) {
 	query := db.Order("created_at DESC, id DESC").Limit(min(max(limit, 1), HwAssistantFeedbackMaxRecent))
 	if rating != 0 {
 		query = query.Where("rating = ?", rating)
 	}
+	switch review {
+	case "":
+	case HwAssistantReviewOpen:
+		query = query.Where("channel <> ? AND (review IS NULL OR review = ?)", hwAssistantAdminChannel, "")
+	default:
+		query = query.Where("review = ?", review)
+	}
 	var rows []HwAssistantFeedback
 	err := query.Find(&rows).Error
 	return rows, err
+}
+
+// HwAssistantReviewFeedback stores the verdict of the bureau on one customer
+// row. It returns gorm.ErrRecordNotFound for an unknown id or an admin row.
+func HwAssistantReviewFeedback(db *gorm.DB, id int, verdict string) error {
+	switch verdict {
+	case HwAssistantReviewApproved, HwAssistantReviewRejected, HwAssistantReviewAbuse:
+	default:
+		return errors.New("invalid verdict")
+	}
+	result := db.Model(&HwAssistantFeedback{}).Where("id = ? AND channel <> ?", id, hwAssistantAdminChannel).
+		Update("review", verdict)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }

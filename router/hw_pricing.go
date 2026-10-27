@@ -38,6 +38,7 @@ func SetHwRouter(apiRouter *gin.RouterGroup) {
 	hwRouter.POST("/assistant/feedback", middleware.HwPublicReadRateLimit(), controller.HwAssistantFeedback)
 	hwRouter.POST("/admin/agent/feedback", middleware.AdminAuth(), controller.HwAdminAgentFeedback)
 	hwRouter.GET("/admin/assistant/feedback", middleware.AdminAuth(), controller.HwAssistantListFeedback)
+	hwRouter.POST("/admin/assistant/feedback/:id/review", middleware.AdminAuth(), controller.HwAssistantReviewFeedback)
 	hwRouter.POST("/admin/agent/chat", middleware.AdminAuth(), controller.HwAdminAgentChat)
 	hwRouter.POST("/admin/agent/ask", middleware.AdminAuth(), controller.HwAdminAgentAskFAQ)
 	hwRouter.GET("/admin/agent/texts", middleware.AdminAuth(), controller.HwAdminAgentListTexts)
