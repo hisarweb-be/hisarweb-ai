@@ -166,7 +166,6 @@ export const FREE_TRIAL_MODELS = [MODEL_HAIKU] as const
  * points at a name the gateway does not serve.
  */
 export const MODEL_CODEX = MODEL_DEFAULT
-export const MODEL_GEMINI = 'gemini-3.8-flash'
 
 /** Models listed in the config files of the programs that need a list. */
 export const LISTED_MODELS: readonly { id: string; name: string }[] = [
