@@ -29,9 +29,10 @@ const admin = vi.hoisted(() => ({ isAdmin: false }))
 const api = vi.hoisted(() => ({
   applyTextOverride: vi.fn(),
   fetchAssistantFaq: vi.fn(),
-  askAssistantFaq: vi.fn(),
-  askAssistantFaqAdmin: vi.fn(),
+  askAssistantChip: vi.fn(),
+  askAssistantChat: vi.fn(),
   askAdminAgent: vi.fn(),
+  sendAnswerFeedback: vi.fn(),
 }))
 
 vi.mock('@/hooks/use-admin', () => ({ useIsAdmin: () => admin.isAdmin }))
@@ -45,9 +46,10 @@ vi.mock('../api', async (original) => ({
   ...(await original<typeof import('../api')>()),
   applyTextOverride: api.applyTextOverride,
   fetchAssistantFaq: api.fetchAssistantFaq,
-  askAssistantFaq: api.askAssistantFaq,
-  askAssistantFaqAdmin: api.askAssistantFaqAdmin,
+  askAssistantChip: api.askAssistantChip,
+  askAssistantChat: api.askAssistantChat,
   askAdminAgent: api.askAdminAgent,
+  sendAnswerFeedback: api.sendAnswerFeedback,
 }))
 
 describe('findTextKeys', () => {
@@ -116,9 +118,11 @@ describe('applyFix', () => {
 describe('AssistantWidget', () => {
   beforeEach(() => {
     api.fetchAssistantFaq.mockReset()
-    api.askAssistantFaq.mockReset()
-    api.askAssistantFaqAdmin.mockReset()
+    api.askAssistantChip.mockReset()
+    api.askAssistantChat.mockReset()
     api.askAdminAgent.mockReset()
+    api.sendAnswerFeedback.mockReset()
+    api.sendAnswerFeedback.mockResolvedValue(undefined)
     api.fetchAssistantFaq.mockResolvedValue([
       { id: 'identity', question: 'Who are you?', answer: 'x' },
     ])
@@ -138,9 +142,20 @@ describe('AssistantWidget', () => {
     expect(screen.getByLabelText('Admin assistant')).toBeTruthy()
   })
 
-  it('answers a fixed question without asking the model', async () => {
+  it('shows the chip answer from the list for a customer and counts the hit', async () => {
+    admin.isAdmin = false
+    api.askAssistantChip.mockResolvedValue({ matched: false })
+    render(<AssistantWidget />)
+    fireEvent.click(screen.getByLabelText('Assistant'))
+    fireEvent.click(await screen.findByText('Who are you?'))
+    expect(await screen.findByText('x')).toBeTruthy()
+    expect(api.askAssistantChip).toHaveBeenCalledWith('identity', 'tr', false)
+    expect(api.askAssistantChat).not.toHaveBeenCalled()
+  })
+
+  it('uses the answer the admin endpoint returns for a chip', async () => {
     admin.isAdmin = true
-    api.askAssistantFaqAdmin.mockResolvedValue({
+    api.askAssistantChip.mockResolvedValue({
       matched: true,
       id: 'identity',
       answer: 'I am Altuner, founder of HisarWeb AI.',
@@ -154,18 +169,85 @@ describe('AssistantWidget', () => {
     expect(api.askAdminAgent).not.toHaveBeenCalled()
   })
 
-  it('gives a customer no model answer for an unknown question', async () => {
+  it('sends typed text from a customer to the model', async () => {
     admin.isAdmin = false
-    api.askAssistantFaq.mockResolvedValue({ matched: false })
+    api.askAssistantChat.mockResolvedValue('Model answer')
     render(<AssistantWidget />)
     fireEvent.click(screen.getByLabelText('Assistant'))
     const box = await screen.findByLabelText('Type your question')
     fireEvent.change(box, { target: { value: 'something odd' } })
     fireEvent.click(screen.getByLabelText('Send'))
-    await waitFor(() =>
-      expect(screen.getByText(/no ready answer/)).toBeTruthy()
-    )
+    expect(await screen.findByText('Model answer')).toBeTruthy()
+    expect(api.askAssistantChat).toHaveBeenCalledOnce()
     expect(api.askAdminAgent).not.toHaveBeenCalled()
+  })
+
+  it('shows a short delayed line instead of an error when the request fails', async () => {
+    admin.isAdmin = false
+    api.askAssistantChat.mockRejectedValue(new Error('boom 502'))
+    render(<AssistantWidget />)
+    fireEvent.click(screen.getByLabelText('Assistant'))
+    const box = await screen.findByLabelText('Type your question')
+    fireEvent.change(box, { target: { value: 'hello' } })
+    fireEvent.click(screen.getByLabelText('Send'))
+    expect(
+      await screen.findByText(
+        'The answer is delayed. Please try again in a minute.'
+      )
+    ).toBeTruthy()
+    expect(screen.queryByText(/boom/)).toBeNull()
+    expect(screen.queryByLabelText('Helpful answer')).toBeNull()
+  })
+
+  it('rates an answer once with the preceding question', async () => {
+    admin.isAdmin = false
+    api.askAssistantChat.mockResolvedValue('Model answer')
+    render(<AssistantWidget />)
+    fireEvent.click(screen.getByLabelText('Assistant'))
+    const box = await screen.findByLabelText('Type your question')
+    fireEvent.change(box, { target: { value: 'my question' } })
+    fireEvent.click(screen.getByLabelText('Send'))
+    fireEvent.click(await screen.findByLabelText('Not helpful'))
+    await waitFor(() =>
+      expect(api.sendAnswerFeedback).toHaveBeenCalledWith(
+        {
+          question: 'my question',
+          answer: 'Model answer',
+          rating: -1,
+          lang: 'tr',
+          correction: undefined,
+        },
+        false
+      )
+    )
+    expect(
+      (screen.getByLabelText('Helpful answer') as HTMLButtonElement).disabled
+    ).toBe(true)
+  })
+
+  it('lets an admin add the right answer to a thumbs down', async () => {
+    admin.isAdmin = true
+    api.askAdminAgent.mockResolvedValue({ reply: 'Model answer' })
+    render(<AssistantWidget />)
+    fireEvent.click(screen.getByLabelText('Admin assistant'))
+    const box = await screen.findByLabelText('What is wrong or unclear?')
+    fireEvent.change(box, { target: { value: 'my question' } })
+    fireEvent.click(screen.getByLabelText('Send'))
+    fireEvent.click(await screen.findByLabelText('Not helpful'))
+    expect(api.sendAnswerFeedback).not.toHaveBeenCalled()
+    fireEvent.change(
+      screen.getByLabelText('What should the answer have been?'),
+      {
+        target: { value: 'Better answer' },
+      }
+    )
+    fireEvent.click(screen.getByText('Save'))
+    await waitFor(() =>
+      expect(api.sendAnswerFeedback).toHaveBeenCalledWith(
+        expect.objectContaining({ rating: -1, correction: 'Better answer' }),
+        true
+      )
+    )
   })
 
   it('adds a pasted screenshot as an attachment for an admin', async () => {
@@ -175,7 +257,10 @@ describe('AssistantWidget', () => {
     const box = await screen.findByLabelText('What is wrong or unclear?')
     const file = new File(['png'], 'shot.png', { type: 'image/png' })
     fireEvent.paste(box, {
-      clipboardData: { items: [{ kind: 'file', type: 'image/png', getAsFile: () => file }], files: [file] },
+      clipboardData: {
+        items: [{ kind: 'file', type: 'image/png', getAsFile: () => file }],
+        files: [file],
+      },
     })
     expect(await screen.findByLabelText('Remove attachment')).toBeTruthy()
   })

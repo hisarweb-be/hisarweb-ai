@@ -77,7 +77,7 @@ func TestHwAdminAgentAskSendsTheInstructionInTheFirstUserMessage(t *testing.T) {
 	assert.Equal(t, "user", request.Messages[0].Role)
 	assert.Contains(t, request.Messages[0].Content, "dit woord is moeilijk")
 	assert.Contains(t, request.Messages[0].Content, "text_fix")
-	assert.Equal(t, hwAdminAgentMaxTokens, request.MaxTokens)
+	assert.Equal(t, hwAssistantMaxTokens, request.MaxTokens)
 }
 
 func TestHwBureauCreateCardPostsAnIssue(t *testing.T) {

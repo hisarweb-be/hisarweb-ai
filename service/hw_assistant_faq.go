@@ -1,10 +1,10 @@
 package service
 
-// The assistant's fixed answers. A question that matches an entry costs no
-// model call: the answer is built from the code (the sold catalog, the
-// discount), never retyped, so it cannot drift from the real offer. The order of
-// the chips follows how often an entry was asked; a new question is only
-// counted, and an entry is added by a developer with a checked answer.
+// The assistant's fixed answers. They answer a clicked chip by id and serve as
+// the fallback when the model does not answer (hw_assistant_knowledge.go);
+// free text always goes to the model. The answer is built from the code (the
+// sold catalog, the discount), never retyped, so it cannot drift from the real
+// offer. The order of the chips follows how often an entry was asked.
 
 import (
 	"fmt"
@@ -20,11 +20,13 @@ import (
 // HwAssistantLanguages are the languages the fixed answers exist in.
 var HwAssistantLanguages = []string{"tr", "en", "nl"}
 
-// HwAssistantIdentity is the answer to "who are you". It never names a model.
+// HwAssistantIdentity is the answer to "who are you" for customers: the
+// digital assistant of HisarWeb, writing in Altuner's name. It never names a
+// model or a supplier and never claims to be a person.
 var HwAssistantIdentity = map[string]string{
-	"tr": "Ben HisarWeb AI'nin sohbet çalışanıyım. Claude API ile çalışıyorum ve api.hisarweb.be hakkındaki sorularınızı yanıtlıyorum. Hangi konuda yardımcı olabilirim?",
-	"en": "I am the chat employee of HisarWeb AI. I run on the Claude API and answer questions about api.hisarweb.be. What can I help you with?",
-	"nl": "Ik ben de chatmedewerker van HisarWeb AI. Ik draai op de Claude API en beantwoord vragen over api.hisarweb.be. Waarmee kan ik je helpen?",
+	"tr": "Ben HisarWeb'in dijital asistanıyım ve Altuner adına yazıyorum. Altuner yazışmaları okuyor, ona destek üzerinden de ulaşabilirsiniz. api.hisarweb.be ile ilgili size nasıl yardımcı olabilirim?",
+	"en": "I am HisarWeb's digital assistant and I write on behalf of Altuner. Altuner reads along, and you can reach him through support as well. How can I help you with api.hisarweb.be?",
+	"nl": "Ik ben de digitale assistent van HisarWeb en ik schrijf namens Altuner. Altuner leest mee en je bereikt hem ook via support. Waarmee kan ik je helpen rond api.hisarweb.be?",
 }
 
 // HwAssistantFAQ is one fixed question with its keywords and answers. The
@@ -142,11 +144,14 @@ var hwAssistantFAQs = []HwAssistantFAQ{
 			"en": {"codex", "chatgpt cli", "codex cli"},
 			"nl": {"codex", "chatgpt cli", "codex cli"},
 		},
+		// Codex talks only the responses wire, so it is configured as a
+		// provider in config.toml, not through OPENAI_BASE_URL.
 		Answer: func(lang string) string {
+			config := fmt.Sprintf("model = %q\nmodel_provider = \"hisarweb\"\n[model_providers.hisarweb]\nname = \"HisarWeb\"\nbase_url = \"https://api.hisarweb.be/v1\"\nenv_key = \"HISARWEB_API_KEY\"\n", hwAssistantCodexModel())
 			return hwAssistantPick(lang,
-				"Üç adım: 1) Codex CLI'yı resmî sayfasından kur; tek komut yeter. 2) İki ortam değişkeni gir: OPENAI_BASE_URL=https://api.hisarweb.be/v1 ve OPENAI_API_KEY=panelden aldığın API anahtarı. 3) Terminalde codex yaz ve listeden bir model seç. Hangi adımda kaldın?",
-				"Three steps: 1) install Codex CLI from its official page, one command is enough. 2) set two environment variables: OPENAI_BASE_URL=https://api.hisarweb.be/v1 and OPENAI_API_KEY=your API key from the panel. 3) type codex in the terminal and pick a model from our list. Which step are you on?",
-				"Drie stappen: 1) installeer Codex CLI vanaf de officiële pagina, één commando volstaat. 2) zet twee omgevingsvariabelen: OPENAI_BASE_URL=https://api.hisarweb.be/v1 en OPENAI_API_KEY=je API-sleutel uit het paneel. 3) typ codex in de terminal en kies een model uit onze lijst. Bij welke stap zit je?")
+				"Üç adım: 1) Codex CLI'yı kur: npm install -g @openai/codex\n2) ~/.codex/config.toml dosyasına şunu yaz:\n"+config+"3) Panelden aldığın API anahtarını HISARWEB_API_KEY ortam değişkenine koy ve terminalde codex yaz. Hangi adımda kaldın?",
+				"Three steps: 1) install Codex CLI: npm install -g @openai/codex\n2) write this in ~/.codex/config.toml:\n"+config+"3) put your API key from the panel in the environment variable HISARWEB_API_KEY and type codex in the terminal. Which step are you on?",
+				"Drie stappen: 1) installeer Codex CLI: npm install -g @openai/codex\n2) zet dit in ~/.codex/config.toml:\n"+config+"3) zet je API-sleutel uit het paneel in de omgevingsvariabele HISARWEB_API_KEY en typ codex in de terminal. Bij welke stap zit je?")
 		},
 	},
 	{
@@ -297,14 +302,18 @@ func HwAssistantAnswerFor(question, lang string) (id, answer string, ok bool) {
 	return entry.ID, entry.Answer(matched), true
 }
 
-// HwAssistantAnswerForAdmin serves the owner's panel: the same fixed answers,
-// except that the identity answer speaks as Altuner, so a "who are you" in
-// the panel never breaks the owner's persona. The public widget keeps the
-// honest chat-employee identity.
-func HwAssistantAnswerForAdmin(question, lang string) (id, answer string, ok bool) {
-	id, answer, ok = HwAssistantAnswerFor(question, lang)
-	if ok && id == "identity" {
-		answer = HwAltunerIdentity[hwAssistantLang(lang)]
+// HwAssistantAnswerByID answers a clicked chip by its FAQ id, without any text
+// matching. In the admin panel the identity entry speaks as Altuner.
+func HwAssistantAnswerByID(id, lang string, admin bool) (answer string, ok bool) {
+	lang = hwAssistantLang(lang)
+	for _, entry := range hwAssistantFAQs {
+		if entry.ID != id {
+			continue
+		}
+		if admin && entry.ID == "identity" {
+			return HwAltunerIdentity[lang], true
+		}
+		return entry.Answer(lang), true
 	}
-	return id, answer, ok
+	return "", false
 }

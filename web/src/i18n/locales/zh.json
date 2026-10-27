@@ -7508,12 +7508,16 @@
     "This file is too large.": "This file is too large.",
     "Only images and text files can be attached.": "Only images and text files can be attached.",
     "Attach a file": "Attach a file",
-    "I have no ready answer for this yet. Pick one of the questions above or ask support. Which one fits?": "I have no ready answer for this yet. Pick one of the questions above or ask support. Which one fits?",
     "Describe the video you want in your own words.": "Describe the video you want in your own words.",
     "How often requests to this model worked in the last 24 hours. Each bar is one hour; green means everything worked.": "How often requests to this model worked in the last 24 hours. Each bar is one hour; green means everything worked.",
     "Copy this address. Some tools call it the base URL or the endpoint.": "Copy this address. Some tools call it the base URL or the endpoint.",
     "Only needed if you write code yourself. Tools like Cursor, Cline and Claude Code just need the three steps above.": "Only needed if you write code yourself. Tools like Cursor, Cline and Claude Code just need the three steps above.",
     "In the examples, <code>YOUR_API_KEY</code> stands for your own API key from step 1.": "In the examples, <code>YOUR_API_KEY</code> stands for your own API key from step 1.",
-    "The page could not be loaded. Please try again.": "The page could not be loaded. Please try again."
+    "The page could not be loaded. Please try again.": "The page could not be loaded. Please try again.",
+    "The answer is delayed. Please try again in a minute.": "The answer is delayed. Please try again in a minute.",
+    "Helpful answer": "Helpful answer",
+    "Not helpful": "Not helpful",
+    "Thanks for your feedback": "Thanks for your feedback",
+    "What should the answer have been?": "What should the answer have been?"
   }
 }
