@@ -491,3 +491,51 @@ func TestHwQualityRunOptionsFromEnvTrimsAndLeavesMissingValuesEmpty(t *testing.T
 	assert.Nil(t, options.Client)
 	assert.Nil(t, options.NowFunc)
 }
+
+// The probe translation is where a refusal becomes "no evidence": 429, 401 and
+// 403 are the route refusing us (quota exhausted, key rejected), while a 5xx,
+// an empty answer, a timeout or a network error say the model itself did not
+// answer. Getting this wrong turns an exhausted quota into a false outage of
+// the whole offer (HwPurgeFalseIdleOutages exists for that alarm) or hides a
+// real 503.
+func TestHwToStatusProbeCallsAQuotaRefusalNoEvidence(t *testing.T) {
+	cases := []struct {
+		name    string
+		status  int
+		body    string
+		network bool
+		want    model.HwStatusProbeOutcome
+	}{
+		{name: "answered", status: http.StatusOK, body: `{"choices":[{"message":{"role":"assistant","content":"pong"}}]}`, want: model.HwStatusProbeAnswered},
+		{name: "quota exhausted", status: http.StatusTooManyRequests, body: `{"error":"rate limited"}`, want: model.HwStatusProbeUnavailable},
+		{name: "key rejected", status: http.StatusUnauthorized, body: `{"error":"bad key"}`, want: model.HwStatusProbeUnavailable},
+		{name: "key forbidden", status: http.StatusForbidden, body: `{"error":"forbidden"}`, want: model.HwStatusProbeUnavailable},
+		{name: "upstream broken", status: http.StatusInternalServerError, body: `{"error":"boom"}`, want: model.HwStatusProbeNoAnswer},
+		{name: "upstream unavailable", status: http.StatusServiceUnavailable, body: `{"error":"down"}`, want: model.HwStatusProbeNoAnswer},
+		{name: "no answer in the body", status: http.StatusOK, body: `{"choices":[]}`, want: model.HwStatusProbeNoAnswer},
+		{name: "network error", network: true, want: model.HwStatusProbeNoAnswer},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tc.network {
+					// A hijacked connection closed without an answer is a
+					// network error on the client side.
+					conn, _, err := w.(http.Hijacker).Hijack()
+					require.NoError(t, err)
+					conn.Close()
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			t.Cleanup(server.Close)
+
+			outcome := hwToStatusProbe(server.Client(), server.URL, "hw-test-key-not-a-real-secret")(
+				context.Background(), "claude-sonnet-5-5",
+			)
+			assert.Equal(t, tc.want, outcome)
+		})
+	}
+}

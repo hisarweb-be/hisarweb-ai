@@ -9,6 +9,8 @@
 package service
 
 import (
+	"context"
+	"net/http"
 	"sync"
 	"time"
 
@@ -162,6 +164,12 @@ func StartHwStatusJob() {
 		if !common.IsMasterNode {
 			return
 		}
+		if probe := hwStatusProbeFromEnv(); probe != nil {
+			model.SetHwStatusProbe(probe, hwStatusProbeTokenIdFromEnv())
+			common.SysLog(common.LogText("status measurement probe installed: a quiet minute is decided by a mini call"))
+		} else {
+			common.SysLog(common.LogText("status measurement probe not configured: a quiet minute is decided by the route"))
+		}
 		go func() {
 			common.SysLog(common.LogText("status measurement job started: interval=%s", hwStatusJobInterval))
 			if removed, err := model.HwPurgeFalseIdleOutages(); err != nil {
@@ -186,6 +194,63 @@ func StartHwStatusJob() {
 			}
 		}()
 	})
+}
+
+// hwStatusProbeFromEnv builds the mini call that decides a quiet minute, from
+// the measurement configuration the quality run already uses
+// (HW_QUALITY_BASE_URL and HW_QUALITY_API_KEY). It returns nil when that
+// configuration is missing, so an environment without a key keeps the route
+// check instead of reporting a false outage.
+func hwStatusProbeFromEnv() func(ctx context.Context, modelName string) model.HwStatusProbeOutcome {
+	options := HwQualityRunOptionsFromEnv()
+	if options.BaseURL == "" || options.APIKey == "" {
+		return nil
+	}
+	return hwToStatusProbe(&http.Client{}, options.BaseURL, options.APIKey)
+}
+
+// hwToStatusProbe is the translation from a route answer to a probe outcome,
+// kept apart from the environment so a test can pin it. Only a 200 is an
+// answer; a quota or key refusal (429, 401, 403) is no evidence about the
+// model, and everything else (a 5xx, an empty body, a timeout, a network
+// error) means the model itself did not answer.
+func hwToStatusProbe(client *http.Client, baseURL string, apiKey string) func(ctx context.Context, modelName string) model.HwStatusProbeOutcome {
+	return func(ctx context.Context, modelName string) model.HwStatusProbeOutcome {
+		_, _, err := hwCallChat(ctx, client, baseURL, apiKey, hwChatRequest{
+			Model:     modelName,
+			Messages:  []hwChatMessage{{Role: "user", Content: "ping"}},
+			MaxTokens: 1,
+		})
+		switch {
+		case err == nil:
+			return model.HwStatusProbeAnswered
+		case hwChatStatusRefused(err):
+			// A quota or key refusal is no evidence about the model.
+			return model.HwStatusProbeUnavailable
+		default:
+			return model.HwStatusProbeNoAnswer
+		}
+	}
+}
+
+// hwStatusProbeTokenIdFromEnv looks up the token the mini call calls with, so
+// the measurement can leave the probe's own rows out of the customer count.
+// Without that id a failed probe would count as a customer failure. An unknown
+// token yields 0, which excludes nothing: a missing id costs an outage signal,
+// never a false one. Only the group and whether the token was found are logged,
+// never the key.
+func hwStatusProbeTokenIdFromEnv() int {
+	options := HwQualityRunOptionsFromEnv()
+	if options.APIKey == "" {
+		return 0
+	}
+	token, err := model.GetTokenByKey(options.APIKey, true)
+	if err != nil || token == nil || token.Id <= 0 {
+		common.SysLog(common.LogText("status measurement probe token not found: probe traffic stays in the count"))
+		return 0
+	}
+	common.SysLog(common.LogText("status measurement probe token resolved: group=%s found=true id=%d", token.Group, token.Id))
+	return token.Id
 }
 
 // runHwStatusOnceSafely is one measurement pass. A panic is logged and ends the
