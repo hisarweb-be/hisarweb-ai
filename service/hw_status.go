@@ -206,9 +206,17 @@ func hwStatusProbeFromEnv() func(ctx context.Context, modelName string) model.Hw
 	if options.BaseURL == "" || options.APIKey == "" {
 		return nil
 	}
-	client := &http.Client{}
+	return hwToStatusProbe(&http.Client{}, options.BaseURL, options.APIKey)
+}
+
+// hwToStatusProbe is the translation from a route answer to a probe outcome,
+// kept apart from the environment so a test can pin it. Only a 200 is an
+// answer; a quota or key refusal (429, 401, 403) is no evidence about the
+// model, and everything else (a 5xx, an empty body, a timeout, a network
+// error) means the model itself did not answer.
+func hwToStatusProbe(client *http.Client, baseURL string, apiKey string) func(ctx context.Context, modelName string) model.HwStatusProbeOutcome {
 	return func(ctx context.Context, modelName string) model.HwStatusProbeOutcome {
-		_, _, err := hwCallChat(ctx, client, options.BaseURL, options.APIKey, hwChatRequest{
+		_, _, err := hwCallChat(ctx, client, baseURL, apiKey, hwChatRequest{
 			Model:     modelName,
 			Messages:  []hwChatMessage{{Role: "user", Content: "ping"}},
 			MaxTokens: 1,
