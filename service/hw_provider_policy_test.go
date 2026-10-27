@@ -124,7 +124,7 @@ func TestHwRouteHasNextAgreesWithNext(t *testing.T) {
 				userGroup:   HwPaidGroup,
 				model:       "claude-sonnet-4-5",
 				family:      HwModelFamily("claude-sonnet-4-5"),
-				openRouter:  testCase.openRouter,
+				alternates:  testCase.openRouter,
 				tried:       map[int]bool{testCase.lastChannel.Id: true},
 				outage:      true,
 				lastChannel: testCase.lastChannel,
@@ -180,7 +180,7 @@ func hwPolicyRoute(lumia, openRouter []*model.Channel) *HwRouteState {
 		model:      "claude-sonnet-4-5",
 		family:     HwModelFamily("claude-sonnet-4-5"),
 		lumia:      lumia,
-		openRouter: openRouter,
+		alternates: openRouter,
 		tried:      map[int]bool{},
 	}
 }
@@ -592,7 +592,7 @@ func TestHwStartRouteBuildsTheRouteFromTaggedChannels(t *testing.T) {
 		assert.Equal(t, modelName, state.model)
 		assert.Equal(t, HwModelFamily(modelName), state.family)
 		assert.Equal(t, []int{3102}, hwRouteIDs(state.lumia), "untagged, foreign-family and plugin-typed channels are left out")
-		assert.Equal(t, []int{3103}, hwRouteIDs(state.openRouter))
+		assert.Equal(t, []int{3103}, hwRouteIDs(state.alternates))
 		assert.Equal(t, 1, state.blockedByFamily)
 	})
 
@@ -616,7 +616,7 @@ func TestHwStartRouteBuildsTheRouteFromTaggedChannels(t *testing.T) {
 		common.SetContextKey(c, constant.ContextKeyUserGroup, "free")
 		state := hwStartRoute(c, "free", modelName, nil)
 		require.NotNil(t, state, "a tagged channel still puts the route in charge")
-		assert.Empty(t, state.openRouter)
+		assert.Empty(t, state.alternates)
 		assert.Empty(t, state.lumia)
 		assert.Nil(t, state.next(), "nothing is left to try, so the caller ends in service-busy")
 	})

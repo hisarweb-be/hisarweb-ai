@@ -4,12 +4,17 @@ import "strings"
 
 // HwProviderTraceTokens identify a supplier or proxy trace in a header name.
 // Matching is case-insensitive.
-var HwProviderTraceTokens = []string{"lumia", "openrouter", "x-or-", "litellm"}
+var HwProviderTraceTokens = []string{"lumia", "openrouter", "x-or-", "litellm", "portix", "kie.ai", "kieai"}
 
 // HwProviderTextTokens are the traces scanned in body text, header values and
 // log text. They omit "x-or-": that token is a header-name pattern, and
 // applying it to prose would rewrite ordinary words such as "box-or-".
-var HwProviderTextTokens = []string{"lumia", "openrouter", "litellm"}
+var HwProviderTextTokens = []string{"lumia", "openrouter", "litellm", "portix", "kie.ai", "kieai"}
+
+// HwProviderWordTokens are supplier names too short to match as a substring
+// ("cookie", "Kiel"). They count as a trace only as a whole word: the
+// characters on both sides must not be a letter or a digit.
+var HwProviderWordTokens = []string{"kie"}
 
 // HwProviderPlaceholder is the neutral word that replaces a supplier trace.
 const HwProviderPlaceholder = "provider"
@@ -33,7 +38,38 @@ func hwHasProviderTrace(text string, tokens []string) bool {
 			return true
 		}
 	}
+	data := []byte(lower)
+	for index := range data {
+		if hwWordTokenAt(data, index) != "" {
+			return true
+		}
+	}
 	return false
+}
+
+// hwWordTokenAt returns the whole-word supplier name that starts at start, or
+// an empty string when none does.
+func hwWordTokenAt(data []byte, start int) string {
+	for _, token := range HwProviderWordTokens {
+		if !hwEqualFoldAt(data, start, token) {
+			continue
+		}
+		end := start + len(token)
+		if start > 0 && hwIsWordByte(data[start-1]) {
+			continue
+		}
+		if end < len(data) && hwIsWordByte(data[end]) {
+			continue
+		}
+		return token
+	}
+	return ""
+}
+
+// hwIsWordByte reports whether b continues a word. Bytes of multi-byte
+// characters count as word bytes, so "kieł" is not mistaken for "kie".
+func hwIsWordByte(b byte) bool {
+	return b >= 0x80 || b >= '0' && b <= '9' || b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z'
 }
 
 // HwReplaceProviderWords rewrites every supplier trace in a header value to the
@@ -67,6 +103,11 @@ func hwReplaceProviderWords(text string, tokens []string) string {
 			}
 		}
 		if matched {
+			continue
+		}
+		if word := hwWordTokenAt(data, index); word != "" {
+			out = append(out, HwProviderPlaceholder...)
+			index += len(word)
 			continue
 		}
 		out = append(out, data[index])
