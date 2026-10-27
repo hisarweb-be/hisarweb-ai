@@ -37,11 +37,12 @@ type HwAssistantFeedback struct {
 }
 
 var (
-	hwAssistantFeedbackPersonalPattern = regexp.MustCompile(`@|\d{6,}`)
+	hwAssistantFeedbackPersonalPattern = regexp.MustCompile(`@|\d{6,}|(?i)sk-[a-z0-9]|[A-Za-z0-9]{32,}`)
 	hwAssistantFeedbackLinkPattern     = regexp.MustCompile(`(?i)https?://[^\s/?#]*`)
 )
 
-// hwAssistantFeedbackLooksPersonal reports an address, a long number or a
+// hwAssistantFeedbackLooksPersonal reports an address, a long number, a
+// key-like string (sk-..., or 32+ letters and digits in one run) or a
 // link to anything but our own API host. A bare mention of the API host is
 // fine.
 func hwAssistantFeedbackLooksPersonal(text string) bool {
@@ -69,8 +70,8 @@ func hwAssistantTruncateRunes(text string, limit int) string {
 }
 
 // HwAssistantStoreFeedback saves row after bounding its text. It returns
-// stored=false without error when the question or the correction looks
-// personal.
+// stored=false without error when the question, the answer or the
+// correction looks personal.
 func HwAssistantStoreFeedback(db *gorm.DB, row HwAssistantFeedback) (bool, error) {
 	row.Question = hwAssistantTruncateRunes(row.Question, HwAssistantFeedbackMaxQuestionRunes)
 	row.Answer = hwAssistantTruncateRunes(row.Answer, HwAssistantFeedbackMaxAnswerRunes)
@@ -78,7 +79,8 @@ func HwAssistantStoreFeedback(db *gorm.DB, row HwAssistantFeedback) (bool, error
 	if row.Question == "" {
 		return false, errors.New("empty question")
 	}
-	if hwAssistantFeedbackLooksPersonal(row.Question) || hwAssistantFeedbackLooksPersonal(row.Correction) {
+	if hwAssistantFeedbackLooksPersonal(row.Question) || hwAssistantFeedbackLooksPersonal(row.Answer) ||
+		hwAssistantFeedbackLooksPersonal(row.Correction) {
 		return false, nil
 	}
 	if err := db.Create(&row).Error; err != nil {
@@ -90,6 +92,15 @@ func HwAssistantStoreFeedback(db *gorm.DB, row HwAssistantFeedback) (bool, error
 // HwAssistantRecentFeedback returns the newest rows, one bounded query.
 func HwAssistantRecentFeedback(db *gorm.DB, limit int) ([]HwAssistantFeedback, error) {
 	return HwAssistantListFeedback(db, 0, limit)
+}
+
+// HwAssistantRecentChannelFeedback returns the newest rows of one channel,
+// one bounded query.
+func HwAssistantRecentChannelFeedback(db *gorm.DB, channel string, limit int) ([]HwAssistantFeedback, error) {
+	var rows []HwAssistantFeedback
+	err := db.Where("channel = ?", channel).Order("created_at DESC, id DESC").
+		Limit(min(max(limit, 1), HwAssistantFeedbackMaxRecent)).Find(&rows).Error
+	return rows, err
 }
 
 // HwAssistantListFeedback returns the newest rows, optionally only those with

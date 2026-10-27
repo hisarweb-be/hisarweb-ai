@@ -9,6 +9,7 @@ import (
 	"errors"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -22,6 +23,8 @@ const (
 	hwAssistantLearnedRejectedHeading    = "Answers that were rated wrong, do not repeat them:"
 	hwAssistantLearnedMinSharedWords     = 2
 	hwAssistantLearnedShortQuestionWords = 3
+	// hwAssistantFeedbackDayLimitAll bounds the stored customer thumbs per day.
+	hwAssistantFeedbackDayLimitAll = 2000
 )
 
 // hwAssistantStopWords are short everyday words (tr, nl, en) that say nothing
@@ -113,13 +116,16 @@ func HwAssistantLearnedSection(question string, rows []model.HwAssistantFeedback
 	return hwAssistantClipRunes(strings.Join(parts, "\n\n"), hwAssistantLearnedMaxSectionRunes)
 }
 
-// HwAssistantLearnedFor loads the recent feedback and returns the section for
-// question; "" on any error or without a database.
+// HwAssistantLearnedFor loads the recent feedback of the owner's panel and
+// returns the section for question; "" on any error or without a database.
+// Only admin rows teach: a widget or Telegram thumb is anonymous and carries
+// the question and answer the client sent, so one fake thumb up would steer
+// what every customer is told. Those rows stay for the owner to review.
 func HwAssistantLearnedFor(question string) string {
 	if model.DB == nil {
 		return ""
 	}
-	rows, err := model.HwAssistantRecentFeedback(model.DB, model.HwAssistantFeedbackMaxRecent)
+	rows, err := model.HwAssistantRecentChannelFeedback(model.DB, HwAssistantChannelAdmin, model.HwAssistantFeedbackMaxRecent)
 	if err != nil {
 		return ""
 	}
@@ -137,6 +143,16 @@ func HwAssistantRecordFeedback(channel, lang, question, answer string, rating, u
 	}
 	if model.DB == nil {
 		return false, errors.New("no database")
+	}
+	if channel != HwAssistantChannelAdmin {
+		// Customer thumbs are stored for review only; the day cap keeps an
+		// anonymous flood from filling the table. A counter that cannot be
+		// written stores nothing.
+		now := common.GetTimestamp()
+		count, err := model.HwAssistantBumpCounter(model.DB, "hw:fb:all:"+time.Unix(now, 0).UTC().Format("2006-01-02"), now)
+		if err != nil || count > hwAssistantFeedbackDayLimitAll {
+			return false, nil
+		}
 	}
 	return model.HwAssistantStoreFeedback(model.DB, model.HwAssistantFeedback{
 		Channel:    hwAssistantClipRunes(channel, 16),

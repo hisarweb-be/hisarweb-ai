@@ -27,6 +27,8 @@ const (
 	// hwTelegramChatDayLimit is how many model answers one linked customer may
 	// get per day.
 	hwTelegramChatDayLimit = 20
+	// hwTelegramChatDayLimitAll bounds the model answers of all chats per day.
+	hwTelegramChatDayLimitAll = 3000
 	// hwTelegramChatGuestDayLimit is how many model answers a chat that is
 	// linked to no account may get per day.
 	hwTelegramChatGuestDayLimit = 10
@@ -80,12 +82,20 @@ func hwTelegramChatReply(ctx context.Context, message *hwTelegramMessage, budget
 	// Only a call that can reach the gateway costs money, so only that one
 	// spends the budget; without a gateway HwAssistantChat answers from the code.
 	if config.BaseURL != "" && config.APIKey != "" {
-		count, err := model.HwAssistantBumpCounter(model.DB, "hw:tgchat:"+budgetKey+":"+now.Format("2006-01-02"), now.Unix())
+		day := now.UTC().Format("2006-01-02")
+		count, err := model.HwAssistantBumpCounter(model.DB, "hw:tgchat:"+budgetKey+":"+day, now.Unix())
+		if err == nil && count <= dayLimit {
+			// The bot answers chats without an account too, so one bound
+			// over all chats caps the cost of a flood of new chats.
+			count, err = model.HwAssistantBumpCounter(model.DB, "hw:tgchat:all:"+day, now.Unix())
+			dayLimit = hwTelegramChatDayLimitAll
+		}
 		if err != nil {
-			// A counter that cannot be written may not stop the answer; the day
-			// limit is a cost guard, not a promise.
+			// A counter that cannot be written fails closed, like the widget:
+			// no model call without a budget.
 			common.SysError(common.LogText("telegram chat could not read its model answer budget"))
-		} else if count > dayLimit {
+		}
+		if err != nil || count > dayLimit {
 			// Over the budget the fixed questions still answer, as the text says.
 			if entry, matched := HwAssistantMatch(question, lang); entry != nil {
 				hwAnswerTelegramChat(ctx, chatID, entry.Answer(matched), "")

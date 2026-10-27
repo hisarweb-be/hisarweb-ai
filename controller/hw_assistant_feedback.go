@@ -7,6 +7,7 @@ package controller
 import (
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
@@ -53,8 +54,18 @@ func hwAssistantStoreFeedbackRequest(c *gin.Context, channel string, userID int,
 	common.ApiSuccess(c, gin.H{"stored": stored})
 }
 
-// HwAssistantFeedback stores a thumb from the public widget.
+// hwAssistantFeedbackDayLimit bounds the thumbs of one address per day.
+const hwAssistantFeedbackDayLimit = 50
+
+// HwAssistantFeedback stores a thumb from the public widget. Over the day
+// limit of the address the thumb is accepted but not stored.
 func HwAssistantFeedback(c *gin.Context) {
+	now := common.GetTimestamp()
+	key := "hw:fb:ip:" + c.ClientIP() + ":" + time.Unix(now, 0).UTC().Format("2006-01-02")
+	if count, err := model.HwAssistantBumpCounter(model.DB, key, now); err != nil || count > hwAssistantFeedbackDayLimit {
+		common.ApiSuccess(c, gin.H{"stored": false})
+		return
+	}
 	hwAssistantStoreFeedbackRequest(c, "widget", c.GetInt("id"), false)
 }
 
