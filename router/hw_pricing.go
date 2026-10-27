@@ -33,6 +33,7 @@ func SetHwRouter(apiRouter *gin.RouterGroup) {
 	// The assistant: fixed answers without a model call, public and rate limited.
 	hwRouter.GET("/assistant/faq", middleware.HwPublicReadRateLimit(), controller.HwAssistantFAQ)
 	hwRouter.POST("/assistant/ask", middleware.HwPublicReadRateLimit(), controller.HwAssistantAsk)
+	hwRouter.POST("/assistant/chat", middleware.HwPublicReadRateLimit(), controller.HwAssistantChat)
 	hwRouter.GET("/admin/assistant/questions", middleware.AdminAuth(), controller.HwAssistantOpenQuestions)
 	hwRouter.POST("/assistant/feedback", middleware.HwPublicReadRateLimit(), controller.HwAssistantFeedback)
 	hwRouter.POST("/admin/agent/feedback", middleware.AdminAuth(), controller.HwAdminAgentFeedback)

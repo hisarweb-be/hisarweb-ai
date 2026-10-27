@@ -303,3 +303,12 @@ func HwAssistantFallback(channel, lang, question string) string {
 		"My answer is running a little late. Could you try again in a minute?",
 		"Mijn antwoord loopt wat vertraging op. Probeer je het over een minuutje opnieuw?")
 }
+
+// HwAssistantLimitedReply is the polite answer when the day budget of model
+// answers is used up, in the language of the question.
+func HwAssistantLimitedReply(lang, question string) string {
+	return hwAssistantPick(hwAssistantReplyLang(question, lang),
+		"Bugün için yazılı cevap sınırına ulaştınız. Hızlı sorular aşağıda duruyor, destek ekibimize de her zaman yazabilirsiniz. Yarın tekrar sormak ister misiniz?",
+		"You have reached today's limit for written answers. The quick questions below still work, and support is always there for you. Would you like to ask again tomorrow?",
+		"Je hebt de limiet van geschreven antwoorden voor vandaag bereikt. De snelle vragen hieronder werken nog en support helpt je altijd verder. Vraag je het morgen opnieuw?")
+}

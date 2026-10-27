@@ -69,7 +69,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/hw/admin/reserve": accessTokenSessionRule,
 	// router/hw_pricing.go: the admin assistant (chat, text fixes, escalation card)
 	"POST /api/hw/admin/agent/chat":             accessTokenSessionRule,
-"POST /api/hw/admin/agent/ask":              accessTokenSessionRule,
+	"POST /api/hw/admin/agent/ask":              accessTokenSessionRule,
 	"GET /api/hw/admin/agent/texts":             accessTokenSessionRule,
 	"POST /api/hw/admin/agent/texts":            accessTokenSessionRule,
 	"POST /api/hw/admin/agent/texts/revert":     accessTokenSessionRule,
@@ -79,6 +79,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	// router/hw_pricing.go: the assistant on every page (fixed FAQ answers, hit counters)
 	"GET /api/hw/assistant/faq":             accessTokenAnyRule,
 	"POST /api/hw/assistant/ask":            accessTokenAnyRule,
+	"POST /api/hw/assistant/chat":           accessTokenAnyRule,
 	"GET /api/hw/admin/assistant/questions": accessTokenSessionRule,
 	"POST /api/hw/assistant/feedback":       accessTokenAnyRule,
 	"POST /api/hw/admin/agent/feedback":     accessTokenSessionRule,

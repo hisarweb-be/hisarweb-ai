@@ -300,7 +300,8 @@ func TestHwAdminAgentHandlersRefuseNonAdmins(t *testing.T) {
 }
 
 // TestHwAdminAgentChat proves the chat turn checks the conversation before it
-// pays for a model call and reports a failing gateway as a failure. The
+// pays for a model call and answers a failing gateway with the fallback, never
+// with the error text. The
 // cleaning of the turns belongs to the service, which validates them again.
 func TestHwAdminAgentChat(t *testing.T) {
 	_, admin := hwAdminTestSetup(t)
@@ -342,12 +343,20 @@ func TestHwAdminAgentChat(t *testing.T) {
 		require.Len(t, seen, 1)
 		assert.Equal(t, "user", seen[0].Role)
 	})
-	t.Run("a failing gateway is reported as a failure", func(t *testing.T) {
-		failure = errors.New("gateway down")
+	t.Run("a failing gateway is answered with the fallback", func(t *testing.T) {
+		failure = errors.New("customer route returned status 403")
 		defer func() { failure = nil }()
-		reply := chat(`{"messages":[{"role":"user","content":"hello"}]}`)
-		assert.False(t, reply.Success)
-		assert.Equal(t, "gateway down", reply.Message)
+		recorder := hwAdminAgentCall(HwAdminAgentChat, common.RoleAdminUser, admin.Id, `{"lang":"nl","messages":[{"role":"user","content":"Waarom faalt de betaling?"}]}`)
+		var reply struct {
+			Success bool                       `json:"success"`
+			Data    service.HwAdminAgentAnswer `json:"data"`
+		}
+		require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &reply), recorder.Body.String())
+		assert.True(t, reply.Success)
+		assert.NotEmpty(t, reply.Data.Reply)
+		assert.NotContains(t, strings.ToLower(reply.Data.Reply), "status")
+		assert.NotContains(t, strings.ToLower(reply.Data.Reply), "failed")
+		assert.NotContains(t, recorder.Body.String(), "403")
 	})
 }
 

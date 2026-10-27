@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -34,42 +33,20 @@ func hwRequireAdmin(c *gin.Context) bool {
 
 type hwAdminAgentChatRequest struct {
 	Messages []service.HwAdminAgentTurn `json:"messages"`
+	Lang     string                     `json:"lang"`
 }
 
-type hwAdminAgentAskRequest struct {
-	Question string `json:"question"`
-	Lang     string `json:"lang"`
-}
-
-// HwAdminAgentAskFAQ answers from the fixed list, in the owner's panel voice:
-// the identity entry speaks as Altuner there, where the public widget shows
-// the honest chat-employee line.
+// HwAdminAgentAskFAQ answers a clicked chip by its id in the owner's panel
+// voice: the identity entry speaks as Altuner there.
 func HwAdminAgentAskFAQ(c *gin.Context) {
 	if !hwRequireAdmin(c) {
 		return
 	}
-	var request hwAdminAgentAskRequest
-	if err := common.DecodeJson(c.Request.Body, &request); err != nil {
-		common.ApiErrorMsg(c, "invalid request")
-		return
-	}
-	question := strings.TrimSpace(request.Question)
-	if question == "" || utf8.RuneCountInString(question) > hwAssistantMaxQuestionRunes {
-		common.ApiErrorMsg(c, "invalid question")
-		return
-	}
-	now := common.GetTimestamp()
-	id, answer, ok := service.HwAssistantAnswerForAdmin(question, request.Lang)
-	if !ok {
-		_ = model.HwAssistantRecordHit(model.DB, "q:"+service.HwAssistantFold(question), now)
-		common.ApiSuccess(c, gin.H{"matched": false})
-		return
-	}
-	_ = model.HwAssistantRecordHit(model.DB, "faq:"+id, now)
-	common.ApiSuccess(c, gin.H{"matched": true, "id": id, "answer": answer})
+	hwAssistantAskByID(c, true)
 }
 
-// HwAdminAgentChat answers one chat turn of the owner.
+// HwAdminAgentChat answers one chat turn of the owner. A model failure is
+// logged by cause and answered with the fallback, never with the error.
 func HwAdminAgentChat(c *gin.Context) {
 	if !hwRequireAdmin(c) {
 		return
@@ -79,13 +56,16 @@ func HwAdminAgentChat(c *gin.Context) {
 		common.ApiErrorMsg(c, "invalid request")
 		return
 	}
-	if _, err := service.HwAdminAgentValidate(request.Messages); err != nil {
+	turns, err := service.HwAdminAgentValidate(request.Messages)
+	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	answer, err := hwAdminAgentAsk(c.Request.Context(), service.HwAdminAgentConfigFromEnv(), request.Messages)
 	if err != nil {
-		common.ApiError(c, err)
+		common.SysError(common.LogText("hw admin agent answer fell back: %s", service.HwAssistantFailureClass(err)))
+		question := turns[len(turns)-1].Content
+		common.ApiSuccess(c, service.HwAdminAgentAnswer{Reply: service.HwAssistantFallback(service.HwAssistantChannelAdmin, request.Lang, question)})
 		return
 	}
 	common.ApiSuccess(c, answer)
