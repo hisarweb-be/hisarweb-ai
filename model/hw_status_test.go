@@ -324,8 +324,11 @@ func TestHwStatusQuietMinuteProbesTheUpstream(t *testing.T) {
 	models := []string{"claude-sonnet-5-5", "claude-unrouted"}
 
 	// The upstream of the routed model does not answer; the unrouted one does.
-	SetHwStatusProbe(func(ctx context.Context, modelName string) bool {
-		return modelName != "claude-sonnet-5-5"
+	SetHwStatusProbe(func(ctx context.Context, modelName string) HwStatusProbeOutcome {
+		if modelName == "claude-sonnet-5-5" {
+			return HwStatusProbeNoAnswer
+		}
+		return HwStatusProbeAnswered
 	}, 0)
 	for i := int64(1); i <= 5; i++ {
 		require.NoError(t, HwMeasureStatusOnce(time.Unix(base+i*60, 0), models))
@@ -365,13 +368,13 @@ func TestHwStatusProbeTrafficStaysOutOfTheCount(t *testing.T) {
 	// The pass runs at the start of its minute, so the row a probe writes lands
 	// in the window of the next pass, exactly as in production.
 	probeRowAt := base + 60
-	SetHwStatusProbe(func(ctx context.Context, modelName string) bool {
+	SetHwStatusProbe(func(ctx context.Context, modelName string) HwStatusProbeOutcome {
 		require.NoError(t, LOG_DB.Create(&Log{
 			Type: LogTypeError, CreatedAt: probeRowAt, Group: HwPaidGroupName,
 			ModelName: modelName, TokenId: probeTokenId, RequestId: "probe",
 		}).Error)
 		probeRowAt += 60
-		return false
+		return HwStatusProbeNoAnswer
 	}, probeTokenId)
 
 	for i := int64(1); i <= 10; i++ {
