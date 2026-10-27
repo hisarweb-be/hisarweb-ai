@@ -812,3 +812,85 @@ func TestHwPriceRefreshPublishesTheEuroRateWithoutRiskingTheLiraRate(t *testing.
 		assert.Empty(t, snapshot.EurPerUsd)
 	})
 }
+
+// TestHwNewCatalogModelsKeepsOnlyNewerChatModelsOfSoldFamilies pins the strict
+// filter of the daily new-model check: only a newer or same-generation chat
+// model of a sold family, under its plain name, is a candidate. Older
+// generations, dated and "latest" variants of sold names, routed or regional
+// keys, :free, retired and unsold families never are.
+func TestHwNewCatalogModelsKeepsOnlyNewerChatModelsOfSoldFamilies(t *testing.T) {
+	list, err := hwParsePriceList([]byte(`{
+  "claude-opus-6": {"input_cost_per_token": 5e-06, "output_cost_per_token": 2.5e-05, "mode": "chat"},
+  "gpt-6.2-sol": {"input_cost_per_token": 2e-06, "output_cost_per_token": 1e-05, "mode": "chat"},
+  "gemini-3.8-pro": {"input_cost_per_token": 2e-06, "output_cost_per_token": 1.2e-05, "mode": "chat"},
+  "grok-4.1-fast": {"input_cost_per_token": 2e-07, "output_cost_per_token": 5e-07, "mode": "chat"},
+  "claude-opus-5-5": {"input_cost_per_token": 4e-06, "output_cost_per_token": 2e-05, "mode": "chat"},
+  "claude-opus-5-5-20261001": {"input_cost_per_token": 4e-06, "output_cost_per_token": 2e-05, "mode": "chat"},
+  "claude-opus-5-5-latest": {"input_cost_per_token": 4e-06, "output_cost_per_token": 2e-05, "mode": "chat"},
+  "grok-4-0709": {"input_cost_per_token": 3e-06, "output_cost_per_token": 1.5e-05, "mode": "chat"},
+  "claude-opus-4-1": {"input_cost_per_token": 1.5e-05, "output_cost_per_token": 7.5e-05, "mode": "chat"},
+  "gemini-2.5-flash": {"input_cost_per_token": 3e-07, "output_cost_per_token": 2.5e-06, "mode": "chat"},
+  "gpt-5.6-luna": {"input_cost_per_token": 1e-07, "output_cost_per_token": 5e-07, "mode": "chat"},
+  "bedrock/claude-opus-6": {"input_cost_per_token": 5e-06, "output_cost_per_token": 2.5e-05, "mode": "chat"},
+  "us.anthropic.claude-opus-6": {"input_cost_per_token": 5e-06, "output_cost_per_token": 2.5e-05, "mode": "chat"},
+  "openrouter/gpt-6.2-sol:free": {"input_cost_per_token": 0, "output_cost_per_token": 0, "mode": "chat"},
+  "gpt-6-image": {"input_cost_per_token": 5e-06, "output_cost_per_token": 4e-05, "mode": "image_generation"},
+  "mistral-large-4": {"input_cost_per_token": 2e-06, "output_cost_per_token": 6e-06, "mode": "chat"},
+  "gpt-6.3-nova": {"input_cost_per_token": null, "output_cost_per_token": 1e-05, "mode": "chat"}
+}`))
+	require.NoError(t, err)
+
+	found := hwNewCatalogModels(list)
+	names := make([]string, 0, len(found))
+	for _, candidate := range found {
+		names = append(names, candidate.Name)
+	}
+	assert.Equal(t, []string{"claude-opus-6", "gemini-3.8-pro", "gpt-6.2-sol", "grok-4.1-fast"}, names)
+	assert.Equal(t, model.HwModelPrice{InputMicroUsd: 5_000_000, OutputMicroUsd: 25_000_000}, found[0].Price)
+}
+
+// TestHwReportNewModelsFilesOneCardPerNewModelOnce proves the daily check
+// reports a new model once, to the Modelverkenner, with the official price and
+// the proposed price at HwListPriceDiscountPercent below it, and that a model
+// already reported is not reported again on the next day.
+func TestHwReportNewModelsFilesOneCardPerNewModelOnce(t *testing.T) {
+	hwPricingTestSetup(t)
+	clean := func() {
+		model.DB.Where("key = ?", HwOptionReportedNewModels).Delete(&model.Option{})
+		common.OptionMapRWMutex.Lock()
+		delete(common.OptionMap, HwOptionReportedNewModels)
+		common.OptionMapRWMutex.Unlock()
+	}
+	clean()
+	t.Cleanup(clean)
+	var cards []hwBureauIssueRequest
+	board := hwStartTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var card hwBureauIssueRequest
+		require.NoError(t, common.DecodeJson(r.Body, &card))
+		cards = append(cards, card)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"identifier":"HIS-2"}`))
+	})
+	config := HwBureauCardConfig{BaseURL: board.URL, CompanyID: "c1"}
+	day1, err := hwParsePriceList([]byte(`{"claude-opus-6": {"input_cost_per_token": 5e-06, "output_cost_per_token": 2.5e-05, "mode": "chat"}}`))
+	require.NoError(t, err)
+
+	require.NoError(t, hwReportNewModels(context.Background(), HwBureauCardConfig{}, day1))
+	assert.Empty(t, cards, "no board, no card")
+
+	require.NoError(t, hwReportNewModels(context.Background(), config, day1))
+	require.NoError(t, hwReportNewModels(context.Background(), config, day1))
+	require.Len(t, cards, 1, "a model is reported once")
+	assert.Equal(t, HwBureauAgentModelverkenner, cards[0].AssigneeAgentID)
+	assert.Contains(t, cards[0].Description, "claude-opus-6: officieel $5 / $25, voorstel HisarWeb $2.5 / $12.5")
+
+	day2, err := hwParsePriceList([]byte(`{
+  "claude-opus-6": {"input_cost_per_token": 5e-06, "output_cost_per_token": 2.5e-05, "mode": "chat"},
+  "gpt-6.2-sol": {"input_cost_per_token": 2e-06, "output_cost_per_token": 1e-05, "mode": "chat"}
+}`))
+	require.NoError(t, err)
+	require.NoError(t, hwReportNewModels(context.Background(), config, day2))
+	require.Len(t, cards, 2)
+	assert.Contains(t, cards[1].Description, "gpt-6.2-sol")
+	assert.NotContains(t, cards[1].Description, "claude-opus-6")
+}
