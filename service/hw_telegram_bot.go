@@ -230,10 +230,12 @@ func hwProcessTelegramUpdate(ctx context.Context, update hwTelegramUpdate, now i
 			hwAnswerTelegramChat(ctx, strconv.FormatInt(message.Chat.Id, 10), texts.Prompt, texts.Button)
 			return HwWebhookAccepted
 		}
-		// A linked customer who asks something without a fixed answer is told so
-		// instead of being left without a reply.
+		// A linked customer who asks something without a fixed answer gets a
+		// model answer in the language of their message; when the gateway does
+		// not answer, the honest fixed text is sent instead.
 		if text := strings.TrimSpace(message.Text); text != "" && !strings.HasPrefix(text, "/") {
-			hwAnswerTelegramChat(ctx, strconv.FormatInt(message.Chat.Id, 10), hwTelegramNoAnswer(hwTelegramAssistantLang(message.From.LanguageCode)), "")
+			hwTelegramChatReply(ctx, user.Id, strconv.FormatInt(message.Chat.Id, 10), text,
+				hwTelegramAssistantLang(message.From.LanguageCode), time.Unix(now, 0))
 			return HwWebhookAccepted
 		}
 		return HwWebhookIgnored

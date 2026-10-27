@@ -47,6 +47,15 @@ func TestHwTelegramFAQ(t *testing.T) {
 		assert.Equal(t, hwTelegramNoAnswer("en"), sent[0].Text)
 	})
 
+	t.Run("a Turkish question gets the Turkish answer from an English account", func(t *testing.T) {
+		api, secret := hwTelegramTestSetup(t)
+		body := hwTelegramTextUpdate(t, 9105, 710005, "en", "sen kimsin")
+		HwHandleTelegramWebhook(context.Background(), body, secret, time.Now())
+		sent := api.messages()
+		require.Len(t, sent, 1)
+		assert.Equal(t, HwAssistantIdentity["tr"], sent[0].Text)
+	})
+
 	t.Run("a stranger without a fixed answer stays unanswered", func(t *testing.T) {
 		api, secret := hwTelegramTestSetup(t)
 		body := hwTelegramTextUpdate(t, 9104, 710004, "en", "random words here")

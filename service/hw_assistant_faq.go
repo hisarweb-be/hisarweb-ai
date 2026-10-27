@@ -27,11 +27,13 @@ var HwAssistantIdentity = map[string]string{
 	"nl": "Ik ben de chatmedewerker van HisarWeb AI. Ik draai op de Claude API en beantwoord vragen over api.hisarweb.be. Waarmee kan ik je helpen?",
 }
 
-// HwAssistantFAQ is one fixed question with its keywords and answers.
+// HwAssistantFAQ is one fixed question with its keywords and answers. The
+// keywords carry their language, so a match also tells the language the
+// question was written in and the answer comes in that language.
 type HwAssistantFAQ struct {
 	ID       string
 	Question map[string]string
-	Keywords []string
+	Keywords map[string][]string
 	Answer   func(lang string) string
 }
 
@@ -61,13 +63,21 @@ var hwAssistantFAQs = []HwAssistantFAQ{
 	{
 		ID:       "identity",
 		Question: map[string]string{"tr": "Sen kimsin?", "en": "Who are you?", "nl": "Wie ben je?"},
-		Keywords: []string{"sen kimsin", "kimsin", "who are you", "what are you", "wie ben je", "wie ben jij", "which model", "hangi model", "welk model", "welke ai", "hangi yapay zeka"},
-		Answer:   func(lang string) string { return HwAssistantIdentity[hwAssistantLang(lang)] },
+		Keywords: map[string][]string{
+			"tr": {"sen kimsin", "kimsin", "hangi model", "hangi yapay zeka"},
+			"en": {"who are you", "what are you", "which model"},
+			"nl": {"wie ben je", "wie ben jij", "welk model", "welke ai"},
+		},
+		Answer: func(lang string) string { return HwAssistantIdentity[hwAssistantLang(lang)] },
 	},
 	{
 		ID:       "models",
 		Question: map[string]string{"tr": "Hangi modelleri sunuyorsunuz?", "en": "Which models do you offer?", "nl": "Welke modellen bieden jullie aan?"},
-		Keywords: []string{"modeller", "hangi modeller", "which models", "models do you", "welke modellen", "modellen"},
+		Keywords: map[string][]string{
+			"tr": {"hangi modeller", "modeller"},
+			"en": {"which models", "models do you"},
+			"nl": {"welke modellen", "modellen"},
+		},
 		Answer: func(lang string) string {
 			list := strings.Join(hwAssistantModelLines(), "\n")
 			return hwAssistantPick(lang,
@@ -79,7 +89,11 @@ var hwAssistantFAQs = []HwAssistantFAQ{
 	{
 		ID:       "price",
 		Question: map[string]string{"tr": "Fiyatlar nasıl?", "en": "How much does it cost?", "nl": "Wat kost het?"},
-		Keywords: []string{"fiyat", "ucret", "kac para", "price", "pricing", "cost", "how much", "prijs", "kost", "tarief", "indirim", "discount", "korting"},
+		Keywords: map[string][]string{
+			"tr": {"fiyat", "ucret", "kac para", "indirim"},
+			"en": {"price", "pricing", "cost", "how much", "discount"},
+			"nl": {"prijs", "kost", "tarief", "korting"},
+		},
 		Answer: func(lang string) string {
 			list := strings.Join(hwAssistantModelLines(), "\n")
 			return hwAssistantPick(lang,
@@ -91,7 +105,11 @@ var hwAssistantFAQs = []HwAssistantFAQ{
 	{
 		ID:       "api",
 		Question: map[string]string{"tr": "API'yi nasıl kullanırım?", "en": "How do I use the API?", "nl": "Hoe gebruik ik de API?"},
-		Keywords: []string{"api", "nasil kullan", "how do i use", "how to use", "hoe gebruik", "base url", "endpoint", "openai", "anahtar", "api key", "sleutel"},
+		Keywords: map[string][]string{
+			"tr": {"api", "nasil kullan", "anahtar"},
+			"en": {"api", "how do i use", "how to use", "api key", "openai", "base url", "endpoint"},
+			"nl": {"api", "hoe gebruik", "sleutel"},
+		},
 		Answer: func(lang string) string {
 			return hwAssistantPick(lang,
 				"Hesabınızdan bir API anahtarı oluşturun. İstekleri https://api.hisarweb.be/v1 adresine OpenAI uyumlu biçimde gönderin ve model adı olarak listemizdeki adlardan birini yazın. Hangi dilde kod yazıyorsunuz?",
@@ -102,7 +120,11 @@ var hwAssistantFAQs = []HwAssistantFAQ{
 	{
 		ID:       "currency",
 		Question: map[string]string{"tr": "Hangi para birimleriyle ödeyebilirim?", "en": "Which currencies can I pay in?", "nl": "In welke munten kan ik betalen?"},
-		Keywords: []string{"para birimi", "currency", "currencies", "munt", "valuta", "lira", "euro", "dolar", "dollar", "odeme", "payment", "betalen", "betaling"},
+		Keywords: map[string][]string{
+			"tr": {"para birimi", "lira", "dolar", "odeme"},
+			"en": {"currency", "currencies", "dollar", "payment"},
+			"nl": {"munt", "valuta", "euro", "betalen", "betaling"},
+		},
 		Answer: func(lang string) string {
 			return hwAssistantPick(lang,
 				"TL, euro ve dolar ile ödeme yapabilirsiniz. Satın aldığınız krediyi tam olarak alırsınız; kur farkı maliyetini biz karşılarız. Hangi para birimini seçersiniz?",
@@ -134,23 +156,36 @@ func HwAssistantFold(text string) string {
 	return strings.Join(strings.Fields(folded), " ")
 }
 
-// HwAssistantMatch returns the entry that best matches the question, or nil.
-// The keyword that is longest wins, so "sen kimsin" beats a single word.
-func HwAssistantMatch(question string) *HwAssistantFAQ {
+// HwAssistantMatch returns the entry that best matches the question and the
+// language the matched keyword belongs to, or nil. The keyword that is longest
+// wins, so "sen kimsin" beats a single word. A keyword that lives in several
+// languages ("api") counts for the preferred one, so the chips keep answering
+// in the panel language, while a keyword of one language ("fiyat") answers in
+// that language whatever the panel shows.
+func HwAssistantMatch(question, preferred string) (*HwAssistantFAQ, string) {
 	folded := HwAssistantFold(question)
 	if folded == "" {
-		return nil
+		return nil, ""
+	}
+	order := []string{hwAssistantLang(preferred)}
+	for _, known := range HwAssistantLanguages {
+		if known != order[0] {
+			order = append(order, known)
+		}
 	}
 	var best *HwAssistantFAQ
+	bestLang := ""
 	bestScore := 0
 	for index := range hwAssistantFAQs {
-		for _, keyword := range hwAssistantFAQs[index].Keywords {
-			if strings.Contains(folded, HwAssistantFold(keyword)) && len(keyword) > bestScore {
-				best, bestScore = &hwAssistantFAQs[index], len(keyword)
+		for _, lang := range order {
+			for _, keyword := range hwAssistantFAQs[index].Keywords[lang] {
+				if strings.Contains(folded, HwAssistantFold(keyword)) && len(keyword) > bestScore {
+					best, bestLang, bestScore = &hwAssistantFAQs[index], lang, len(keyword)
+				}
 			}
 		}
 	}
-	return best
+	return best, bestLang
 }
 
 // HwAssistantFAQView is one chip: the question and its fixed answer.
@@ -172,11 +207,14 @@ func HwAssistantFAQList(lang string, hits map[string]int) []HwAssistantFAQView {
 	return views
 }
 
-// HwAssistantAnswerFor returns the fixed answer for a question, if any.
+// HwAssistantAnswerFor returns the fixed answer for a question, if any. The
+// answer is written in the language of the question itself: the language the
+// matched keyword belongs to, not the language of the panel or of the Telegram
+// account, so "sen kimsin" is answered in Turkish everywhere.
 func HwAssistantAnswerFor(question, lang string) (id, answer string, ok bool) {
-	entry := HwAssistantMatch(question)
+	entry, matched := HwAssistantMatch(question, lang)
 	if entry == nil {
 		return "", "", false
 	}
-	return entry.ID, entry.Answer(lang), true
+	return entry.ID, entry.Answer(matched), true
 }
