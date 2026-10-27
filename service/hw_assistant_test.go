@@ -100,9 +100,10 @@ func TestHwAssistantAnswerFollowsTheQuestionLanguage(t *testing.T) {
 	assert.Contains(t, answer, "anahtar", "a Turkish sentence is answered in Turkish on a Dutch panel")
 
 	// An English loan word inside a Turkish question does not make the answer
-	// English: the owner's own report from 27 Oct.
+	// English: the owner's own report from 27 Oct. The claude-cli entry wins
+	// on the longer keyword, and its Turkish steps still mention the key.
 	_, answer, ok = HwAssistantAnswerFor("Nasil api key yukleye bilirim Claude CLI e?", "tr")
-	require.True(t, ok, "the English loan words api key must match the api entry")
+	require.True(t, ok, "a question about Claude CLI must match the claude-cli entry")
 	assert.Contains(t, answer, "anahtar", "a Turkish question is answered in Turkish even when it contains api key")
 
 	_, answer, ok = HwAssistantAnswerFor("nasil api key yukleye bilirim", "nl")
