@@ -680,3 +680,80 @@ func TestHwFirstChannelKeepsClaimsAndReplacesForeignPicks(t *testing.T) {
 		assert.True(t, state.finished)
 	})
 }
+
+func hwFreeChannel(id int, route map[string]any) *model.Channel {
+	channel := hwPolicyChannel(id, HwProviderFree, "")
+	if route != nil {
+		channel.SetOtherInfo(map[string]any{HwFreeRouteKey: route})
+	}
+	return channel
+}
+
+// The free tier only carries customer data when it is approved, data class K
+// and outside China; anything less keeps it out of the route.
+func TestHwFreeRouteApprovedGuardsCustomerData(t *testing.T) {
+	approved := map[string]any{"approved": true, "data_class": "K", "region": "eu"}
+	testCases := []struct {
+		name  string
+		route map[string]any
+		want  bool
+	}{
+		{name: "approved K outside China", route: approved, want: true},
+		{name: "no approval metadata", route: nil},
+		{name: "not approved", route: map[string]any{"approved": false, "data_class": "K", "region": "eu"}},
+		{name: "data class I", route: map[string]any{"approved": true, "data_class": "I", "region": "us"}},
+		{name: "chinese step", route: map[string]any{"approved": true, "data_class": "K", "region": " CN "}},
+		{name: "unknown region", route: map[string]any{"approved": true, "data_class": "K"}},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			assert.Equal(t, testCase.want, HwFreeRouteApproved(hwFreeChannel(1, testCase.route)))
+		})
+	}
+	assert.False(t, HwFreeRouteApproved(nil))
+	assert.Equal(t, HwProviderFree, HwChannelProvider(hwPolicyChannel(2, "free-groq", "")))
+	assert.True(t, HwChannelAllowedForGroup(hwFreeChannel(3, approved), "free", "free"), "free routes serve every group")
+}
+
+// Order of the route: free first, then Lumia, then Portix and Kie cheapest
+// first, OpenRouter last whatever it costs. A 429 on a free channel moves on
+// at once and never earns the paused extra Lumia attempt.
+func TestHwRouteTriesFreeThenLumiaThenOpenRouterLast(t *testing.T) {
+	previousPause := common.HwLumiaRetryPauseMs
+	common.HwLumiaRetryPauseMs = 0
+	t.Cleanup(func() { common.HwLumiaRetryPauseMs = previousPause })
+
+	approved := map[string]any{"approved": true, "data_class": "K", "region": "eu"}
+	free := hwFreeChannel(21, approved)
+	lumia := hwPolicyChannel(22, HwProviderLumia, "")
+	openRouter := hwPolicyChannel(23, HwProviderOpenRouter, "")
+	openRouter.SetOtherInfo(map[string]any{HwChannelCostKey: map[string]any{"claude-sonnet-4-5": map[string]any{"in": 0.1, "out": 0.1}}})
+	portix := hwPolicyChannel(24, HwProviderPortix, "")
+	portix.SetOtherInfo(map[string]any{HwChannelCostKey: map[string]any{"claude-sonnet-4-5": map[string]any{"in": 3.0, "out": 15.0}}})
+	kie := hwPolicyChannel(25, HwProviderKie, "")
+
+	state := hwPolicyRoute([]*model.Channel{lumia}, nil)
+	state.free = []*model.Channel{free}
+	state.alternates = []*model.Channel{openRouter, kie, portix}
+	hwSortAlternates(state.alternates, state.model)
+
+	assert.False(t, state.claim(lumia), "a Lumia pick waits while a free route is untried")
+	c := hwClientErrorContext("")
+	c.Set(hwRouteContextKey, state)
+
+	var order []int
+	quota := hwPolicyError(http.StatusTooManyRequests, types.ErrorCodeBadResponseStatusCode)
+	for channel := state.next(); channel != nil; channel = state.next() {
+		order = append(order, channel.Id)
+		decision, handled := HwDecideRetry(c, quota)
+		require.True(t, handled)
+		if channel.Id == free.Id {
+			assert.False(t, state.outage, "a free 429 is no Lumia outage")
+			assert.Equal(t, "retry", decision.Action)
+		}
+		if decision.Action != "retry" {
+			break
+		}
+	}
+	assert.Equal(t, []int{21, 22, 22, 24, 25, 23}, order, "free, Lumia, one Lumia retry, Portix, Kie (no price), OpenRouter last")
+}
