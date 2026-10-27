@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -893,4 +895,53 @@ func TestHwReportNewModelsFilesOneCardPerNewModelOnce(t *testing.T) {
 	require.Len(t, cards, 2)
 	assert.Contains(t, cards[1].Description, "gpt-6.2-sol")
 	assert.NotContains(t, cards[1].Description, "claude-opus-6")
+}
+
+// TestHwWebModelPricesMatchTheCatalog keeps the price table of the site
+// (web/src/features/hw/data/model-prices.ts) in step with hwSoldModels: the
+// same model ids both ways, the official column equal to the catalog list
+// price, and the HisarWeb column HwListPriceDiscountPercent below it. A model
+// without an official list price (official: null) still sells at half the
+// catalog price.
+func TestHwWebModelPricesMatchTheCatalog(t *testing.T) {
+	source, err := os.ReadFile("../web/src/features/hw/data/model-prices.ts")
+	require.NoError(t, err)
+	text := string(source)
+	start := strings.Index(text, "export const MODEL_PRICES: readonly ModelPrice[] = [")
+	require.GreaterOrEqual(t, start, 0, "MODEL_PRICES table not found")
+	end := strings.Index(text[start:], "\n]\n")
+	require.Greater(t, end, 0, "end of MODEL_PRICES not found")
+	table := text[start : start+end]
+
+	usd := func(value string) decimal.Decimal {
+		parsed, err := decimal.NewFromString(value)
+		require.NoError(t, err)
+		return parsed
+	}
+	entry := regexp.MustCompile(`model: '([^']+)'[\s\S]*?official: (null|\{ input: ([\d.]+), output: ([\d.]+) \})[\s\S]*?hisarweb: \{ input: ([\d.]+), output: ([\d.]+) \}`)
+	matches := entry.FindAllStringSubmatch(table, -1)
+	require.Equal(t, strings.Count(table, "model: '"), len(matches), "every MODEL_PRICES entry must parse")
+
+	web := make(map[string]bool, len(matches))
+	for _, m := range matches {
+		name := m[1]
+		web[name] = true
+		sold, ok := hwFindSoldModel(name)
+		if !assert.True(t, ok, "%s is on the site but not in hwSoldModels", name) {
+			continue
+		}
+		listIn := decimal.New(sold.InputMicroUsd, -6)
+		listOut := decimal.New(sold.OutputMicroUsd, -6)
+		if m[2] == "null" {
+			assert.True(t, sold.ListOptional, "%s shows no official price but has one in the catalog", name)
+		} else {
+			assert.True(t, usd(m[3]).Equal(listIn), "%s official input %s, catalog %s", name, m[3], listIn)
+			assert.True(t, usd(m[4]).Equal(listOut), "%s official output %s, catalog %s", name, m[4], listOut)
+		}
+		assert.True(t, usd(m[5]).Equal(HwOurUsd(listIn)), "%s HisarWeb input %s, want %s", name, m[5], HwOurUsd(listIn))
+		assert.True(t, usd(m[6]).Equal(HwOurUsd(listOut)), "%s HisarWeb output %s, want %s", name, m[6], HwOurUsd(listOut))
+	}
+	for _, name := range HwSoldModelNames() {
+		assert.True(t, web[name], "%s is sold but missing from the site price table", name)
+	}
 }
