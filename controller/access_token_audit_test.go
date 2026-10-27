@@ -1080,8 +1080,18 @@ func TestAuditDatabaseMatrix(t *testing.T) {
 						require.NoError(t, db.Create(&releasedAuditUser{Username: "released-owner", Password: "placeholder", AccessToken: &legacy, AffCode: "released-aff", Quota: 1234}).Error)
 						require.NoError(t, db.Create(&releasedAuditLog{UserId: 1, Type: model.LogTypeLogin, Content: "historical login", CreatedAt: 100, RequestId: "legacy-request"}).Error)
 					}
+					// InitDB opens a fresh pool on every call and orphans the
+					// previous one; on Windows audit.db stays locked until
+					// every pool is closed, which breaks TempDir cleanup.
 					for range 2 {
 						require.NoError(t, model.InitDB())
+						if opened := model.DB; opened != db {
+							t.Cleanup(func() {
+								if sqlDB, err := opened.DB(); err == nil {
+									_ = sqlDB.Close()
+								}
+							})
+						}
 						require.NoError(t, model.InitLogDB())
 					}
 					if !upgrade {
