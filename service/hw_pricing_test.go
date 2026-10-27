@@ -72,6 +72,12 @@ const hwTestPriceListBody = `{
   "claude-haiku-5-5": {"input_cost_per_token": 1e-07, "output_cost_per_token": 5e-07, "mode": "chat"},
   "claude-fable-5-1": {"input_cost_per_token": 1e-05, "output_cost_per_token": 5e-05, "mode": "chat"},
   "gemini-3.8-flash": {"input_cost_per_token": 7.5e-07, "output_cost_per_token": 3.75e-06, "mode": "chat"},
+  "gpt-6-luna": {"input_cost_per_token": 1e-07, "output_cost_per_token": 5e-07, "mode": "chat"},
+  "gpt-6.1-sol": {"input_cost_per_token": 2e-06, "output_cost_per_token": 1e-05, "mode": "chat"},
+  "gpt-6-astra": {"input_cost_per_token": 1e-05, "output_cost_per_token": 5e-05, "mode": "chat"},
+  "gemini-3.8-flash-cyber": {"input_cost_per_token": 1.5e-06, "output_cost_per_token": 7.5e-06, "mode": "chat"},
+  "grok-4": {"input_cost_per_token": 2e-06, "output_cost_per_token": 6e-06, "mode": "chat"},
+  "grok-4-fast": {"input_cost_per_token": 2e-06, "output_cost_per_token": 6e-06, "mode": "chat"},
   "claude-haiku-4-5": {"input_cost_per_token": 1e-06, "output_cost_per_token": 5e-06, "mode": "chat"},
   "some-other-model": {"input_cost_per_token": 3e-06, "output_cost_per_token": 1.5e-05, "mode": "chat"}
 }`
@@ -123,7 +129,7 @@ func TestHwPriceSnapshotFetchStoresSourceTimeAndRateDate(t *testing.T) {
 	assert.Equal(t, fetchedAt.Unix(), snapshot.FetchedAt)
 	assert.Equal(t, "2026-10-19", snapshot.FxDate)
 	assert.Equal(t, "49.5523", snapshot.TryPerUsd)
-	assert.Equal(t, 7, snapshot.ListedCount)
+	assert.Equal(t, 13, snapshot.ListedCount)
 	prices, err := snapshot.HwSnapshotModelPrices()
 	require.NoError(t, err)
 	assert.Equal(t, model.HwModelPrice{InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000}, prices["claude-sonnet-5-5"])

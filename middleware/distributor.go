@@ -20,6 +20,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/gin-gonic/gin"
@@ -50,6 +51,16 @@ func Distribute() func(c *gin.Context) {
 			abortWithOpenAiMessage(c, invalidRequestStatus(err), i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
 			return
 		}
+		// A retired model resolves to its successor before anything else runs,
+		// so channel selection, billing and the upstream request all see the
+		// current generation. Token limits and the free-group allowlist keep
+		// accepting the name the customer actually typed.
+		originalRequestedModel := modelRequest.Model
+		if target, ok := setting.GetModelRedirect(modelRequest.Model); ok {
+			common.SetContextKey(c, constant.ContextKeyModelRedirectedFrom, modelRequest.Model)
+			common.SysLog(common.LogText("model redirect: %s -> %s", modelRequest.Model, target))
+			modelRequest.Model = target
+		}
 		_, pinned, _ := constraints.ResolvedPin()
 		if !pinned {
 			// Select a channel for the user
@@ -67,7 +78,8 @@ func Distribute() func(c *gin.Context) {
 				if !ok {
 					tokenModelLimit = map[string]bool{}
 				}
-				if !TokenModelLimitAllows(tokenModelLimit, modelRequest.Model) {
+				if !TokenModelLimitAllows(tokenModelLimit, modelRequest.Model) &&
+					!TokenModelLimitAllows(tokenModelLimit, originalRequestedModel) {
 					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenModelForbidden, map[string]any{"Model": modelRequest.Model}))
 					return
 				}
@@ -102,7 +114,8 @@ func Distribute() func(c *gin.Context) {
 		// not the group the request runs as: a free token in default, vip or
 		// auto stays a free request. A pinned channel is no exception: the pin
 		// decides where a request goes, never what the trial may call.
-		if shouldSelectChannel && !HwFreeGroupModelAllowed(hwUserGroup(c), modelRequest.Model) {
+		if shouldSelectChannel && !HwFreeGroupModelAllowed(hwUserGroup(c), modelRequest.Model) &&
+			!HwFreeGroupModelAllowed(hwUserGroup(c), originalRequestedModel) {
 			abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorGroupAccessDenied))
 			return
 		}

@@ -284,7 +284,7 @@ func TestHwApplySnapshotModelRatios(t *testing.T) {
 	snapshot := &model.HwPriceSnapshot{
 		Models: `{"claude-opus-5-5":{"in":6000000,"out":30000000},` +
 			`"claude-sonnet-5-5":{"in":2000000,"out":10000000},` +
-			`"gpt-6.1-sol":{"in":2000000,"out":10000000},` +
+			`"gpt-5.6-sol":{"in":2000000,"out":10000000},` +
 			`"gemini-3.8-flash":{"in":0,"out":9000000}}`,
 	}
 	require.NoError(t, HwApplySnapshotModelRatios(snapshot))
@@ -301,7 +301,7 @@ func TestHwApplySnapshotModelRatios(t *testing.T) {
 	assert.Equal(t, 5.0, ratio_setting.GetCompletionRatio("claude-sonnet-5-5"))
 	// A retired name in the snapshot is never priced again: the daily list may
 	// still carry it, but the bill does not.
-	_, ok, _ = ratio_setting.GetModelRatio("gpt-6.1-sol")
+	_, ok, _ = ratio_setting.GetModelRatio("gpt-5.6-sol")
 	assert.False(t, ok, "a retired model is not priced by the snapshot")
 	// A model outside the catalog keeps its operator ratio.
 	ratio, ok, _ = ratio_setting.GetModelRatio("gpt-4o")

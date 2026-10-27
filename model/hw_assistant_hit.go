@@ -7,6 +7,7 @@ package model
 // address or a long number.
 
 import (
+	"errors"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -33,6 +34,31 @@ func HwAssistantRecordHit(db *gorm.DB, key string, now int64) error {
 	if key == "" || utf8.RuneCountInString(key) > HwAssistantHitKeyMaxLen || hwAssistantPersonalPattern.MatchString(key) {
 		return nil
 	}
+	return hwAssistantBump(db, key, now)
+}
+
+// HwAssistantBumpCounter adds one to the counter of key and returns how often
+// it now counts. Unlike HwAssistantRecordHit nothing is skipped: the caller
+// counts an event of its own (the per-day model-answer budget of the Telegram
+// bot), not a question a customer typed, so the personal-looking guard must
+// not swallow the key.
+func HwAssistantBumpCounter(db *gorm.DB, key string, now int64) (int, error) {
+	key = strings.TrimSpace(key)
+	if key == "" || utf8.RuneCountInString(key) > HwAssistantHitKeyMaxLen {
+		return 0, errors.New("invalid counter key")
+	}
+	if err := hwAssistantBump(db, key, now); err != nil {
+		return 0, err
+	}
+	var row HwAssistantHit
+	if err := db.Where(commonKeyCol+" = ?", key).First(&row).Error; err != nil {
+		return 0, err
+	}
+	return row.Hits, nil
+}
+
+// hwAssistantBump writes the one-up counter behind both hit functions.
+func hwAssistantBump(db *gorm.DB, key string, now int64) error {
 	return db.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "key"}},
 		DoUpdates: clause.Assignments(map[string]any{

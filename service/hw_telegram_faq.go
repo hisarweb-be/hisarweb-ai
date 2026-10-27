@@ -2,8 +2,10 @@ package service
 
 // The Telegram bot answers the same fixed questions as the chat on the site
 // (hw_assistant_faq.go): the answer comes from the code, costs no model call and
-// is the same for a customer and for someone who only opened the bot. The text
-// of a message is never stored; only the id of a matched question is counted.
+// is the same for a customer and for someone who only opened the bot. The
+// answer follows the language of the question, not of the Telegram account. A
+// question without a fixed answer goes to hw_telegram_chat.go. The text of a
+// message is never stored; only the id of a matched question is counted.
 
 import (
 	"context"

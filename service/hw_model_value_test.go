@@ -24,7 +24,9 @@ import (
 
 var (
 	hwClaudeModelPattern = regexp.MustCompile(`^claude-(haiku|sonnet|opus|fable)-(\d+(?:-\d+)*)$`)
-	hwTierModelPattern   = regexp.MustCompile(`^(gpt|gemini)-(\d+(?:\.\d+)*)-([a-z]+)$`)
+	hwTierModelPattern   = regexp.MustCompile(`^(gpt|gemini)-(\d+(?:\.\d+)*)-([a-z]+(?:-[a-z]+)*)$`)
+	hwGrokModelPattern   = regexp.MustCompile(`^grok-(\d+(?:\.\d+)?)(?:-([a-z]+))?$`)
+	hwBareModelPattern   = regexp.MustCompile(`^(gpt|gemini)-(\d+(?:\.\d+)*)$`)
 )
 
 // hwValueFamily splits a sold model name into its family (the tier that is
@@ -35,6 +37,13 @@ func hwValueFamily(name string) (string, []int, error) {
 		family, version = "claude-"+m[1], strings.ReplaceAll(m[2], "-", ".")
 	} else if m := hwTierModelPattern.FindStringSubmatch(name); m != nil {
 		family, version = m[1]+"-"+m[3], m[2]
+	} else if m := hwGrokModelPattern.FindStringSubmatch(name); m != nil {
+		family, version = "grok", m[1]
+		if m[2] != "" {
+			family = "grok-" + m[2]
+		}
+	} else if m := hwBareModelPattern.FindStringSubmatch(name); m != nil {
+		family, version = m[1]+"-"+m[2], m[2]
 	} else {
 		return "", nil, fmt.Errorf("model %q has no known family; extend hwValueFamily", name)
 	}
@@ -149,10 +158,14 @@ func TestHwRetiredModelsAreNotSoldAndPointAtASoldModel(t *testing.T) {
 		}
 		assert.Equal(t, retiredFamily, successorFamily, retired)
 	}
-	// The three gpt names are the case this exception exists for.
-	assert.False(t, soldFamily["gpt-astra"])
-	assert.False(t, soldFamily["gpt-sol"])
-	assert.False(t, soldFamily["gpt-luna"])
+	// The 27 Oct exception cases: the retired gpt 5.6 generation and the bare
+	// gpt-6 name have no namesake among the sold 6.x names, so their successors
+	// live in another sold family. The sold 6 families themselves exist.
+	assert.True(t, soldFamily["gpt-luna"])
+	assert.True(t, soldFamily["gpt-sol"])
+	assert.True(t, soldFamily["gpt-astra"])
+	assert.False(t, soldFamily["gpt-terra"])
+	assert.False(t, soldFamily["gpt-6"])
 }
 
 // TestHwDailyPriceListSkipsRetiredModels checks the daily refresh path: the open
@@ -171,6 +184,9 @@ func TestHwDailyPriceListSkipsRetiredModels(t *testing.T) {
 		"gpt-6.1-sol":       {"2e-06", "1e-05"},
 		"gpt-6-luna":        {"1e-07", "5e-07"},
 		"gemini-3.8-flash":  {"7.5e-07", "3.75e-06"},
+		"gemini-3.8-flash-cyber": {"1.5e-06", "7.5e-06"},
+		"grok-4":            {"2e-06", "6e-06"},
+		"grok-4-fast":       {"2e-06", "6e-06"},
 	} {
 		list[name] = hwPriceListEntry{InputCostPerToken: []byte(price[0]), OutputCostPerToken: []byte(price[1]), Mode: "chat"}
 	}
@@ -181,6 +197,37 @@ func TestHwDailyPriceListSkipsRetiredModels(t *testing.T) {
 	for retired := range hwRetiredModels {
 		assert.NotContains(t, prices, retired)
 	}
+}
+
+// TestHwPriceListToleratesListOptionalModels: a sold model without an official
+// list price (ListOptional) may be absent from the daily list — the extraction
+// keeps every other price instead of refusing the whole snapshot. A model with
+// a list price stays mandatory.
+func TestHwPriceListToleratesListOptionalModels(t *testing.T) {
+	complete := map[string]hwPriceListEntry{}
+	for _, sold := range hwSoldModels {
+		complete[sold.PriceKey] = hwPriceListEntry{
+			InputCostPerToken:  []byte(decimal.New(sold.InputMicroUsd, -6).String()),
+			OutputCostPerToken: []byte(decimal.New(sold.OutputMicroUsd, -6).String()),
+			Mode:               "chat",
+		}
+	}
+	withoutGrok := map[string]hwPriceListEntry{}
+	for key, entry := range complete {
+		if key == "grok-4" || key == "grok-4-fast" {
+			continue
+		}
+		withoutGrok[key] = entry
+	}
+	prices, err := hwExtractSoldModelPrices(withoutGrok)
+	require.NoError(t, err)
+	assert.NotContains(t, prices, "grok-4")
+	assert.NotContains(t, prices, "grok-4-fast")
+	assert.Len(t, prices, len(hwSoldModels)-2)
+
+	delete(complete, "claude-opus-5-5")
+	_, err = hwExtractSoldModelPrices(complete)
+	assert.Error(t, err, "a model with an official list price stays mandatory")
 }
 
 // TestHwPriceListRequiresEverySoldModel protects the bill against a price list

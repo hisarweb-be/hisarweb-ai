@@ -65,13 +65,13 @@ afterEach(async () => {
   await useLanguage('en')
 })
 
-test('lists all 5 sold models, one row each', () => {
+test('lists all 11 sold models, one row each', () => {
   render(<PriceTable />)
 
   const rows = within(screen.getByRole('table')).getAllByRole('row')
   // Two header rows, then one row per model.
-  expect(rows).toHaveLength(2 + 5)
-  expect(MODEL_PRICES).toHaveLength(5)
+  expect(rows).toHaveLength(2 + 11)
+  expect(MODEL_PRICES).toHaveLength(11)
   for (const entry of MODEL_PRICES) {
     expect(screen.getByText(entry.model)).toBeInTheDocument()
   }
@@ -102,7 +102,7 @@ test('shows every source with its URL and measurement date', () => {
     'https://openrouter.ai/api/v1/models',
     'https://api.hisarweb.be/api/pricing',
   ])
-  expect(within(sources).getAllByText(/2026-10-22/)).toHaveLength(5)
+  expect(within(sources).getAllByText(/2026-10-27/)).toHaveLength(5)
 })
 
 test('computes the saving against the official price and against OpenRouter', () => {

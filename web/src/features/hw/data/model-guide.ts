@@ -37,13 +37,20 @@ export type ModelGuide = {
   description: GuideText
 }
 
-/** Default order of the catalogue ("Recommended"): strongest first. */
+/** Default order of the catalogue ("Recommended"): strongest first, the
+ *  newcomer of a price tier directly after its established peer. */
 export const RECOMMENDED_ORDER = [
   'claude-fable-5-1',
+  'gpt-6-astra',
   'claude-opus-5-5',
   'claude-sonnet-5-5',
+  'gpt-6.1-sol',
   'claude-haiku-5-5',
+  'gpt-6-luna',
   'gemini-3.8-flash',
+  'gemini-3.8-flash-cyber',
+  'grok-4',
+  'grok-4-fast',
 ] as const
 
 export const MODEL_GUIDE: Readonly<Record<string, ModelGuide>> = {
@@ -89,6 +96,66 @@ export const MODEL_GUIDE: Readonly<Record<string, ModelGuide>> = {
     description: {
       tr: 'Google’ın hızlı ve ucuz modeli. Görselleri okuyabilir ve çok uzun belgeleri tek seferde işleyebilir, örneğin bir ekran görüntüsünü ya da uzun bir PDF’i.',
       en: 'Google’s fast and cheap model. It can read images and work through very long documents in one go, such as a screenshot or a long PDF.',
+    },
+  },
+  'gpt-6-astra': {
+    tag: {
+      tr: 'OpenAI’nin en güçlüsü',
+      en: 'OpenAI’s most powerful',
+    },
+    description: {
+      tr: 'OpenAI’nin amiral gemisi modeli. En zor araştırma sorunları, saatler süren çok adımlı görevler ve bir uygulamanın tamamını kapsayan büyük yeniden yazımlar için; Fable ile aynı fiyat sınıfında.',
+      en: 'OpenAI’s flagship model. For the hardest research problems, multi-step jobs that run for hours, and rewrites that span a whole app; priced in the same tier as Fable.',
+    },
+  },
+  'gpt-6.1-sol': {
+    tag: {
+      tr: 'OpenAI: en iyi fiyat/performans',
+      en: 'OpenAI: best value',
+    },
+    description: {
+      tr: 'OpenAI dünyasında günlük kodlamanın dengeli seçimi. Cursor veya Codex ile uygulama geliştirmek ve birçok dosyayı kapsayan değişikliği baştan sona tamamlamak için idealdir; Sonnet ile aynı fiyata.',
+      en: 'The balanced pick for everyday coding in the OpenAI family. Ideal for building apps with Cursor or Codex and carrying a change across many files from start to finish, at the same price as Sonnet.',
+    },
+  },
+  'gpt-6-luna': {
+    tag: {
+      tr: 'OpenAI: en hızlı ve ucuz',
+      en: 'OpenAI: fastest and cheapest',
+    },
+    description: {
+      tr: 'OpenAI’nin en hızlı ve en ucuz modeli. Sohbet, kısa özetleme, sınıflandırma ve yüzlerce küçük işi arka arkaya çalıştırmak için uygundur; Haiku ile aynı fiyata OpenAI kalitesi.',
+      en: 'OpenAI’s fastest and cheapest model. A good fit for chat, short summaries, sorting and running hundreds of small jobs in a row, with OpenAI quality at the same price as Haiku.',
+    },
+  },
+  'gemini-3.8-flash-cyber': {
+    tag: {
+      tr: 'Hassas kod düzenleme',
+      en: 'Precise code editing',
+    },
+    description: {
+      tr: 'Google’ın kod doğruluğuna odaklanan Gemini sürümü. Mevcut kodu okuyup en küçük değişiklikle hedeflenen düzeltmeyi yapmak ve sonucu testlerle doğrulamak için; Flash’tan biraz pahalıdır.',
+      en: 'Google’s Gemini variant focused on code correctness. For reading existing code, making the smallest targeted fix and verifying the result with tests; a little pricier than Flash.',
+    },
+  },
+  'grok-4': {
+    tag: {
+      tr: 'Güçlü akıl yürütme',
+      en: 'Strong reasoning',
+    },
+    description: {
+      tr: 'xAI’nin güçlü modeli. Zor mantık problemleri, karmaşık analizler ve uzun çok adımlı görevler için. Bu sitede yanıtları biraz daha yavaş gelir; sabırlı ve derin işlerde kullanın.',
+      en: 'xAI’s powerful model. For hard logic problems, complex analysis and long multi-step jobs. On this site its answers arrive a little slower; use it for patient, deep work.',
+    },
+  },
+  'grok-4-fast': {
+    tag: {
+      tr: 'Günlük Grok',
+      en: 'Everyday Grok',
+    },
+    description: {
+      tr: 'xAI’nin günlük işler için tasarlanmış Grok sürümü. Sohbet, kısa kod yardımı ve basit otomasyonlar için grok-4 ile aynı fiyata sunulur; hızı burada günün yoğunluğuna göre değişir.',
+      en: 'xAI’s Grok version built for everyday jobs. Offered at the same price as grok-4 for chat, quick coding help and simple automations; its speed here varies with how busy the day is.',
     },
   },
 }

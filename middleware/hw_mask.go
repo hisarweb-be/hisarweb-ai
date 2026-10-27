@@ -582,7 +582,7 @@ var hwFilterPanicHook func()
 // mask rewrites (identity, model, error) and the escape sequence that could
 // hide a trace. Chunks without any of them are pure model output.
 var hwPayloadNeedles = []string{
-	"lumia", "openrouter", "litellm",
+	"lumia", "openrouter", "litellm", "portix", "kie",
 	`"model"`, `"id"`, `"error"`, `"object"`, `"type"`, `"message`, `"response`,
 	"native_finish_reason", "is_byok", "cost_details", "system_fingerprint",
 	"provider", "generation_id", `"x_`, `"x-`, "gen-", `\u`, `"usage"`,
