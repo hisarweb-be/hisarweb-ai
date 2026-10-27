@@ -301,6 +301,10 @@ func TestHwAssistantInstructionEndsWithTheLanguageRule(t *testing.T) {
 		assert.Contains(t, instruction, "https://api.hisarweb.be/v1", channel)
 		assert.Contains(t, instruction, "ANTHROPIC_BASE_URL", channel)
 		assert.Contains(t, instruction, "config.toml", channel)
+		// "Can I use this API in Kiro?" got a hedge that sent the customer off to
+		// look; the answer is a plain no with the route that works.
+		assert.Contains(t, instruction, "our API cannot be plugged into Kiro", channel)
+		assert.NotContains(t, instruction, "we have not tested it ourselves", channel)
 		assert.LessOrEqual(t, len([]rune(instruction)), hwAssistantInstructionMaxRunes+len([]rune(hwAssistantLanguageRule))+2, channel)
 	}
 }
