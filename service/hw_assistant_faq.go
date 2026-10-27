@@ -118,6 +118,21 @@ var hwAssistantFAQs = []HwAssistantFAQ{
 		},
 	},
 	{
+		ID:       "claude-cli",
+		Question: map[string]string{"tr": "Claude CLI'yi nasıl kurarım?", "en": "How do I install Claude CLI?", "nl": "Hoe installeer ik Claude CLI?"},
+		Keywords: map[string][]string{
+			"tr": {"claude cli", "cli kurarim", "cli yuklerim", "cli nasil"},
+			"en": {"claude cli", "install claude cli", "cli install"},
+			"nl": {"claude cli", "cli installeren", "claude installeren"},
+		},
+		Answer: func(lang string) string {
+			return hwAssistantPick(lang,
+				"Üç adım: 1) Claude CLI'yı resmî sayfasından kur; tek komut yeter. 2) İki ortam değişkeni gir: ANTHROPIC_BASE_URL=https://api.hisarweb.be ve ANTHROPIC_AUTH_TOKEN=panelden aldığın API anahtarı. 3) Terminalde claude yaz ve listeden bir model seç. Hangi adımda kaldın?",
+				"Three steps: 1) install Claude CLI from its official page, one command is enough. 2) set two environment variables: ANTHROPIC_BASE_URL=https://api.hisarweb.be and ANTHROPIC_AUTH_TOKEN=your API key from the panel. 3) type claude in the terminal and pick a model from our list. Which step are you on?",
+				"Drie stappen: 1) installeer Claude CLI vanaf de officiële pagina, één commando volstaat. 2) zet twee omgevingsvariabelen: ANTHROPIC_BASE_URL=https://api.hisarweb.be en ANTHROPIC_AUTH_TOKEN=je API-sleutel uit het paneel. 3) typ claude in de terminal en kies een model uit onze lijst. Bij welke stap zit je?")
+		},
+	},
+	{
 		ID:       "currency",
 		Question: map[string]string{"tr": "Hangi para birimleriyle ödeyebilirim?", "en": "Which currencies can I pay in?", "nl": "In welke munten kan ik betalen?"},
 		Keywords: map[string][]string{
