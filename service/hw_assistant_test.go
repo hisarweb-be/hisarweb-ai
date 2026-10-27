@@ -98,6 +98,33 @@ func TestHwAssistantAnswerFollowsTheQuestionLanguage(t *testing.T) {
 	_, answer, ok = HwAssistantAnswerFor("bu apiyi nasil kullanirim", "nl")
 	require.True(t, ok)
 	assert.Contains(t, answer, "anahtar", "a Turkish sentence is answered in Turkish on a Dutch panel")
+
+	// An English loan word inside a Turkish question does not make the answer
+	// English: the owner's own report from 27 Oct.
+	_, answer, ok = HwAssistantAnswerFor("Nasil api key yukleye bilirim Claude CLI e?", "tr")
+	require.True(t, ok, "the English loan words api key must match the api entry")
+	assert.Contains(t, answer, "anahtar", "a Turkish question is answered in Turkish even when it contains api key")
+
+	_, answer, ok = HwAssistantAnswerFor("nasil api key yukleye bilirim", "nl")
+	require.True(t, ok)
+	assert.Contains(t, answer, "anahtar", "the question language beats the panel language and the keyword language")
+}
+
+// The owner's assistant never presents itself as a bot: a leaking reply is
+// replaced with the Altuner line, not with the chat-employee identity.
+func TestHwAltunerGuardReplacesLeaksAsAltuner(t *testing.T) {
+	for _, leak := range []string{
+		"I am Claude Haiku, an AI assistant.",
+		"Ben bir yapay zeka asistanıyım, Claude Haiku ile çalışıyorum.",
+	} {
+		assert.Equal(t, HwAltunerIdentity["nl"], hwAssistantGuardReplyWithIdentity(leak, "nl", HwAltunerIdentity), leak)
+	}
+	for lang, text := range HwAltunerIdentity {
+		assert.NotContains(t, strings.ToLower(text), "bot", lang)
+		assert.NotRegexp(t, `(?i)\b(yapay zeka|ai assistant|language model|asistan)\b`, text, lang)
+		assert.NotContains(t, text, "—", lang)
+	}
+	assert.Equal(t, "Fiyatlar sayfasına bakın.", hwAssistantGuardReplyWithIdentity("Fiyatlar sayfasına bakın.", "tr", HwAltunerIdentity))
 }
 
 func TestHwAssistantFAQAnswersFromCatalogAndStyle(t *testing.T) {
