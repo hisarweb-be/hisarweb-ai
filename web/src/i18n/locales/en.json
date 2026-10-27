@@ -7467,7 +7467,6 @@
     "This file is too large.": "This file is too large.",
     "Only images and text files can be attached.": "Only images and text files can be attached.",
     "Attach a file": "Attach a file",
-    "I have no ready answer for this yet. Pick one of the questions above or ask support. Which one fits?": "I have no ready answer for this yet. Pick one of the questions above or ask support. Which one fits?",
     "How long the whole answer takes, from sending your request until the last word.": "How long the whole answer takes, from sending your request until the last word.",
     "Create an API key. It works like a password that your tool uses to talk to the model.": "Create an API key. It works like a password that your tool uses to talk to the model.",
     "The answer or code the model writes back. It costs more per token than what you send.": "The answer or code the model writes back. It costs more per token than what you send.",
@@ -7539,6 +7538,11 @@
     "We could not load the channels.": "We could not load the channels.",
     "We could not grant the channel.": "We could not grant the channel.",
     "Channel granted.": "Channel granted.",
-    "Channel credit granted. The bonus follows once the account is verified.": "Channel credit granted. The bonus follows once the account is verified."
+    "Channel credit granted. The bonus follows once the account is verified.": "Channel credit granted. The bonus follows once the account is verified.",
+    "The answer is delayed. Please try again in a minute.": "The answer is delayed. Please try again in a minute.",
+    "Helpful answer": "Helpful answer",
+    "Not helpful": "Not helpful",
+    "Thanks for your feedback": "Thanks for your feedback",
+    "What should the answer have been?": "What should the answer have been?"
   }
 }

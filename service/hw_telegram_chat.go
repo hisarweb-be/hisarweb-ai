@@ -1,17 +1,17 @@
 package service
 
-// The Telegram bot answers a question without a fixed answer through the
-// gateway itself, in the language of the message: a customer may write in any
-// language and the answer comes back in that language. A question with a fixed
-// answer (hw_telegram_faq.go) still costs no model call. Only a linked account
-// gets model answers, the message body is never stored, a per-day counter
-// bounds the cost, and a gateway that does not answer falls back to the honest
-// fixed text of hw_telegram_faq.go.
+// The Telegram bot answers every free-typed message through the model with the
+// shared instruction of every assistant channel (hw_assistant_knowledge.go), in
+// the language of the message. A linked customer and a chat that is linked to
+// no account both get answers, each within its own day budget. A message that
+// replies to an earlier bot answer brings that answer along as context. The
+// message body is never stored; only a thumb the customer presses stores the
+// question and the answer it rates, as learning material.
 
 import (
 	"context"
-	"fmt"
-	"net/http"
+	"errors"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -24,34 +24,26 @@ const (
 	// hwTelegramChatMaxQuestionRunes bounds the question that travels to the
 	// model.
 	hwTelegramChatMaxQuestionRunes = 800
-	// hwTelegramChatMaxTokens keeps one answer short and cheap.
-	hwTelegramChatMaxTokens = 400
 	// hwTelegramChatDayLimit is how many model answers one linked customer may
-	// get per day. A question with a fixed answer is answered from the code and
-	// never counts.
+	// get per day.
 	hwTelegramChatDayLimit = 20
+	// hwTelegramChatDayLimitAll bounds the model answers of all chats per day.
+	hwTelegramChatDayLimitAll = 3000
+	// hwTelegramChatGuestDayLimit is how many model answers a chat that is
+	// linked to no account may get per day.
+	hwTelegramChatGuestDayLimit = 10
+	// hwTelegramEarlierMessage stands in for the customer message that a
+	// replied-to bot answer once answered: Telegram does not send it along, and
+	// the conversation must open with a customer turn.
+	hwTelegramEarlierMessage = "(earlier message in this chat)"
+	// hwTelegramFeedbackUp and hwTelegramFeedbackDown are the callback data of
+	// the thumbs under a model answer.
+	hwTelegramFeedbackUp   = "fb:1"
+	hwTelegramFeedbackDown = "fb:0"
 )
 
-// hwTelegramChatInstruction is the stable part of the customer prompt. The
-// facts and the question are appended by hwTelegramChatPrompt so the numbers
-// come from the code and cannot drift from the real offer.
-const hwTelegramChatInstruction = `You are the chatbot employee of HisarWeb AI and you serve the customers of api.hisarweb.be through Telegram. If asked who or what you are, say you are the chatbot employee of HisarWeb AI that runs on the Claude API. Never name a model, a model version, a supplier or a development tool, and you are not a coding assistant: you cannot run commands.
-Answer in the language of the customer's message, whatever language that is, and stay in that language for the whole answer. Write short active sentences, no em-dash, no emoji, no bold, no invented numbers: use only the facts below, say plainly when you do not know, and end with one concrete question or action. You are a support chat, not a general chat: keep the talk on api.hisarweb.be and its models, prices, payment and account.
-Never ask for passwords, API keys or other secrets. You cannot change settings, money or accounts yourself; for that, point at the panel at https://api.hisarweb.be.`
-
-// hwTelegramChatFacts are the numbers the model may state, built from the sold
-// catalog and the discount the way the fixed answers are.
-func hwTelegramChatFacts() string {
-	return fmt.Sprintf("Facts you may use, and no others:\n- Panel: https://api.hisarweb.be, OpenAI-compatible endpoint: https://api.hisarweb.be/v1\n- Every model is billed %d%% below the official list price. Price per million tokens, input / output:\n%s\n- Payment in TRY, EUR and USD; the customer receives the full credit they buy.\n- A free trial credit exists; the customer starts it in the panel.", HwListPriceDiscountPercent, strings.Join(hwAssistantModelLines(), "\n"))
-}
-
-// hwTelegramChatPrompt builds the one message of the call.
-func hwTelegramChatPrompt(question string) string {
-	return hwTelegramChatInstruction + "\n\n" + hwTelegramChatFacts() + "\n\nCustomer message:\n" + question
-}
-
-// hwTelegramDayLimit is the answer of a customer who used all model answers of
-// the day. The fixed questions keep working.
+// hwTelegramDayLimit is the answer of a chat that used all model answers of the
+// day. The fixed questions keep working.
 func hwTelegramDayLimit(lang string) string {
 	return hwAssistantPick(lang,
 		"Bugünlük soru hakkınız doldu. Sabit sorular /help ile çalışmaya devam eder; yarın tekrar yazabilirsiniz.",
@@ -67,56 +59,118 @@ func hwTelegramTooLong(lang string) string {
 		"Je bericht is te lang. Kort de vraag in en stuur hem opnieuw.")
 }
 
-// hwTelegramModelAnswer answers one question through the gateway, in the
-// language of the question. An empty string means no answer came; the caller
-// then sends the honest fixed text instead. lang is only the fallback language
-// of the fixed texts (tr, nl or en) and of the leak guard, not the answer
-// language: the model answers in the language of the message itself.
-func hwTelegramModelAnswer(ctx context.Context, userID int, question, lang string, now time.Time) string {
-	question = strings.TrimSpace(question)
-	if utf8.RuneCountInString(question) > hwTelegramChatMaxQuestionRunes {
-		return hwTelegramTooLong(lang)
-	}
-	config := HwAdminAgentConfigFromEnv()
-	if config.BaseURL == "" || config.APIKey == "" {
-		return ""
-	}
-	key := fmt.Sprintf("hw:tgchat:%d:%s", userID, now.Format("2006-01-02"))
-	count, err := model.HwAssistantBumpCounter(model.DB, key, now.Unix())
-	if err != nil {
-		// A counter that cannot be written may not stop the answer; the day
-		// limit is a cost guard, not a promise.
-		common.SysError(common.LogText("telegram chat could not read its model answer budget"))
-	} else if count > hwTelegramChatDayLimit {
-		return hwTelegramDayLimit(lang)
-	}
-	client := config.Client
-	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
-	}
-	text, _, err := hwCallChat(ctx, client, config.BaseURL, config.APIKey, hwChatRequest{
-		Model:     config.Model,
-		Messages:  []hwChatMessage{{Role: "user", Content: hwTelegramChatPrompt(question)}},
-		MaxTokens: hwTelegramChatMaxTokens,
-	})
-	if err != nil {
-		common.SysError(common.LogText("telegram chat model answer failed"))
-		return ""
-	}
-	reply := strings.TrimSpace(text)
-	if reply == "" {
-		return ""
-	}
-	return HwAssistantGuardReply(reply, lang)
+// hwTelegramFeedbackThanks acknowledges a thumb.
+func hwTelegramFeedbackThanks(lang string) string {
+	return hwAssistantPick(lang,
+		"Teşekkürler, geri bildiriminiz kaydedildi.",
+		"Thanks, your feedback has been noted.",
+		"Bedankt, je feedback is genoteerd.")
 }
 
-// hwTelegramChatReply answers a question of a linked customer that no fixed
-// answer covers: through the model in the language of the message, and when
-// that yields nothing with the honest fixed text.
-func hwTelegramChatReply(ctx context.Context, userID int, chatID, question, lang string, now time.Time) {
-	answer := hwTelegramModelAnswer(ctx, userID, question, lang, now)
-	if answer == "" {
-		answer = hwTelegramNoAnswer(lang)
+// hwTelegramChatReply answers one free-typed message through the model.
+// budgetKey names whose day budget it spends (a user id, or "c" and the chat
+// id for a chat without an account). A model answer goes out as a reply to the
+// message with the two thumbs under it; a fixed text goes out plain.
+func hwTelegramChatReply(ctx context.Context, message *hwTelegramMessage, budgetKey string, dayLimit int, lang string, now time.Time) {
+	question := strings.TrimSpace(message.Text)
+	chatID := strconv.FormatInt(message.Chat.Id, 10)
+	if utf8.RuneCountInString(question) > hwTelegramChatMaxQuestionRunes {
+		hwAnswerTelegramChat(ctx, chatID, hwTelegramTooLong(lang), "")
+		return
 	}
-	hwAnswerTelegramChat(ctx, chatID, answer, "")
+	config := HwAdminAgentConfigFromEnv()
+	// Only a call that can reach the gateway costs money, so only that one
+	// spends the budget; without a gateway HwAssistantChat answers from the code.
+	if config.BaseURL != "" && config.APIKey != "" {
+		day := now.UTC().Format("2006-01-02")
+		count, err := model.HwAssistantBumpCounter(model.DB, "hw:tgchat:"+budgetKey+":"+day, now.Unix())
+		if err == nil && count <= dayLimit {
+			// The bot answers chats without an account too, so one bound
+			// over all chats caps the cost of a flood of new chats.
+			count, err = model.HwAssistantBumpCounter(model.DB, "hw:tgchat:all:"+day, now.Unix())
+			dayLimit = hwTelegramChatDayLimitAll
+		}
+		if err != nil {
+			// A counter that cannot be written fails closed, like the widget:
+			// no model call without a budget.
+			common.SysError(common.LogText("telegram chat could not read its model answer budget"))
+		}
+		if err != nil || count > dayLimit {
+			// Over the budget the fixed questions still answer, as the text says.
+			if entry, matched := HwAssistantMatch(question, lang); entry != nil {
+				hwAnswerTelegramChat(ctx, chatID, entry.Answer(matched), "")
+				return
+			}
+			hwAnswerTelegramChat(ctx, chatID, hwTelegramDayLimit(lang), "")
+			return
+		}
+	}
+	turns := []HwAdminAgentTurn{{Role: "user", Content: question}}
+	if replied := message.ReplyToMessage; replied != nil && replied.From != nil && replied.From.IsBot && strings.TrimSpace(replied.Text) != "" {
+		turns = []HwAdminAgentTurn{
+			{Role: "user", Content: hwTelegramEarlierMessage},
+			{Role: "assistant", Content: hwAssistantClipRunes(strings.TrimSpace(replied.Text), HwAdminAgentMaxMessageRunes)},
+			{Role: "user", Content: question},
+		}
+	}
+	reply, ok := HwAssistantChat(ctx, config, HwAssistantChannelTelegram, lang, turns)
+	if !ok {
+		hwAnswerTelegramChat(ctx, chatID, reply, "")
+		return
+	}
+	err := hwTelegramCall(ctx, "sendMessage", hwTelegramMessageRequest{
+		ChatId:          message.Chat.Id,
+		Text:            reply,
+		ReplyParameters: &hwTelegramReplyParameters{MessageId: message.MessageId, AllowSendingWithoutReply: true},
+		ReplyMarkup: &hwTelegramKeyboard{InlineKeyboard: [][]hwTelegramInlineButton{{
+			{Text: "👍", CallbackData: hwTelegramFeedbackUp},
+			{Text: "👎", CallbackData: hwTelegramFeedbackDown},
+		}}},
+	})
+	if err != nil && !errors.Is(err, ErrHwTelegramUnavailable) {
+		common.SysError(common.LogText("telegram answer could not be delivered"))
+	}
+}
+
+// hwTelegramFeedback stores the thumb a customer pressed under a model answer.
+// The answer is the bot message that carries the buttons, the question is the
+// customer message it replies to. The thumbs are taken away after one press
+// and the press is always acknowledged, so the button stops spinning.
+func hwTelegramFeedback(ctx context.Context, query *hwTelegramCallbackQuery) HwWebhookOutcome {
+	rating := 0
+	switch query.Data {
+	case hwTelegramFeedbackUp:
+		rating = 1
+	case hwTelegramFeedbackDown:
+		rating = -1
+	default:
+		return HwWebhookIgnored
+	}
+	if query.From == nil {
+		return HwWebhookIgnored
+	}
+	lang := hwTelegramAssistantLang(query.From.LanguageCode)
+	if message := query.Message; message != nil && message.ReplyToMessage != nil {
+		question := strings.TrimSpace(message.ReplyToMessage.Text)
+		userID := 0
+		if user, err := model.GetUserByTelegramID(strconv.FormatInt(query.From.Id, 10)); err == nil {
+			userID = user.Id
+		}
+		if _, err := HwAssistantRecordFeedback(HwAssistantChannelTelegram, hwAssistantReplyLang(question, lang),
+			question, strings.TrimSpace(message.Text), rating, userID, ""); err != nil {
+			common.SysError(common.LogText("telegram feedback could not be stored"))
+		}
+		// Without a reply_markup the edit removes the inline keyboard.
+		if err := hwTelegramCall(ctx, "editMessageReplyMarkup", hwTelegramEditMarkupRequest{
+			ChatId: message.Chat.Id, MessageId: message.MessageId,
+		}); err != nil && !errors.Is(err, ErrHwTelegramUnavailable) {
+			common.SysError(common.LogText("telegram feedback buttons could not be removed"))
+		}
+	}
+	if err := hwTelegramCall(ctx, "answerCallbackQuery", hwTelegramCallbackAnswer{
+		CallbackQueryId: query.Id, Text: hwTelegramFeedbackThanks(lang),
+	}); err != nil && !errors.Is(err, ErrHwTelegramUnavailable) {
+		common.SysError(common.LogText("telegram feedback could not be acknowledged"))
+	}
+	return HwWebhookAccepted
 }

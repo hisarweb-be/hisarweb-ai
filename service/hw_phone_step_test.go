@@ -1045,7 +1045,7 @@ func TestHwRegisterTelegramWebhookFromTheSettingsToken(t *testing.T) {
 	require.NoError(t, HwRegisterTelegramWebhook(context.Background()))
 	assert.Equal(t, "/botsettings-bot-token/setWebhook", path)
 	assert.Equal(t, "https://api.example.test/api/hw/telegram/webhook", registered.Url)
-	assert.Equal(t, []string{"message"}, registered.AllowedUpdates)
+	assert.Equal(t, []string{"message", "callback_query"}, registered.AllowedUpdates)
 	require.Len(t, registered.SecretToken, 64)
 	assert.NotContains(t, registered.SecretToken, "settings-bot-token")
 

@@ -74,3 +74,66 @@ func TestHwAssistantRecordHitDatabaseMatrix(t *testing.T) {
 		})
 	}
 }
+
+func TestHwAssistantFeedbackStoreSkipsPersonalAndListsNewestFirst(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:hw_assistant_feedback?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&HwAssistantFeedback{}))
+
+	cases := []struct {
+		question, correction string
+		stored               bool
+	}{
+		{"how do I get an api key", "", true},
+		{"see https://api.hisarweb.be/docs for the base url", "", true},
+		{"what is api.hisarweb.be", "", true},
+		{"mail me at a@b.nl", "", false},
+		{"my number is 0612345678", "", false},
+		{"see https://evil.example.com/x", "", false},
+		{"http://api.hisarweb.be.evil.com is that you", "", false},
+		{"clean question", "write to me@example.com", false},
+	}
+	for index, tc := range cases {
+		stored, err := HwAssistantStoreFeedback(db, HwAssistantFeedback{
+			Channel: "widget", Question: tc.question, Answer: "a", Rating: 1, Correction: tc.correction, CreatedAt: int64(100 + index),
+		})
+		require.NoError(t, err, tc.question)
+		assert.Equal(t, tc.stored, stored, tc.question)
+	}
+
+	_, err = HwAssistantStoreFeedback(db, HwAssistantFeedback{Question: "bad one", Answer: "a", Rating: -1, CreatedAt: 500})
+	require.NoError(t, err)
+	recent, err := HwAssistantRecentFeedback(db, 10)
+	require.NoError(t, err)
+	require.Len(t, recent, 4)
+	assert.Equal(t, "bad one", recent[0].Question, "newest first")
+	down, err := HwAssistantListFeedback(db, -1, "", 10)
+	require.NoError(t, err)
+	require.Len(t, down, 1)
+
+	_, err = HwAssistantStoreFeedback(db, HwAssistantFeedback{Channel: "admin", Question: "admin row", Answer: "a", Rating: 1, CreatedAt: 600})
+	require.NoError(t, err)
+	open, err := HwAssistantListFeedback(db, 0, HwAssistantReviewOpen, 10)
+	require.NoError(t, err)
+	require.Len(t, open, 4, "customer rows only, admin row excluded")
+
+	assert.Error(t, HwAssistantReviewFeedback(db, recent[0].ID, "maybe"))
+	require.NoError(t, HwAssistantReviewFeedback(db, recent[0].ID, HwAssistantReviewApproved))
+	require.NoError(t, HwAssistantReviewFeedback(db, recent[1].ID, HwAssistantReviewAbuse))
+	assert.ErrorIs(t, HwAssistantReviewFeedback(db, 999999, HwAssistantReviewRejected), gorm.ErrRecordNotFound)
+	var admin HwAssistantFeedback
+	require.NoError(t, db.Where("channel = ?", "admin").First(&admin).Error)
+	assert.ErrorIs(t, HwAssistantReviewFeedback(db, admin.ID, HwAssistantReviewAbuse), gorm.ErrRecordNotFound, "admin rows are not reviewed")
+
+	open, err = HwAssistantListFeedback(db, 0, HwAssistantReviewOpen, 10)
+	require.NoError(t, err)
+	assert.Len(t, open, 2)
+	abuse, err := HwAssistantListFeedback(db, 0, HwAssistantReviewAbuse, 10)
+	require.NoError(t, err)
+	require.Len(t, abuse, 1)
+	learnable, err := HwAssistantLearnableFeedback(db, 10)
+	require.NoError(t, err)
+	require.Len(t, learnable, 2, "admin row and the approved customer row")
+	assert.Equal(t, "admin row", learnable[0].Question)
+	assert.Equal(t, recent[0].ID, learnable[1].ID)
+}

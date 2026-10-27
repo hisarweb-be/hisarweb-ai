@@ -33,9 +33,20 @@ func hwRequireAdmin(c *gin.Context) bool {
 
 type hwAdminAgentChatRequest struct {
 	Messages []service.HwAdminAgentTurn `json:"messages"`
+	Lang     string                     `json:"lang"`
 }
 
-// HwAdminAgentChat answers one chat turn of the owner.
+// HwAdminAgentAskFAQ answers a clicked chip by its id in the owner's panel
+// voice: the identity entry speaks as Altuner there.
+func HwAdminAgentAskFAQ(c *gin.Context) {
+	if !hwRequireAdmin(c) {
+		return
+	}
+	hwAssistantAskByID(c, true)
+}
+
+// HwAdminAgentChat answers one chat turn of the owner. A model failure is
+// logged by cause and answered with the fallback, never with the error.
 func HwAdminAgentChat(c *gin.Context) {
 	if !hwRequireAdmin(c) {
 		return
@@ -45,13 +56,16 @@ func HwAdminAgentChat(c *gin.Context) {
 		common.ApiErrorMsg(c, "invalid request")
 		return
 	}
-	if _, err := service.HwAdminAgentValidate(request.Messages); err != nil {
+	turns, err := service.HwAdminAgentValidate(request.Messages)
+	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	answer, err := hwAdminAgentAsk(c.Request.Context(), service.HwAdminAgentConfigFromEnv(), request.Messages)
 	if err != nil {
-		common.ApiError(c, err)
+		common.SysError(common.LogText("hw admin agent answer fell back: %s", service.HwAssistantFailureClass(err)))
+		question := turns[len(turns)-1].Content
+		common.ApiSuccess(c, service.HwAdminAgentAnswer{Reply: service.HwAssistantFallback(service.HwAssistantChannelAdmin, request.Lang, question)})
 		return
 	}
 	common.ApiSuccess(c, answer)

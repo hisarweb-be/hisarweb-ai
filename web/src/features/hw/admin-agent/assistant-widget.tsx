@@ -32,9 +32,11 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { useIsAdmin } from '@/hooks/use-admin'
 
+import { AnswerFeedback } from './answer-feedback'
 import {
   askAdminAgent,
-  askAssistantFaq,
+  askAssistantChat,
+  askAssistantChip,
   assistantLanguage,
   escalateToBureau,
   fetchAssistantFaq,
@@ -57,6 +59,8 @@ type Entry = AgentTurn & {
   id: number
   answer?: AgentAnswer
   applied?: AppliedFix
+  /** A real answer (model or chip), so it can be rated. */
+  rateable?: boolean
 }
 
 const fileKey = (file: AgentAttachment) =>
@@ -67,9 +71,9 @@ function messageOf(error: unknown, fallback: string): string {
 }
 
 /**
- * The chat on every page. Everyone gets the fixed questions and their answers
- * (no model call). An admin can also report an error, a hard word or a
- * screenshot to the assistant, which proposes a text fix or a bureau card.
+ * The chat on every page. A clicked question shows its fixed answer; typed
+ * text always goes to the model. An admin can also report an error, a hard
+ * word or a screenshot, and the assistant proposes a text fix or a bureau card.
  */
 export function AssistantWidget() {
   const isAdmin = useIsAdmin()
@@ -120,10 +124,7 @@ export function AssistantWidget() {
     }
   }
 
-  async function send(question?: string) {
-    const text = (question ?? draft).trim()
-    if ((!text && pending.length === 0) || busy) return
-    const attachments = question ? [] : pending
+  function begin(text: string, attachments: AgentAttachment[]): Entry[] {
     const history: Entry[] = [
       ...entries,
       {
@@ -137,33 +138,58 @@ export function AssistantWidget() {
     setDraft('')
     setPending([])
     setBusy(true)
-    const reply = (content: string, answer?: AgentAnswer) =>
+    return history
+  }
+
+  async function pickChip(item: AssistantFaq) {
+    if (busy) return
+    const history = begin(item.question, [])
+    const counted = askAssistantChip(item.id, lang, isAdmin).catch(
+      () => undefined
+    )
+    const result = isAdmin ? await counted : undefined
+    setEntries([
+      ...history,
+      {
+        id: ++lastId.current,
+        role: 'assistant',
+        content: result?.matched ? result.answer : item.answer,
+        rateable: true,
+      },
+    ])
+    setBusy(false)
+  }
+
+  async function send() {
+    const text = draft.trim()
+    if ((!text && pending.length === 0) || busy) return
+    const history = begin(text, pending)
+    const reply = (entry: Partial<Entry> & { content: string }) =>
       setEntries([
         ...history,
-        { id: ++lastId.current, role: 'assistant', content, answer },
+        { id: ++lastId.current, role: 'assistant', ...entry },
       ])
     try {
-      if (text && attachments.length === 0) {
-        const fixed = await askAssistantFaq(text, lang)
-        if (fixed.matched) return reply(fixed.answer)
-      }
-      if (!isAdmin) {
-        return reply(
-          t(
-            'I have no ready answer for this yet. Pick one of the questions above or ask support. Which one fits?'
-          )
+      if (isAdmin) {
+        const answer = await askAdminAgent(
+          history.map(({ role, content, attachments: files }, at) => ({
+            role,
+            content,
+            attachments: at === history.length - 1 ? files : undefined,
+          })),
+          lang
         )
+        reply({ content: answer.reply, answer, rateable: true })
+      } else {
+        reply({
+          content: await askAssistantChat(history, lang),
+          rateable: true,
+        })
       }
-      const answer = await askAdminAgent(
-        history.map(({ role, content, attachments: files }, at) => ({
-          role,
-          content,
-          attachments: at === history.length - 1 ? files : undefined,
-        }))
-      )
-      reply(answer.reply, answer)
-    } catch (error) {
-      toast.error(messageOf(error, failed))
+    } catch {
+      reply({
+        content: t('The answer is delayed. Please try again in a minute.'),
+      })
     } finally {
       setBusy(false)
     }
@@ -248,7 +274,7 @@ export function AssistantWidget() {
                   size='sm'
                   variant='outline'
                   disabled={busy}
-                  onClick={() => void send(item.question)}
+                  onClick={() => void pickChip(item)}
                 >
                   {item.question}
                 </Button>
@@ -278,6 +304,14 @@ export function AssistantWidget() {
                   )
                 )}
                 <p className='whitespace-pre-wrap'>{entry.content}</p>
+                {entry.rateable && (
+                  <AnswerFeedback
+                    question={entries[index - 1]?.content ?? ''}
+                    answer={entry.content}
+                    lang={lang}
+                    admin={isAdmin}
+                  />
+                )}
                 {entry.answer?.text_fix && (
                   <div className='mt-2 space-y-2 border-t pt-2'>
                     <p>

@@ -264,6 +264,7 @@ func runHwStatusOnceSafely(at time.Time) {
 	if err := model.HwMeasureStatusOnce(at, HwSoldModelNames()); err != nil {
 		common.SysError(common.LogText("status measurement job failed; the next minute retries"))
 	}
+	runHwIncidentCardSafely(at)
 }
 
 func runHwStatusPurgeOnceSafely(at time.Time) {

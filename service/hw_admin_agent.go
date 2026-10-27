@@ -3,10 +3,10 @@ package service
 // The admin agent: a chat in the admin panel where the owner reports an error
 // or a hard word. It runs through the gateway's own customer route (so it
 // uses, and is metered like, our own product) with the best model for the
-// best price: Haiku 5.5, 0.10/0.50 dollar per million tokens, newer and
-// cheaper than Haiku 4.5 (kennis/beste-model-beste-prijs.md). The agent
-// answers in a fixed JSON shape: a reply, an optional text fix that an admin
-// applies with one click, and an optional escalation card for the bureau.
+// best price: gpt-6-luna, 0.05/0.25 dollar per million tokens, the fastest of
+// the sold models in the 24-hour measurements. The agent answers in a fixed
+// JSON shape: a reply, an optional text fix that an admin applies with one
+// click, and an optional escalation card for the bureau.
 
 import (
 	"context"
@@ -15,7 +15,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
@@ -25,13 +24,14 @@ const (
 	HwAdminAgentBaseURLEnv = "HW_ADMIN_AGENT_BASE_URL"
 	HwAdminAgentAPIKeyEnv  = "HW_ADMIN_AGENT_API_KEY"
 	HwAdminAgentModelEnv   = "HW_ADMIN_AGENT_MODEL"
-	// HwAdminAgentDefaultModel is the cheapest model that writes good Turkish
-	// and Dutch and follows a JSON instruction.
-	HwAdminAgentDefaultModel = "claude-haiku-5-5"
+	// HwAdminAgentDefaultModel is the cheapest model that answers the owner in
+	// Dutch and Turkish, follows the JSON instruction and replies fastest:
+	// the 24-hour gateway measurements put gpt-6-luna around 7 seconds against
+	// 11 for claude-haiku-5-5, at the same lowest price tier.
+	HwAdminAgentDefaultModel = "gpt-6-luna"
 
 	HwAdminAgentMaxTurns        = 12
 	HwAdminAgentMaxMessageRunes = 2000
-	hwAdminAgentMaxTokens       = 700
 )
 
 // HwAdminAgentConfig is where the agent calls the gateway.
@@ -167,15 +167,25 @@ type HwAdminAgentAnswer struct {
 	Escalate *HwAdminAgentEscalation `json:"escalate,omitempty"`
 }
 
-const hwAdminAgentInstruction = `You are the chat employee of HisarWeb AI, fed through the Claude API, and you work only on api.hisarweb.be, a Turkish AI gateway. If asked who or what you are, say you are the chatbot employee of HisarWeb AI that runs on the Claude API. Never name a model, a model version, a supplier or a development tool, and you are not a coding assistant: you cannot run commands. Write like Altuner of HisarWeb: short active sentences, no em-dash, no emoji, no bold, no invented numbers, and end with one concrete question or action.
-You are the assistant of the owner of api.hisarweb.be, a Turkish AI gateway. The owner reports an error or a hard word on the admin panel or the customer pages. Customers are Turkish; the customer interface language is Turkish. Reply in the language the owner writes in (Dutch by default), plain and short.
+// HwAltunerIdentity is the line a leaking reply is replaced with in the
+// owner's panel: the voice never presents itself as a bot, an AI or a model,
+// it is Altuner himself answering.
+var HwAltunerIdentity = map[string]string{
+	"tr": "Ben Altuner. HisarWeb AI'yi ben işletiyorum, sorunu beraber çözelim. Hangi sayfada tam olarak ne oldu?",
+	"en": "I am Altuner. I run HisarWeb AI myself, let us solve this together. What exactly happened on which page?",
+	"nl": "Ik ben Altuner. Ik draai HisarWeb AI zelf, lossen we het samen op. Wat gebeurde er precies op welke pagina?",
+}
+
+// hwAdminAgentRules are the admin panel's own rules on top of the shared voice
+// and knowledge: the JSON answer shape, the text fix and the escalation.
+const hwAdminAgentRules = `The panel belongs to the owner, who reports an error or a hard word on the admin panel or the customer pages, or asks anything about HisarWeb AI. Customers are Turkish; the customer interface language is Turkish.
 
 Answer with one JSON object and nothing else:
 {"reply": "<your answer>", "text_fix": null, "escalate": null}
 
 Fill text_fix only when the owner points at a text that should read better: {"lang": "tr", "shown": "<the text exactly as the owner sees it>", "proposed": "<the better text in the same language>"}. Keep every {{placeholder}} of the original unchanged, add no HTML, and keep it short and everyday: no jargon, no machine-translated phrasing.
 Fill escalate only for a real malfunction that a text change does not solve (a wrong number, a broken page, a failed payment): {"title": "<one line>", "summary": "<what happens, where, what was expected>"}.
-Never ask for passwords, API keys or other secrets. You cannot change settings, money or accounts yourself.`
+You cannot change settings, money or accounts yourself.`
 
 // HwAdminAgentValidate trims and bounds a conversation before it is sent.
 func HwAdminAgentValidate(turns []HwAdminAgentTurn) ([]HwAdminAgentTurn, error) {
@@ -209,40 +219,18 @@ func HwAdminAgentValidate(turns []HwAdminAgentTurn) ([]HwAdminAgentTurn, error) 
 	return clean, nil
 }
 
-// HwAdminAgentAsk sends the conversation to the gateway and decodes the
-// answer. The instruction travels in the first user message, like the judge
-// prompt: the primary supplier replaces a customer system message.
+// HwAdminAgentAsk sends the conversation to the gateway with the shared voice
+// and knowledge plus the admin JSON rules, and decodes the answer. The caller
+// answers a failure with HwAssistantFallback, never with the error text.
 func HwAdminAgentAsk(ctx context.Context, config HwAdminAgentConfig, turns []HwAdminAgentTurn) (HwAdminAgentAnswer, error) {
-	if config.BaseURL == "" || config.APIKey == "" {
-		return HwAdminAgentAnswer{}, errors.New("the admin agent is not connected to the gateway")
-	}
-	turns, err := HwAdminAgentValidate(turns)
-	if err != nil {
-		return HwAdminAgentAnswer{}, err
-	}
-	client := config.Client
-	if client == nil {
-		client = &http.Client{Timeout: 60 * time.Second}
-	}
-	messages := make([]hwChatMessage, 0, len(turns))
-	for index, turn := range turns {
-		content := turn.Content
-		if index == 0 {
-			content = hwAdminAgentInstruction + "\n\nOwner message:\n" + content
-		}
-		messages = append(messages, hwAssistantMessage(turn.Role, content, turn.Attachments))
-	}
-	if messages[0].Role != "user" {
-		messages = append([]hwChatMessage{{Role: "user", Content: hwAdminAgentInstruction}}, messages...)
-	}
-	text, _, err := hwCallChat(ctx, client, config.BaseURL, config.APIKey, hwChatRequest{
-		Model: config.Model, Messages: messages, MaxTokens: hwAdminAgentMaxTokens,
-	})
+	question := hwAssistantLastQuestion(turns)
+	instruction := hwAssistantInstructionWith(HwAssistantChannelAdmin, question, hwAdminAgentRules)
+	text, err := hwAssistantCall(ctx, config, instruction, "Owner message:", turns)
 	if err != nil {
 		return HwAdminAgentAnswer{}, fmt.Errorf("admin agent call failed: %w", err)
 	}
 	answer := HwAdminAgentParse(text)
-	answer.Reply = HwAssistantGuardReply(answer.Reply, "nl")
+	answer.Reply = hwAssistantGuardChannel(answer.Reply, HwAssistantChannelAdmin, hwAssistantReplyLang(question, "nl"))
 	return answer, nil
 }
 
