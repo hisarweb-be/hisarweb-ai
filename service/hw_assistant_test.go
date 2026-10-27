@@ -70,6 +70,26 @@ func TestHwAssistantFAQMatchesWithoutModelAndAccents(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestHwAssistantAnswerFollowsTheQuestionLanguage(t *testing.T) {
+	// A Turkish question is answered in Turkish, whatever the panel or the
+	// Telegram account shows; an English question in English.
+	_, answer, ok := HwAssistantAnswerFor("sen kimsin", "en")
+	require.True(t, ok)
+	assert.Equal(t, HwAssistantIdentity["tr"], answer)
+
+	_, answer, ok = HwAssistantAnswerFor("who are you", "tr")
+	require.True(t, ok)
+	assert.Equal(t, HwAssistantIdentity["en"], answer)
+
+	_, answer, ok = HwAssistantAnswerFor("wat kost het", "tr")
+	require.True(t, ok)
+	assert.Contains(t, answer, "lijstprijs")
+
+	// A keyword that lives in several languages answers in the preferred one.
+	_, answer, _ = HwAssistantAnswerFor("api", "nl")
+	assert.Contains(t, answer, "API-sleutel")
+}
+
 func TestHwAssistantFAQAnswersFromCatalogAndStyle(t *testing.T) {
 	for _, view := range HwAssistantFAQList("en", nil) {
 		assert.NotContains(t, view.Answer, "—", view.ID)
