@@ -109,6 +109,35 @@ func TestHwAssistantAnswerFollowsTheQuestionLanguage(t *testing.T) {
 	_, answer, ok = HwAssistantAnswerFor("nasil api key yukleye bilirim", "nl")
 	require.True(t, ok)
 	assert.Contains(t, answer, "anahtar", "the question language beats the panel language and the keyword language")
+
+	// The owner's report of 27 Oct: a Codex CLI question must not be hijacked
+	// by the Claude CLI entry, and both CLIs have their own steps.
+	_, answer, ok = HwAssistantAnswerFor("En hoe kan ik dit bij ChatGPT codex cli installeren?", "tr")
+	require.True(t, ok)
+	assert.Contains(t, answer, "OPENAI_BASE_URL", "a Codex question gets the Codex steps")
+	assert.NotContains(t, answer, "ANTHROPIC", "the Claude steps do not answer a Codex question")
+
+	_, answer, ok = HwAssistantAnswerFor("Hayir Claude CLI nasil yuklerim bana adim adim anlat", "tr")
+	require.True(t, ok)
+	assert.Contains(t, answer, "ANTHROPIC_BASE_URL")
+
+	_, answer, ok = HwAssistantAnswerFor("Hoe kan ik dit api bij Claude CLI installeren", "nl")
+	require.True(t, ok)
+	assert.Contains(t, answer, "ANTHROPIC_BASE_URL")
+
+	// A name question matches the identity entry, and in the owner's panel
+	// that answer speaks as Altuner while the public widget stays honest.
+	_, answer, ok = HwAssistantAnswerFor("Senin adin ne?", "tr")
+	require.True(t, ok)
+	assert.Equal(t, HwAssistantIdentity["tr"], answer, "the public identity stays the chat employee")
+
+	_, answer, ok = HwAssistantAnswerForAdmin("Merhaba sen kimsin", "tr")
+	require.True(t, ok)
+	assert.Equal(t, HwAltunerIdentity["tr"], answer, "the panel identity speaks as Altuner")
+
+	_, answer, ok = HwAssistantAnswerForAdmin("Hoe kan ik dit bij ChatGPT codex cli installeren?", "nl")
+	require.True(t, ok)
+	assert.Contains(t, answer, "OPENAI_BASE_URL", "the panel FAQ is the same except for the identity")
 }
 
 // The owner's assistant never presents itself as a bot: a leaking reply is

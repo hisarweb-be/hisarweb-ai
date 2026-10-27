@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -33,6 +34,39 @@ func hwRequireAdmin(c *gin.Context) bool {
 
 type hwAdminAgentChatRequest struct {
 	Messages []service.HwAdminAgentTurn `json:"messages"`
+}
+
+type hwAdminAgentAskRequest struct {
+	Question string `json:"question"`
+	Lang     string `json:"lang"`
+}
+
+// HwAdminAgentAskFAQ answers from the fixed list, in the owner's panel voice:
+// the identity entry speaks as Altuner there, where the public widget shows
+// the honest chat-employee line.
+func HwAdminAgentAskFAQ(c *gin.Context) {
+	if !hwRequireAdmin(c) {
+		return
+	}
+	var request hwAdminAgentAskRequest
+	if err := common.DecodeJson(c.Request.Body, &request); err != nil {
+		common.ApiErrorMsg(c, "invalid request")
+		return
+	}
+	question := strings.TrimSpace(request.Question)
+	if question == "" || utf8.RuneCountInString(question) > hwAssistantMaxQuestionRunes {
+		common.ApiErrorMsg(c, "invalid question")
+		return
+	}
+	now := common.GetTimestamp()
+	id, answer, ok := service.HwAssistantAnswerForAdmin(question, request.Lang)
+	if !ok {
+		_ = model.HwAssistantRecordHit(model.DB, "q:"+service.HwAssistantFold(question), now)
+		common.ApiSuccess(c, gin.H{"matched": false})
+		return
+	}
+	_ = model.HwAssistantRecordHit(model.DB, "faq:"+id, now)
+	common.ApiSuccess(c, gin.H{"matched": true, "id": id, "answer": answer})
 }
 
 // HwAdminAgentChat answers one chat turn of the owner.

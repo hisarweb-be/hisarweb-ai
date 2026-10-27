@@ -69,6 +69,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/hw/admin/reserve": accessTokenSessionRule,
 	// router/hw_pricing.go: the admin assistant (chat, text fixes, escalation card)
 	"POST /api/hw/admin/agent/chat":             accessTokenSessionRule,
+"POST /api/hw/admin/agent/ask":              accessTokenSessionRule,
 	"GET /api/hw/admin/agent/texts":             accessTokenSessionRule,
 	"POST /api/hw/admin/agent/texts":            accessTokenSessionRule,
 	"POST /api/hw/admin/agent/texts/revert":     accessTokenSessionRule,

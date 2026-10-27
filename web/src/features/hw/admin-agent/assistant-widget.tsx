@@ -35,6 +35,7 @@ import { useIsAdmin } from '@/hooks/use-admin'
 import {
   askAdminAgent,
   askAssistantFaq,
+  askAssistantFaqAdmin,
   assistantLanguage,
   escalateToBureau,
   fetchAssistantFaq,
@@ -144,7 +145,10 @@ export function AssistantWidget() {
       ])
     try {
       if (text && attachments.length === 0) {
-        const fixed = await askAssistantFaq(text, lang)
+        const fixed = await (isAdmin ? askAssistantFaqAdmin : askAssistantFaq)(
+          text,
+          lang
+        )
         if (fixed.matched) return reply(fixed.answer)
       }
       if (!isAdmin) {

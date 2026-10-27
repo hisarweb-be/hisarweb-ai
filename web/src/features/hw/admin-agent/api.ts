@@ -52,6 +52,18 @@ export async function askAssistantFaq(
   return requireServerSuccess(response.data).data as AssistantAsk
 }
 
+/** The owner's panel: the same fixed answers, with the Altuner identity. */
+export async function askAssistantFaqAdmin(
+  question: string,
+  lang: string
+): Promise<AssistantAsk> {
+  const response = await api.post('/api/hw/admin/agent/ask', {
+    question,
+    lang,
+  })
+  return requireServerSuccess(response.data).data as AssistantAsk
+}
+
 export type AgentTextFix = { lang: string; shown: string; proposed: string }
 
 export type AgentEscalation = { title: string; summary: string }

@@ -64,9 +64,9 @@ var hwAssistantFAQs = []HwAssistantFAQ{
 		ID:       "identity",
 		Question: map[string]string{"tr": "Sen kimsin?", "en": "Who are you?", "nl": "Wie ben je?"},
 		Keywords: map[string][]string{
-			"tr": {"sen kimsin", "kimsin", "hangi model", "hangi yapay zeka"},
-			"en": {"who are you", "what are you", "which model"},
-			"nl": {"wie ben je", "wie ben jij", "welk model", "welke ai"},
+			"tr": {"sen kimsin", "kimsin", "adin ne", "ismin ne", "hangi model", "hangi yapay zeka"},
+			"en": {"who are you", "what are you", "your name", "which model"},
+			"nl": {"wie ben je", "wie ben jij", "hoe heet je", "wat is je naam", "welk model", "welke ai"},
 		},
 		Answer: func(lang string) string { return HwAssistantIdentity[hwAssistantLang(lang)] },
 	},
@@ -121,15 +121,32 @@ var hwAssistantFAQs = []HwAssistantFAQ{
 		ID:       "claude-cli",
 		Question: map[string]string{"tr": "Claude CLI'yi nasıl kurarım?", "en": "How do I install Claude CLI?", "nl": "Hoe installeer ik Claude CLI?"},
 		Keywords: map[string][]string{
-			"tr": {"claude cli", "cli kurarim", "cli yuklerim", "cli nasil"},
-			"en": {"claude cli", "install claude cli", "cli install"},
-			"nl": {"claude cli", "cli installeren", "claude installeren"},
+			// Tool-specific only: a generic "cli installeren" would hijack
+			// questions about other CLIs such as Codex.
+			"tr": {"claude cli", "claud cli", "claude nasil kurulur", "claude kurarim"},
+			"en": {"claude cli", "claud cli", "install claude", "claude install"},
+			"nl": {"claude cli", "claud cli", "claude installeren", "claude kurarim"},
 		},
 		Answer: func(lang string) string {
 			return hwAssistantPick(lang,
 				"Üç adım: 1) Claude CLI'yı resmî sayfasından kur; tek komut yeter. 2) İki ortam değişkeni gir: ANTHROPIC_BASE_URL=https://api.hisarweb.be ve ANTHROPIC_AUTH_TOKEN=panelden aldığın API anahtarı. 3) Terminalde claude yaz ve listeden bir model seç. Hangi adımda kaldın?",
 				"Three steps: 1) install Claude CLI from its official page, one command is enough. 2) set two environment variables: ANTHROPIC_BASE_URL=https://api.hisarweb.be and ANTHROPIC_AUTH_TOKEN=your API key from the panel. 3) type claude in the terminal and pick a model from our list. Which step are you on?",
 				"Drie stappen: 1) installeer Claude CLI vanaf de officiële pagina, één commando volstaat. 2) zet twee omgevingsvariabelen: ANTHROPIC_BASE_URL=https://api.hisarweb.be en ANTHROPIC_AUTH_TOKEN=je API-sleutel uit het paneel. 3) typ claude in de terminal en kies een model uit onze lijst. Bij welke stap zit je?")
+		},
+	},
+	{
+		ID:       "codex-cli",
+		Question: map[string]string{"tr": "Codex CLI'yı nasıl kurarım?", "en": "How do I install Codex CLI?", "nl": "Hoe installeer ik Codex CLI?"},
+		Keywords: map[string][]string{
+			"tr": {"codex", "chatgpt cli", "codex cli"},
+			"en": {"codex", "chatgpt cli", "codex cli"},
+			"nl": {"codex", "chatgpt cli", "codex cli"},
+		},
+		Answer: func(lang string) string {
+			return hwAssistantPick(lang,
+				"Üç adım: 1) Codex CLI'yı resmî sayfasından kur; tek komut yeter. 2) İki ortam değişkeni gir: OPENAI_BASE_URL=https://api.hisarweb.be/v1 ve OPENAI_API_KEY=panelden aldığın API anahtarı. 3) Terminalde codex yaz ve listeden bir model seç. Hangi adımda kaldın?",
+				"Three steps: 1) install Codex CLI from its official page, one command is enough. 2) set two environment variables: OPENAI_BASE_URL=https://api.hisarweb.be/v1 and OPENAI_API_KEY=your API key from the panel. 3) type codex in the terminal and pick a model from our list. Which step are you on?",
+				"Drie stappen: 1) installeer Codex CLI vanaf de officiële pagina, één commando volstaat. 2) zet twee omgevingsvariabelen: OPENAI_BASE_URL=https://api.hisarweb.be/v1 en OPENAI_API_KEY=je API-sleutel uit het paneel. 3) typ codex in de terminal en kies een model uit onze lijst. Bij welke stap zit je?")
 		},
 	},
 	{
@@ -278,4 +295,16 @@ func HwAssistantAnswerFor(question, lang string) (id, answer string, ok bool) {
 		return "", "", false
 	}
 	return entry.ID, entry.Answer(matched), true
+}
+
+// HwAssistantAnswerForAdmin serves the owner's panel: the same fixed answers,
+// except that the identity answer speaks as Altuner, so a "who are you" in
+// the panel never breaks the owner's persona. The public widget keeps the
+// honest chat-employee identity.
+func HwAssistantAnswerForAdmin(question, lang string) (id, answer string, ok bool) {
+	id, answer, ok = HwAssistantAnswerFor(question, lang)
+	if ok && id == "identity" {
+		answer = HwAltunerIdentity[hwAssistantLang(lang)]
+	}
+	return id, answer, ok
 }
