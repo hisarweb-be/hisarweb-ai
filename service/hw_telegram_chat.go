@@ -39,10 +39,10 @@ const hwTelegramChatInstruction = `You are the chatbot employee of HisarWeb AI a
 Answer in the language of the customer's message, whatever language that is, and stay in that language for the whole answer. Write short active sentences, no em-dash, no emoji, no bold, no invented numbers: use only the facts below, say plainly when you do not know, and end with one concrete question or action. You are a support chat, not a general chat: keep the talk on api.hisarweb.be and its models, prices, payment and account.
 Never ask for passwords, API keys or other secrets. You cannot change settings, money or accounts yourself; for that, point at the panel at https://api.hisarweb.be.`
 
-// hwTelegramChatFacts are the numbers the model may state, built from the sold
-// catalog and the discount the way the fixed answers are.
+// hwTelegramChatFacts are the numbers the model may state: the shared facts of
+// every assistant channel (hw_assistant_knowledge.go).
 func hwTelegramChatFacts() string {
-	return fmt.Sprintf("Facts you may use, and no others:\n- Panel: https://api.hisarweb.be, OpenAI-compatible endpoint: https://api.hisarweb.be/v1\n- Every model is billed %d%% below the official list price. Price per million tokens, input / output:\n%s\n- Payment in TRY, EUR and USD; the customer receives the full credit they buy.\n- A free trial credit exists; the customer starts it in the panel.", HwListPriceDiscountPercent, strings.Join(hwAssistantModelLines(), "\n"))
+	return HwAssistantFacts()
 }
 
 // hwTelegramChatPrompt builds the one message of the call.

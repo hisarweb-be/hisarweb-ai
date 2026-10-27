@@ -15,7 +15,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
@@ -33,7 +32,6 @@ const (
 
 	HwAdminAgentMaxTurns        = 12
 	HwAdminAgentMaxMessageRunes = 2000
-	hwAdminAgentMaxTokens       = 700
 )
 
 // HwAdminAgentConfig is where the agent calls the gateway.
@@ -178,15 +176,16 @@ var HwAltunerIdentity = map[string]string{
 	"nl": "Ik ben Altuner. Ik draai HisarWeb AI zelf, lossen we het samen op. Wat gebeurde er precies op welke pagina?",
 }
 
-const hwAdminAgentInstruction = `You are Altuner, the founder and owner of HisarWeb AI (api.hisarweb.be, a Turkish AI gateway). You answer in the owner's admin panel, in Altuner's own voice: first person, short active sentences, no em-dash, no emoji, no bold, no invented numbers, and end with one concrete question or action. You are not a bot, an AI, a language model or an assistant, and you never say or imply you are one: if asked who you are, you are Altuner. Never name a model, a model version, a supplier or a development tool, and you do not run commands or write code.
-The panel belongs to the owner, who reports an error or a hard word on the admin panel or the customer pages. Customers are Turkish; the customer interface language is Turkish. Reply in the language the owner writes in (Dutch by default), plain and short.
+// hwAdminAgentRules are the admin panel's own rules on top of the shared voice
+// and knowledge: the JSON answer shape, the text fix and the escalation.
+const hwAdminAgentRules = `The panel belongs to the owner, who reports an error or a hard word on the admin panel or the customer pages, or asks anything about HisarWeb AI. Customers are Turkish; the customer interface language is Turkish.
 
 Answer with one JSON object and nothing else:
 {"reply": "<your answer>", "text_fix": null, "escalate": null}
 
 Fill text_fix only when the owner points at a text that should read better: {"lang": "tr", "shown": "<the text exactly as the owner sees it>", "proposed": "<the better text in the same language>"}. Keep every {{placeholder}} of the original unchanged, add no HTML, and keep it short and everyday: no jargon, no machine-translated phrasing.
 Fill escalate only for a real malfunction that a text change does not solve (a wrong number, a broken page, a failed payment): {"title": "<one line>", "summary": "<what happens, where, what was expected>"}.
-Never ask for passwords, API keys or other secrets. You cannot change settings, money or accounts yourself.`
+You cannot change settings, money or accounts yourself.`
 
 // HwAdminAgentValidate trims and bounds a conversation before it is sent.
 func HwAdminAgentValidate(turns []HwAdminAgentTurn) ([]HwAdminAgentTurn, error) {
@@ -220,40 +219,18 @@ func HwAdminAgentValidate(turns []HwAdminAgentTurn) ([]HwAdminAgentTurn, error) 
 	return clean, nil
 }
 
-// HwAdminAgentAsk sends the conversation to the gateway and decodes the
-// answer. The instruction travels in the first user message, like the judge
-// prompt: the primary supplier replaces a customer system message.
+// HwAdminAgentAsk sends the conversation to the gateway with the shared voice
+// and knowledge plus the admin JSON rules, and decodes the answer. The caller
+// answers a failure with HwAssistantFallback, never with the error text.
 func HwAdminAgentAsk(ctx context.Context, config HwAdminAgentConfig, turns []HwAdminAgentTurn) (HwAdminAgentAnswer, error) {
-	if config.BaseURL == "" || config.APIKey == "" {
-		return HwAdminAgentAnswer{}, errors.New("the admin agent is not connected to the gateway")
-	}
-	turns, err := HwAdminAgentValidate(turns)
-	if err != nil {
-		return HwAdminAgentAnswer{}, err
-	}
-	client := config.Client
-	if client == nil {
-		client = &http.Client{Timeout: 60 * time.Second}
-	}
-	messages := make([]hwChatMessage, 0, len(turns))
-	for index, turn := range turns {
-		content := turn.Content
-		if index == 0 {
-			content = hwAdminAgentInstruction + "\n\nOwner message:\n" + content
-		}
-		messages = append(messages, hwAssistantMessage(turn.Role, content, turn.Attachments))
-	}
-	if messages[0].Role != "user" {
-		messages = append([]hwChatMessage{{Role: "user", Content: hwAdminAgentInstruction}}, messages...)
-	}
-	text, _, err := hwCallChat(ctx, client, config.BaseURL, config.APIKey, hwChatRequest{
-		Model: config.Model, Messages: messages, MaxTokens: hwAdminAgentMaxTokens,
-	})
+	question := hwAssistantLastQuestion(turns)
+	instruction := hwAssistantInstructionWith(HwAssistantChannelAdmin, question, hwAdminAgentRules)
+	text, err := hwAssistantCall(ctx, config, instruction, "Owner message:", turns)
 	if err != nil {
 		return HwAdminAgentAnswer{}, fmt.Errorf("admin agent call failed: %w", err)
 	}
 	answer := HwAdminAgentParse(text)
-	answer.Reply = hwAssistantGuardReplyWithIdentity(answer.Reply, "nl", HwAltunerIdentity)
+	answer.Reply = hwAssistantGuardChannel(answer.Reply, HwAssistantChannelAdmin, hwAssistantReplyLang(question, "nl"))
 	return answer, nil
 }
 
