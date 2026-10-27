@@ -108,19 +108,26 @@ func hwTelegramTextsFor(languageCode string) hwTelegramTexts {
 }
 
 // hwTelegramUpdate is the part of a bot update this webhook reads. The message
-// body is never logged or stored.
+// body is never logged, and stored only when the customer rates an answer.
 type hwTelegramUpdate struct {
-	UpdateId int64              `json:"update_id"`
-	Message  *hwTelegramMessage `json:"message"`
+	UpdateId      int64                    `json:"update_id"`
+	Message       *hwTelegramMessage       `json:"message"`
+	CallbackQuery *hwTelegramCallbackQuery `json:"callback_query"`
 }
 
-// hwTelegramMessage is one message of the update.
+// hwTelegramUser is the sender of a message or a button press.
+type hwTelegramUser struct {
+	Id           int64  `json:"id"`
+	IsBot        bool   `json:"is_bot"`
+	LanguageCode string `json:"language_code"`
+}
+
+// hwTelegramMessage is one message of the update. ReplyToMessage is the
+// message it answers; Telegram nests it one level deep only.
 type hwTelegramMessage struct {
-	From *struct {
-		Id           int64  `json:"id"`
-		LanguageCode string `json:"language_code"`
-	} `json:"from"`
-	Chat struct {
+	MessageId int64           `json:"message_id"`
+	From      *hwTelegramUser `json:"from"`
+	Chat      struct {
 		Id int64 `json:"id"`
 	} `json:"chat"`
 	Text    string `json:"text"`
@@ -128,6 +135,16 @@ type hwTelegramMessage struct {
 		PhoneNumber string `json:"phone_number"`
 		UserId      *int64 `json:"user_id"`
 	} `json:"contact"`
+	ReplyToMessage *hwTelegramMessage `json:"reply_to_message"`
+}
+
+// hwTelegramCallbackQuery is the press of an inline button: Message is the bot
+// message that carries the button.
+type hwTelegramCallbackQuery struct {
+	Id      string             `json:"id"`
+	From    *hwTelegramUser    `json:"from"`
+	Data    string             `json:"data"`
+	Message *hwTelegramMessage `json:"message"`
 }
 
 // HwHandleTelegramWebhook verifies and processes one bot update. Without a
@@ -195,6 +212,9 @@ func HwHandleTelegramWebhook(ctx context.Context, rawBody []byte, secretHeader s
 // Log lines carry user ids, outcomes and counts only: no link token, no phone
 // number, no chat id and no message body.
 func hwProcessTelegramUpdate(ctx context.Context, update hwTelegramUpdate, now int64) HwWebhookOutcome {
+	if update.CallbackQuery != nil {
+		return hwTelegramFeedback(ctx, update.CallbackQuery)
+	}
 	message := update.Message
 	if message == nil || message.From == nil {
 		return HwWebhookIgnored
@@ -203,16 +223,26 @@ func hwProcessTelegramUpdate(ctx context.Context, update hwTelegramUpdate, now i
 	if payload, ok := hwTelegramLinkPayload(message.Text); ok {
 		return hwLinkTelegramAccount(ctx, message, payload, texts, now)
 	}
-	// A question with a fixed answer is answered for anyone, without a model call.
-	if hwTelegramFAQReply(ctx, message, now) {
+	text := strings.TrimSpace(message.Text)
+	lang := hwTelegramAssistantLang(message.From.LanguageCode)
+	// The list of fixed questions is there for anyone.
+	if message.Contact == nil && hwTelegramIsHelp(text) {
+		hwAnswerTelegramChat(ctx, strconv.FormatInt(message.Chat.Id, 10), hwTelegramHelpText(lang), "")
 		return HwWebhookAccepted
 	}
+	// Every free-typed message goes to the model; commands do not.
+	isQuestion := message.Contact == nil && text != "" && !strings.HasPrefix(text, "/")
 	user, err := model.GetUserByTelegramID(strconv.FormatInt(message.From.Id, 10))
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		// Someone who opens the bot without a link gets told where the link
-		// lives; every other message of an unknown account stays ignored.
-		if strings.HasPrefix(strings.TrimSpace(message.Text), "/start") {
+		// lives, and a question gets an answer within the smaller day budget of
+		// the chat; anything else of an unknown account stays ignored.
+		if strings.HasPrefix(text, "/start") {
 			hwAnswerTelegramChat(ctx, strconv.FormatInt(message.Chat.Id, 10), texts.LinkNeeded, "")
+			return HwWebhookAccepted
+		}
+		if isQuestion {
+			hwTelegramChatReply(ctx, message, "c"+strconv.FormatInt(message.Chat.Id, 10), hwTelegramChatGuestDayLimit, lang, time.Unix(now, 0))
 			return HwWebhookAccepted
 		}
 		common.SysLog(common.LogText("telegram webhook ignored a message from a Telegram account that is linked to no user"))
@@ -226,16 +256,12 @@ func hwProcessTelegramUpdate(ctx context.Context, update hwTelegramUpdate, now i
 		// A bot may only write to a chat the customer opened, so the request for
 		// the number answers the /start that opened it; pushing it after the
 		// login would reach only customers who had opened the bot before.
-		if strings.HasPrefix(strings.TrimSpace(message.Text), "/start") {
+		if strings.HasPrefix(text, "/start") {
 			hwAnswerTelegramChat(ctx, strconv.FormatInt(message.Chat.Id, 10), texts.Prompt, texts.Button)
 			return HwWebhookAccepted
 		}
-		// A linked customer who asks something without a fixed answer gets a
-		// model answer in the language of their message; when the gateway does
-		// not answer, the honest fixed text is sent instead.
-		if text := strings.TrimSpace(message.Text); text != "" && !strings.HasPrefix(text, "/") {
-			hwTelegramChatReply(ctx, user.Id, strconv.FormatInt(message.Chat.Id, 10), text,
-				hwTelegramAssistantLang(message.From.LanguageCode), time.Unix(now, 0))
+		if isQuestion {
+			hwTelegramChatReply(ctx, message, strconv.Itoa(user.Id), hwTelegramChatDayLimit, lang, time.Unix(now, 0))
 			return HwWebhookAccepted
 		}
 		return HwWebhookIgnored
@@ -447,7 +473,7 @@ func HwRegisterTelegramWebhook(ctx context.Context) error {
 	return hwTelegramCall(ctx, "setWebhook", hwTelegramWebhookRequest{
 		Url:            address + hwTelegramWebhookPath,
 		SecretToken:    hwTelegramWebhookSecret(),
-		AllowedUpdates: []string{"message"},
+		AllowedUpdates: []string{"message", "callback_query"},
 	})
 }
 
@@ -474,9 +500,6 @@ func HwRegisterTelegramWebhookInBackground() {
 	}()
 }
 
-// hwTelegramCall posts one Bot API method. The API base comes from
-// HW_TELEGRAM_API_BASE (a test double in tests). The URL carries the token, so
-// no error returned here quotes it.
 // hwTelegramAPIBase returns the Bot API base. The bot token travels in the URL
 // path, so only https leaves the host; plain http is accepted for a loopback
 // address only (a test server or a local Bot API server).
@@ -500,7 +523,13 @@ func hwTelegramAPIBase() (string, bool) {
 	return "", false
 }
 
+// hwTelegramCall posts one Bot API method. The API base comes from
+// HW_TELEGRAM_API_BASE (a test double in tests). The URL carries the token, so
+// no error returned here quotes it.
 func hwTelegramCall(ctx context.Context, method string, request any) error {
+	if hwTelegramBotToken() == "" {
+		return ErrHwTelegramUnavailable
+	}
 	body, err := common.Marshal(request)
 	if err != nil {
 		return ErrHwTelegramDeliveryFailed
@@ -534,19 +563,50 @@ type hwTelegramWebhookRequest struct {
 	AllowedUpdates []string `json:"allowed_updates"`
 }
 
-// hwTelegramMessageRequest is the sendMessage body. The reply markup is only
-// present when a button is asked for.
+// hwTelegramMessageRequest is the sendMessage body. The reply parameters and
+// the reply markup are only present when asked for.
 type hwTelegramMessageRequest struct {
-	ChatId      int64               `json:"chat_id"`
-	Text        string              `json:"text"`
-	ReplyMarkup *hwTelegramKeyboard `json:"reply_markup,omitempty"`
+	ChatId          int64                      `json:"chat_id"`
+	Text            string                     `json:"text"`
+	ReplyParameters *hwTelegramReplyParameters `json:"reply_parameters,omitempty"`
+	ReplyMarkup     *hwTelegramKeyboard        `json:"reply_markup,omitempty"`
 }
 
-// hwTelegramKeyboard is the one-button keyboard with the share-contact button.
+// hwTelegramReplyParameters makes the message a reply to an earlier one; the
+// message still goes out when that one was deleted in the meantime.
+type hwTelegramReplyParameters struct {
+	MessageId                int64 `json:"message_id"`
+	AllowSendingWithoutReply bool  `json:"allow_sending_without_reply,omitempty"`
+}
+
+// hwTelegramKeyboard is the reply markup: either the one-button keyboard with
+// the share-contact button, or the inline buttons under a message. Only the
+// one that is set is serialised.
 type hwTelegramKeyboard struct {
-	Keyboard        [][]hwTelegramButton `json:"keyboard"`
-	ResizeKeyboard  bool                 `json:"resize_keyboard,omitempty"`
-	OneTimeKeyboard bool                 `json:"one_time_keyboard,omitempty"`
+	Keyboard        [][]hwTelegramButton       `json:"keyboard,omitempty"`
+	InlineKeyboard  [][]hwTelegramInlineButton `json:"inline_keyboard,omitempty"`
+	ResizeKeyboard  bool                       `json:"resize_keyboard,omitempty"`
+	OneTimeKeyboard bool                       `json:"one_time_keyboard,omitempty"`
+}
+
+// hwTelegramInlineButton is a button under a message; pressing it sends
+// callback_data back as a callback_query.
+type hwTelegramInlineButton struct {
+	Text         string `json:"text"`
+	CallbackData string `json:"callback_data"`
+}
+
+// hwTelegramEditMarkupRequest is the editMessageReplyMarkup body; without a
+// reply_markup it removes the inline buttons.
+type hwTelegramEditMarkupRequest struct {
+	ChatId    int64 `json:"chat_id"`
+	MessageId int64 `json:"message_id"`
+}
+
+// hwTelegramCallbackAnswer is the answerCallbackQuery body.
+type hwTelegramCallbackAnswer struct {
+	CallbackQueryId string `json:"callback_query_id"`
+	Text            string `json:"text,omitempty"`
 }
 
 // hwTelegramButton is one keyboard button. request_contact asks Telegram to
