@@ -279,7 +279,11 @@ func HwAssistantChat(ctx context.Context, config HwAdminAgentConfig, channel, la
 	if channel == HwAssistantChannelAdmin {
 		label = "Owner message:"
 	}
-	text, err := hwAssistantCall(ctx, config, HwAssistantInstruction(channel, question), label, turns)
+	// A bare greeting such as "Hallo" fits several languages; the model then
+	// guessed German on a Dutch page. It answers in the page language instead.
+	shortRule := "If the latest message is too short to tell its language (only a greeting such as Hallo, Hi or Merhaba), answer in " +
+		hwAssistantPick(hwAssistantReplyLang(question, lang), "Turkish", "English", "Dutch") + "."
+	text, err := hwAssistantCall(ctx, config, HwAssistantInstruction(channel, question)+"\n\n"+shortRule, label, turns)
 	if err != nil {
 		common.SysError(common.LogText("hw assistant %s answer fell back: %s", channel, HwAssistantFailureClass(err)))
 		return HwAssistantFallback(channel, lang, question), false

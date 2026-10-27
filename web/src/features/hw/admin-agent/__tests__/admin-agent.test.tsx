@@ -182,6 +182,26 @@ describe('AssistantWidget', () => {
     expect(api.askAdminAgent).not.toHaveBeenCalled()
   })
 
+  it('sends on Enter, not on Shift+Enter, and shows the typing bubble while waiting', async () => {
+    admin.isAdmin = false
+    let answer: (text: string) => void = () => undefined
+    api.askAssistantChat.mockReturnValue(
+      new Promise<string>((resolve) => (answer = resolve))
+    )
+    render(<AssistantWidget />)
+    fireEvent.click(screen.getByLabelText('Assistant'))
+    const box = await screen.findByLabelText('Type your question')
+    fireEvent.change(box, { target: { value: 'hello' } })
+    fireEvent.keyDown(box, { key: 'Enter', shiftKey: true })
+    expect(api.askAssistantChat).not.toHaveBeenCalled()
+    fireEvent.keyDown(box, { key: 'Enter' })
+    expect(api.askAssistantChat).toHaveBeenCalledOnce()
+    expect(screen.getByRole('status').textContent).toContain('typing')
+    answer('Model answer')
+    expect(await screen.findByText('Model answer')).toBeTruthy()
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
   it('shows a short delayed line instead of an error when the request fails', async () => {
     admin.isAdmin = false
     api.askAssistantChat.mockRejectedValue(new Error('boom 502'))

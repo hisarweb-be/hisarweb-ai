@@ -369,6 +369,17 @@ func TestHwAssistantChatAnswersThroughTheGateway(t *testing.T) {
 	assert.Equal(t, hwAssistantMaxTokens, request.MaxTokens)
 }
 
+func TestHwAssistantChatAnswersABareGreetingInThePageLanguage(t *testing.T) {
+	hwAssistantFeedbackDB(t)
+	for lang, want := range map[string]string{"nl": "answer in Dutch.", "tr": "answer in Turkish.", "en": "answer in English."} {
+		config, request := hwAssistantFakeGateway(t, http.StatusOK, `{"choices":[{"message":{"role":"assistant","content":"Hoi."}}]}`)
+		_, ok := HwAssistantChat(context.Background(), config, HwAssistantChannelWidget, lang, []HwAdminAgentTurn{{Role: "user", Content: "Hallo"}})
+		require.True(t, ok)
+		require.NotEmpty(t, request.Messages)
+		assert.Contains(t, request.Messages[0].Content, want, lang)
+	}
+}
+
 func TestHwAssistantChatFallsBackWithoutShowingTheCause(t *testing.T) {
 	hwAssistantFeedbackDB(t)
 	for _, status := range []int{http.StatusForbidden, http.StatusInternalServerError} {
