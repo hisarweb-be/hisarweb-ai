@@ -86,8 +86,6 @@ var hwSoldModels = []HwSoldModel{
 	{Name: "claude-opus-5-5", PriceKey: "claude-opus-5-5", InputMicroUsd: 4_000_000, OutputMicroUsd: 20_000_000},
 	{Name: "claude-sonnet-5-5", PriceKey: "claude-sonnet-5-5", InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000},
 	{Name: "claude-haiku-5-5", PriceKey: "claude-haiku-5-5", InputMicroUsd: 100_000, OutputMicroUsd: 500_000},
-	{Name: "claude-fable-5-1", PriceKey: "claude-fable-5-1", InputMicroUsd: 10_000_000, OutputMicroUsd: 50_000_000},
-	{Name: "gemini-3.8-flash", PriceKey: "gemini-3.8-flash", InputMicroUsd: 750_000, OutputMicroUsd: 3_750_000},
 	// The gpt generation 6 family returned to the catalog on 27 Oct 2026 at the
 	// official list prices; the 5.6 generation and the bare gpt-6 name are
 	// retired below because their successors are better and cheaper.
@@ -119,6 +117,14 @@ var hwRetiredModels = map[string]string{
 	"gpt-5.6-sol":   "gpt-6.1-sol",
 	"gpt-5.6-terra": "gpt-6.1-sol",
 	"gpt-6":         "gpt-6.1-sol",
+	// claude-fable-5-1 and gemini-3.8-flash left the catalog on 27 Oct 2026
+	// after the model check (kennis/lumia-modelkeuring.md): Fable answered the
+	// open identity question with another model's name, and the Gemini name has
+	// no route under the sold name (HTTP 403 key_model_access_denied). Neither
+	// had a vendor route left, so each one points at the sold model of its own
+	// price tier.
+	"claude-fable-5-1": "claude-opus-5-5",
+	"gemini-3.8-flash": "claude-haiku-5-5",
 }
 
 // HwRetiredModelSuccessor returns the model that replaces a retired model name.

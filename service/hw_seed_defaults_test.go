@@ -123,8 +123,6 @@ func TestHwSeedDefaultOptions(t *testing.T) {
 			"claude-opus-5-5":   1,
 			"claude-sonnet-5-5": 0.5,
 			"claude-haiku-5-5":  0.025,
-			"claude-fable-5-1":  2.5,
-			"gemini-3.8-flash":  0.1875,
 		}
 		for name, expected := range expectedModelRatios {
 			ratio, ok, _ := ratio_setting.GetModelRatio(name)
@@ -177,9 +175,9 @@ func TestHwSeedDefaultOptions(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, 3.5, ratio, "an operator price is never replaced")
 		assert.Equal(t, 4.0, ratio_setting.GetCompletionRatio("claude-opus-5-5"))
-		ratio, ok, _ = ratio_setting.GetModelRatio("claude-fable-5-1")
+		ratio, ok, _ = ratio_setting.GetModelRatio("claude-haiku-5-5")
 		require.True(t, ok, "a missing sold model is filled in")
-		assert.Equal(t, 2.5, ratio)
+		assert.Equal(t, 0.025, ratio)
 		ratio, ok, _ = ratio_setting.GetModelRatio("gpt-4o")
 		require.True(t, ok, "a model outside the catalog stays")
 		assert.Equal(t, 1.25, ratio)

@@ -29,8 +29,6 @@ export const HW_SOLD_MODELS = [
   'claude-opus-5-5',
   'claude-sonnet-5-5',
   'claude-haiku-5-5',
-  'claude-fable-5-1',
-  'gemini-3.8-flash',
 ] as const
 
 export type HwSoldModel = (typeof HW_SOLD_MODELS)[number]
