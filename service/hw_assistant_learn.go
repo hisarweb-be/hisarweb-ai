@@ -118,14 +118,15 @@ func HwAssistantLearnedSection(question string, rows []model.HwAssistantFeedback
 
 // HwAssistantLearnedFor loads the recent feedback of the owner's panel and
 // returns the section for question; "" on any error or without a database.
-// Only admin rows teach: a widget or Telegram thumb is anonymous and carries
-// the question and answer the client sent, so one fake thumb up would steer
-// what every customer is told. Those rows stay for the owner to review.
+// Only admin rows and customer rows the bureau approved teach: a widget or
+// Telegram thumb is anonymous and carries the question and answer the client
+// sent, so an unreviewed fake thumb up would steer what every customer is
+// told.
 func HwAssistantLearnedFor(question string) string {
 	if model.DB == nil {
 		return ""
 	}
-	rows, err := model.HwAssistantRecentChannelFeedback(model.DB, HwAssistantChannelAdmin, model.HwAssistantFeedbackMaxRecent)
+	rows, err := model.HwAssistantLearnableFeedback(model.DB, model.HwAssistantFeedbackMaxRecent)
 	if err != nil {
 		return ""
 	}

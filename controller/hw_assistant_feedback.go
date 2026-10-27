@@ -5,6 +5,7 @@ package controller
 // list what was rated.
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type hwAssistantFeedbackRequest struct {
@@ -78,7 +80,8 @@ func HwAdminAgentFeedback(c *gin.Context) {
 	hwAssistantStoreFeedbackRequest(c, "admin", c.GetInt("id"), true)
 }
 
-// HwAssistantListFeedback lists the newest feedback, optionally one rating.
+// HwAssistantListFeedback lists the newest feedback, optionally one rating
+// and one review state (open, approved, rejected, abuse).
 func HwAssistantListFeedback(c *gin.Context) {
 	if !hwRequireAdmin(c) {
 		return
@@ -88,10 +91,52 @@ func HwAssistantListFeedback(c *gin.Context) {
 		common.ApiErrorMsg(c, "invalid rating")
 		return
 	}
-	rows, err := model.HwAssistantListFeedback(model.DB, rating, model.HwAssistantFeedbackMaxList)
+	review := c.Query("review")
+	switch review {
+	case "", model.HwAssistantReviewOpen, model.HwAssistantReviewApproved, model.HwAssistantReviewRejected, model.HwAssistantReviewAbuse:
+	default:
+		common.ApiErrorMsg(c, "invalid review")
+		return
+	}
+	rows, err := model.HwAssistantListFeedback(model.DB, rating, review, model.HwAssistantFeedbackMaxList)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	common.ApiSuccess(c, rows)
+}
+
+// HwAssistantReviewFeedback stores the verdict of the bureau on one customer
+// thumb: approved (teaches), rejected or abuse (never teaches).
+func HwAssistantReviewFeedback(c *gin.Context) {
+	if !hwRequireAdmin(c) {
+		return
+	}
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		common.ApiErrorMsg(c, "invalid id")
+		return
+	}
+	var request struct {
+		Verdict string `json:"verdict"`
+	}
+	if err := common.DecodeJson(c.Request.Body, &request); err != nil {
+		common.ApiErrorMsg(c, "invalid request")
+		return
+	}
+	switch request.Verdict {
+	case model.HwAssistantReviewApproved, model.HwAssistantReviewRejected, model.HwAssistantReviewAbuse:
+	default:
+		common.ApiErrorMsg(c, "invalid verdict")
+		return
+	}
+	if err := model.HwAssistantReviewFeedback(model.DB, id, request.Verdict); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			common.ApiErrorMsg(c, "feedback not found")
+			return
+		}
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{"id": id, "review": request.Verdict})
 }
