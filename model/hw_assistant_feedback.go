@@ -37,7 +37,7 @@ type HwAssistantFeedback struct {
 }
 
 var (
-	hwAssistantFeedbackPersonalPattern = regexp.MustCompile(`@|\d{6,}|(?i)sk-[a-z0-9]|[A-Za-z0-9]{32,}`)
+	hwAssistantFeedbackPersonalPattern = regexp.MustCompile(`@|\d{6,}|(?i)\bsk-[a-z0-9]|[A-Za-z0-9]{32,}`)
 	hwAssistantFeedbackLinkPattern     = regexp.MustCompile(`(?i)https?://[^\s/?#]*`)
 )
 
