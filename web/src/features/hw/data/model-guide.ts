@@ -40,32 +40,23 @@ export type ModelGuide = {
 /** Default order of the catalogue ("Recommended"): strongest first, the
  *  newcomer of a price tier directly after its established peer. */
 export const RECOMMENDED_ORDER = [
-  'claude-fable-5-1',
   'gpt-6-astra',
   'claude-opus-5-5',
   'claude-sonnet-5-5',
   'gpt-6.1-sol',
   'claude-haiku-5-5',
   'gpt-6-luna',
-  'gemini-3.8-flash',
   'gemini-3.8-flash-cyber',
   'grok-4',
   'grok-4-fast',
 ] as const
 
 export const MODEL_GUIDE: Readonly<Record<string, ModelGuide>> = {
-  'claude-fable-5-1': {
-    tag: { tr: 'En güçlü', en: 'Most powerful' },
-    description: {
-      tr: 'En zor işler için en güçlü model. Derin düşünme gerektiren sorunlarda ve saatler süren, çok adımlı görevlerde kullanın; örneğin büyük bir uygulamanın tasarımını baştan kurmak.',
-      en: 'The strongest model, for the hardest jobs. Use it for problems that need deep thinking and for multi-step tasks that run for hours, such as designing a large app from scratch.',
-    },
-  },
   'claude-opus-5-5': {
     tag: { tr: 'Büyük projeler', en: 'Big projects' },
     description: {
-      tr: 'Büyük ve karmaşık kodlama işleri ile uzun süren görevler için. Birçok dosyayı kapsayan bir değişikliği baştan sona kendisi yapabilir; Fable’dan daha hızlı ve ucuz.',
-      en: 'For large, complex coding work and long-running tasks. It can carry out a change that spans many files from start to finish, faster and cheaper than Fable.',
+      tr: 'Büyük ve karmaşık kodlama işleri ile uzun süren görevler için. Birçok dosyayı kapsayan bir değişikliği baştan sona kendisi yapabilir; Astra’dan daha hızlı ve ucuz.',
+      en: 'For large, complex coding work and long-running tasks. It can carry out a change that spans many files from start to finish, faster and cheaper than Astra.',
     },
   },
   'claude-sonnet-5-5': {
@@ -88,24 +79,14 @@ export const MODEL_GUIDE: Readonly<Record<string, ModelGuide>> = {
       en: 'Very fast and very cheap. A good fit for a chatbot, summarising text, or running hundreds of small jobs (sorting, extracting facts) in a row.',
     },
   },
-  'gemini-3.8-flash': {
-    tag: {
-      tr: 'Hızlı, görsel ve uzun belge',
-      en: 'Fast, images and long documents',
-    },
-    description: {
-      tr: 'Google’ın hızlı ve ucuz modeli. Görselleri okuyabilir ve çok uzun belgeleri tek seferde işleyebilir, örneğin bir ekran görüntüsünü ya da uzun bir PDF’i.',
-      en: 'Google’s fast and cheap model. It can read images and work through very long documents in one go, such as a screenshot or a long PDF.',
-    },
-  },
   'gpt-6-astra': {
     tag: {
       tr: 'OpenAI’nin en güçlüsü',
       en: 'OpenAI’s most powerful',
     },
     description: {
-      tr: 'OpenAI’nin amiral gemisi modeli. En zor araştırma sorunları, saatler süren çok adımlı görevler ve bir uygulamanın tamamını kapsayan büyük yeniden yazımlar için; Fable ile aynı fiyat sınıfında.',
-      en: 'OpenAI’s flagship model. For the hardest research problems, multi-step jobs that run for hours, and rewrites that span a whole app; priced in the same tier as Fable.',
+      tr: 'OpenAI’nin amiral gemisi modeli. En zor araştırma sorunları, saatler süren çok adımlı görevler ve bir uygulamanın tamamını kapsayan büyük yeniden yazımlar için; Opus ile aynı fiyat sınıfında.',
+      en: 'OpenAI’s flagship model. For the hardest research problems, multi-step jobs that run for hours, and rewrites that span a whole app; priced in the same tier as Opus.',
     },
   },
   'gpt-6.1-sol': {

@@ -25,7 +25,6 @@ import {
   LISTED_MODELS,
   MODEL_CODEX,
   MODEL_DEFAULT,
-  MODEL_GEMINI,
   MODEL_HAIKU,
   MODEL_OPUS,
   OPENAI_BASE_URL,
@@ -820,7 +819,6 @@ const codex: ToolGuide = {
 const OPENCODE_V1_MODELS = LISTED_MODELS.map(
   (model) => `        "${model.id}": { "name": "${model.name}" }`
 )
-OPENCODE_V1_MODELS.push(`        "${MODEL_GEMINI}": { "name": "Gemini 3.8 Flash" }`)
 
 const OPENCODE_V1_CONFIG = `{
   "provider": {

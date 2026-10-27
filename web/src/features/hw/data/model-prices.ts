@@ -103,13 +103,6 @@ export const PRICE_SOURCES: readonly PriceSource[] = [
 /** Same order as the catalogue ("Recommended"): see `RECOMMENDED_ORDER` in `model-guide.ts`. */
 export const MODEL_PRICES: readonly ModelPrice[] = [
   {
-    model: 'claude-fable-5-1',
-    provider: 'Anthropic',
-    official: { input: 10, output: 50 },
-    openrouter: { input: 10, output: 50 },
-    hisarweb: { input: 5, output: 25 },
-  },
-  {
     model: 'gpt-6-astra',
     provider: 'OpenAI',
     official: { input: 10, output: 50 },
@@ -150,14 +143,6 @@ export const MODEL_PRICES: readonly ModelPrice[] = [
     official: { input: 0.1, output: 0.5 },
     openrouter: { input: 0.1, output: 0.5 },
     hisarweb: { input: 0.05, output: 0.25 },
-  },
-  {
-    // OpenRouter charges 10% above the official price for this model.
-    model: 'gemini-3.8-flash',
-    provider: 'Google',
-    official: { input: 0.75, output: 3.75 },
-    openrouter: { input: 0.825, output: 4.125 },
-    hisarweb: { input: 0.375, output: 1.875 },
   },
   {
     // Google's own pages do not list the cyber variant; the official price is
