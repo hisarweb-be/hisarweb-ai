@@ -704,6 +704,8 @@ func TestHwFreeRouteApprovedGuardsCustomerData(t *testing.T) {
 		{name: "data class I", route: map[string]any{"approved": true, "data_class": "I", "region": "us"}},
 		{name: "chinese step", route: map[string]any{"approved": true, "data_class": "K", "region": " CN "}},
 		{name: "unknown region", route: map[string]any{"approved": true, "data_class": "K"}},
+		{name: "hong kong step", route: map[string]any{"approved": true, "data_class": "K", "region": "HK"}},
+		{name: "china spelled out", route: map[string]any{"approved": true, "data_class": "K", "region": "China"}},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -738,6 +740,7 @@ func TestHwRouteTriesFreeThenLumiaThenOpenRouterLast(t *testing.T) {
 	hwSortAlternates(state.alternates, state.model)
 
 	assert.False(t, state.claim(lumia), "a Lumia pick waits while a free route is untried")
+	assert.False(t, state.claim(openRouter), "an OpenRouter pick waits while a free route is untried")
 	c := hwClientErrorContext("")
 	c.Set(hwRouteContextKey, state)
 
@@ -756,4 +759,19 @@ func TestHwRouteTriesFreeThenLumiaThenOpenRouterLast(t *testing.T) {
 		}
 	}
 	assert.Equal(t, []int{21, 22, 22, 24, 25, 23}, order, "free, Lumia, one Lumia retry, Portix, Kie (no price), OpenRouter last")
+}
+
+// Without a Lumia channel the stock selection may land on OpenRouter first;
+// the route refuses it while Portix or Kie is still untried.
+func TestHwRouteRefusesOpenRouterBeforeOtherAlternates(t *testing.T) {
+	openRouter := hwPolicyChannel(31, HwProviderOpenRouter, "")
+	portix := hwPolicyChannel(32, HwProviderPortix, "")
+
+	state := hwPolicyRoute(nil, nil)
+	state.alternates = []*model.Channel{openRouter, portix}
+	hwSortAlternates(state.alternates, state.model)
+
+	assert.False(t, state.claim(openRouter))
+	assert.True(t, state.claim(portix))
+	assert.True(t, state.claim(openRouter), "OpenRouter is fine once the others are tried")
 }

@@ -179,8 +179,11 @@ func HwFreeRouteApproved(channel *model.Channel) bool {
 	dataClass, _ := route["data_class"].(string)
 	region, _ := route["region"].(string)
 	region = strings.ToLower(strings.TrimSpace(region))
-	return approved && strings.EqualFold(strings.TrimSpace(dataClass), "K") && region != "" && region != "cn"
+	return approved && strings.EqualFold(strings.TrimSpace(dataClass), "K") && region != "" && !hwChineseRegions[region]
 }
+
+// hwChineseRegions are the region spellings that count as a Chinese step.
+var hwChineseRegions = map[string]bool{"cn": true, "china": true, "hk": true, "hong kong": true, "hongkong": true, "mo": true, "macau": true}
 
 // hwProviderTier orders the suppliers: free, Lumia, then the alternatives.
 func hwProviderTier(provider string) int {
@@ -400,6 +403,12 @@ func (s *HwRouteState) claim(channel *model.Channel) bool {
 	if tier > 1 && s.peekLumia() != nil {
 		return false
 	}
+	// OpenRouter stays last even when the stock selection lands on it first.
+	if provider == HwProviderOpenRouter {
+		if next := s.peekAlternate(); next != nil && HwChannelProvider(next) != HwProviderOpenRouter {
+			return false
+		}
+	}
 	if !HwChannelAllowedForGroup(channel, s.group, s.userGroup) {
 		return false
 	}
@@ -483,8 +492,8 @@ func (s *HwRouteState) peekAlternate() *model.Channel {
 // quota error there moves on at once, without the Lumia pause), then every
 // Lumia alias once, then exactly one extra Lumia attempt after a Lumia outage
 // (after the fixed pause), then the alternative suppliers for the paying group,
-// Portix and Kie cheapest first and OpenRouter last, then nothing at all. Another family is never part of the
-// route.
+// Portix and Kie cheapest first and OpenRouter last, then nothing at all.
+// Another family is never part of the route.
 func (s *HwRouteState) next() *model.Channel {
 	if s == nil || s.finished {
 		return nil
