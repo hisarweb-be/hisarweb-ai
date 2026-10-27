@@ -74,3 +74,40 @@ func TestHwAssistantRecordHitDatabaseMatrix(t *testing.T) {
 		})
 	}
 }
+
+func TestHwAssistantFeedbackStoreSkipsPersonalAndListsNewestFirst(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:hw_assistant_feedback?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&HwAssistantFeedback{}))
+
+	cases := []struct {
+		question, correction string
+		stored               bool
+	}{
+		{"how do I get an api key", "", true},
+		{"see https://api.hisarweb.be/docs for the base url", "", true},
+		{"what is api.hisarweb.be", "", true},
+		{"mail me at a@b.nl", "", false},
+		{"my number is 0612345678", "", false},
+		{"see https://evil.example.com/x", "", false},
+		{"http://api.hisarweb.be.evil.com is that you", "", false},
+		{"clean question", "write to me@example.com", false},
+	}
+	for index, tc := range cases {
+		stored, err := HwAssistantStoreFeedback(db, HwAssistantFeedback{
+			Channel: "widget", Question: tc.question, Answer: "a", Rating: 1, Correction: tc.correction, CreatedAt: int64(100 + index),
+		})
+		require.NoError(t, err, tc.question)
+		assert.Equal(t, tc.stored, stored, tc.question)
+	}
+
+	_, err = HwAssistantStoreFeedback(db, HwAssistantFeedback{Question: "bad one", Answer: "a", Rating: -1, CreatedAt: 500})
+	require.NoError(t, err)
+	recent, err := HwAssistantRecentFeedback(db, 10)
+	require.NoError(t, err)
+	require.Len(t, recent, 4)
+	assert.Equal(t, "bad one", recent[0].Question, "newest first")
+	down, err := HwAssistantListFeedback(db, -1, 10)
+	require.NoError(t, err)
+	require.Len(t, down, 1)
+}

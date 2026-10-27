@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/QuantumNous/new-api/model"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -192,4 +194,34 @@ func TestHwAdminAgentValidateAttachments(t *testing.T) {
 	}
 	_, err = HwAdminAgentValidate([]HwAdminAgentTurn{{Role: "user", Content: "hi", Attachments: []HwAdminAgentAttachment{png, png, png, png}}})
 	assert.Error(t, err)
+}
+
+func TestHwAssistantLearnedSection(t *testing.T) {
+	rows := []model.HwAssistantFeedback{
+		{Question: "How do I get an API key for my app", Answer: "Create a token in the panel.", Rating: 1},
+		{Question: "How do I top up my balance with a card", Answer: "Wrong answer about cards.", Rating: -1},
+		{Question: "How do I top up my balance with a card", Answer: "Old answer.", Rating: -1, Correction: "Use the Wallet page and pick Top up."},
+	}
+	cases := []struct {
+		name, question string
+		contains       []string
+		excludes       []string
+	}{
+		{"similar question picks the approved row", "where can I get an api key?", []string{"Approved answers", "Create a token in the panel."}, []string{"rated wrong"}},
+		{"wrong row lands under the rated wrong heading", "top up balance card", []string{"Answers that were rated wrong", "Wrong answer about cards."}, nil},
+		{"correction wins over answer", "top up balance card", []string{"Use the Wallet page and pick Top up."}, []string{"Old answer."}},
+		{"unrelated question gives nothing", "what is the weather tomorrow", nil, []string{"Q:"}},
+		{"one shared word is not enough", "my app crashes", nil, []string{"Q:"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			section := HwAssistantLearnedSection(tc.question, rows)
+			for _, want := range tc.contains {
+				assert.Contains(t, section, want)
+			}
+			for _, unwanted := range tc.excludes {
+				assert.NotContains(t, section, unwanted)
+			}
+		})
+	}
 }

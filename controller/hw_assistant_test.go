@@ -25,7 +25,7 @@ func hwAssistantTestRouter(t *testing.T) *gin.Engine {
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.HwAssistantHit{}))
+	require.NoError(t, db.AutoMigrate(&model.HwAssistantHit{}, &model.HwAssistantFeedback{}))
 	model.DB = db
 	t.Cleanup(func() {
 		sqlDB, _ := db.DB()
@@ -34,6 +34,7 @@ func hwAssistantTestRouter(t *testing.T) *gin.Engine {
 	engine := gin.New()
 	engine.GET("/faq", HwAssistantFAQ)
 	engine.POST("/ask", HwAssistantAsk)
+	engine.POST("/feedback", HwAssistantFeedback)
 	return engine
 }
 
@@ -103,4 +104,26 @@ func TestHwAssistantOpenQuestions(t *testing.T) {
 	assert.NotContains(t, body, "price", "an answered question is not an open one")
 	assert.NotContains(t, body, "q:", "the prefix is internal")
 	assert.Less(t, strings.Index(body, "which models"), strings.Index(body, "how to refund"), "most asked first")
+}
+
+func TestHwAssistantFeedbackStoresAndSkipsPersonal(t *testing.T) {
+	engine := hwAssistantTestRouter(t)
+	post := func(body string) string {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPost, "/feedback", strings.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		engine.ServeHTTP(recorder, request)
+		return recorder.Body.String()
+	}
+	assert.Contains(t, post(`{"question":"how do I get a key","answer":"Create a token.","rating":1,"lang":"en","correction":"ignored"}`), `"stored":true`)
+	assert.Contains(t, post(`{"question":"mail me at a@b.nl","answer":"ok","rating":-1,"lang":"en"}`), `"stored":false`)
+	assert.Contains(t, post(`{"question":"q","answer":"a","rating":0}`), `"success":false`)
+	assert.Contains(t, post(`{"question":"","answer":"a","rating":1}`), `"success":false`)
+
+	rows, err := model.HwAssistantRecentFeedback(model.DB, 10)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "widget", rows[0].Channel)
+	assert.Equal(t, 1, rows[0].Rating)
+	assert.Empty(t, rows[0].Correction, "the public endpoint ignores a correction")
 }

@@ -410,6 +410,7 @@ func migrateDB() error {
 		&HwTextOverride{},
 		&HwAdminEscalation{},
 		&HwAssistantHit{},
+		&HwAssistantFeedback{},
 	)
 	if err != nil {
 		return err
