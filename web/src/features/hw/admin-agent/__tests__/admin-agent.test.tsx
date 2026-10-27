@@ -30,6 +30,7 @@ const api = vi.hoisted(() => ({
   applyTextOverride: vi.fn(),
   fetchAssistantFaq: vi.fn(),
   askAssistantFaq: vi.fn(),
+  askAssistantFaqAdmin: vi.fn(),
   askAdminAgent: vi.fn(),
 }))
 
@@ -45,6 +46,7 @@ vi.mock('../api', async (original) => ({
   applyTextOverride: api.applyTextOverride,
   fetchAssistantFaq: api.fetchAssistantFaq,
   askAssistantFaq: api.askAssistantFaq,
+  askAssistantFaqAdmin: api.askAssistantFaqAdmin,
   askAdminAgent: api.askAdminAgent,
 }))
 
@@ -115,6 +117,7 @@ describe('AssistantWidget', () => {
   beforeEach(() => {
     api.fetchAssistantFaq.mockReset()
     api.askAssistantFaq.mockReset()
+    api.askAssistantFaqAdmin.mockReset()
     api.askAdminAgent.mockReset()
     api.fetchAssistantFaq.mockResolvedValue([
       { id: 'identity', question: 'Who are you?', answer: 'x' },
@@ -137,16 +140,16 @@ describe('AssistantWidget', () => {
 
   it('answers a fixed question without asking the model', async () => {
     admin.isAdmin = true
-    api.askAssistantFaq.mockResolvedValue({
+    api.askAssistantFaqAdmin.mockResolvedValue({
       matched: true,
       id: 'identity',
-      answer: 'I am the chat employee of HisarWeb AI.',
+      answer: 'I am Altuner, founder of HisarWeb AI.',
     })
     render(<AssistantWidget />)
     fireEvent.click(screen.getByLabelText('Admin assistant'))
     fireEvent.click(await screen.findByText('Who are you?'))
     expect(
-      await screen.findByText('I am the chat employee of HisarWeb AI.')
+      await screen.findByText('I am Altuner, founder of HisarWeb AI.')
     ).toBeTruthy()
     expect(api.askAdminAgent).not.toHaveBeenCalled()
   })

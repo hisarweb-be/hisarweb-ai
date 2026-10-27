@@ -35,6 +35,7 @@ func SetHwRouter(apiRouter *gin.RouterGroup) {
 	hwRouter.POST("/assistant/ask", middleware.HwPublicReadRateLimit(), controller.HwAssistantAsk)
 	hwRouter.GET("/admin/assistant/questions", middleware.AdminAuth(), controller.HwAssistantOpenQuestions)
 	hwRouter.POST("/admin/agent/chat", middleware.AdminAuth(), controller.HwAdminAgentChat)
+	hwRouter.POST("/admin/agent/ask", middleware.AdminAuth(), controller.HwAdminAgentAskFAQ)
 	hwRouter.GET("/admin/agent/texts", middleware.AdminAuth(), controller.HwAdminAgentListTexts)
 	hwRouter.POST("/admin/agent/texts", middleware.AdminAuth(), controller.HwAdminAgentApplyText)
 	hwRouter.POST("/admin/agent/texts/revert", middleware.AdminAuth(), controller.HwAdminAgentRevertText)
