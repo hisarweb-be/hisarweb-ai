@@ -107,7 +107,14 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 		if showBodyWhenFail {
 			newApiErr.Err = buildErrWithBody("")
 		} else {
-			logger.LogError(ctx, common.LogText("bad response status code %d, body: %s", resp.StatusCode, responseBodyPreview))
+			// A non-JSON body is usually an upstream HTML page: a proxy, CDN or
+			// firewall block page. Copying it into our own log freezes that HTML
+			// in the container log, so only its shape is logged. The full body
+			// stays available through the debug log.
+			if common.DebugEnabled {
+				logger.LogDebug(ctx, "bad response status code %d, body: %s", resp.StatusCode, responseBodyPreview)
+			}
+			logger.LogError(ctx, common.LogText("bad response status code %d, non-JSON body (content-type %q, %d bytes)", resp.StatusCode, resp.Header.Get("Content-Type"), len(responseBody)))
 			newApiErr.Err = fmt.Errorf("bad response status code %d", resp.StatusCode)
 		}
 		return

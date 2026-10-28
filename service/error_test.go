@@ -158,3 +158,37 @@ func withDebugEnabled(t *testing.T, enabled bool) {
 		common.DebugEnabled = oldDebug
 	})
 }
+
+// A non-JSON upstream body is nearly always a proxy or firewall block page in
+// HTML. Copying it into our own error log made that HTML show up in the
+// container log of hisarweb-ai (HIS-5575), so only its shape may be logged.
+func TestRelayErrorHandlerDoesNotCopyHTMLBodyIntoErrorLog(t *testing.T) {
+	withDebugEnabled(t, false)
+
+	body := `<html><head><title>Access denied</title></head><body>Visit <a href="https://www.cloudflare.com/?utm_source=errorcode_error">cloudflare.com</a> for more information.</body></html>`
+	var logBuffer bytes.Buffer
+
+	common.LogWriterMu.Lock()
+	oldWriter := gin.DefaultErrorWriter
+	gin.DefaultErrorWriter = &logBuffer
+	common.LogWriterMu.Unlock()
+	t.Cleanup(func() {
+		common.LogWriterMu.Lock()
+		gin.DefaultErrorWriter = oldWriter
+		common.LogWriterMu.Unlock()
+	})
+
+	resp := &http.Response{
+		StatusCode: http.StatusForbidden,
+		Header:     http.Header{"Content-Type": []string{"text/html; charset=UTF-8"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+
+	newAPIError := RelayErrorHandler(context.Background(), resp, false)
+
+	require.NotNil(t, newAPIError)
+	require.NotContains(t, logBuffer.String(), "cloudflare.com")
+	require.NotContains(t, logBuffer.String(), "<html>")
+	require.Contains(t, logBuffer.String(), "non-JSON body")
+	require.Contains(t, logBuffer.String(), "text/html")
+}
