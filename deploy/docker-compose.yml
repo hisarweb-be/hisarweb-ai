@@ -107,6 +107,12 @@ services:
       timeout: 5s
       retries: 10
       start_period: 5s
+      # Measured 28 Oct 2026 (HIS-5658): postgres accepts connections 0.1 s
+      # after start, but Docker runs the first probe only after
+      # start_interval, which defaults to 5 s during start_period regardless
+      # of interval or start_period. That default was the whole 5.5 s wait
+      # before the app container could start (503 window 7.5 s).
+      start_interval: 250ms
 
 volumes:
   app_data:
