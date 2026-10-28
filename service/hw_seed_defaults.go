@@ -84,6 +84,10 @@ func HwSeedDefaultOptions() error {
 		hwSeedGroupRatios,
 		hwSeedUserUsableGroups,
 		hwSeedSoldModelRatios,
+		// Before the retirement, so the two rules meet in one pass over the
+		// channels: a name that came back is attached and a retired name is
+		// removed, never the other way around.
+		hwSeedSoldModelChannels,
 		hwSeedRetiredModels,
 		hwSeedThinkingAdapter,
 		hwSeedDisplayCurrency,
@@ -182,6 +186,61 @@ func hwSeedMissingSoldModelRatios(prices map[string]model.HwModelPrice) error {
 	}
 	if completionChanged {
 		if err := hwWriteRatioOption(hwCompletionRatioOption, completionRatios); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// hwSeedSoldModelChannels re-attaches a sold model that has no ability row to a
+// channel of its own family. hwSeedRetiredModels takes a name out of the
+// channels, so a name that returns to hwSoldModels would be sold by the
+// comparator and the status page while no channel answers it; this step is the
+// other direction and closes that gap at startup.
+//
+// The ability rows are derived, never written loose: the name goes into
+// channel.Models and UpdateAbilities rebuilds the rows from the models and the
+// group, which keeps status, priority and weight in step with the channel. A
+// family without a channel is skipped: a channel carries a key, so creating one
+// is an operator decision. Idempotent: a sold model that already has an ability
+// row is left alone.
+func hwSeedSoldModelChannels(map[string]string) error {
+	var routedModels []string
+	if err := model.DB.Model(&model.Ability{}).Distinct("model").Pluck("model", &routedModels).Error; err != nil {
+		return err
+	}
+	routed := make(map[string]struct{}, len(routedModels))
+	for _, name := range routedModels {
+		routed[name] = struct{}{}
+	}
+	var channels []model.Channel
+	if err := model.DB.Find(&channels).Error; err != nil {
+		return err
+	}
+	for _, sold := range hwSoldModels {
+		if _, ok := routed[sold.Name]; ok {
+			continue
+		}
+		family := HwModelFamily(sold.Name)
+		if family == "" {
+			continue
+		}
+		idx := slices.IndexFunc(channels, func(channel model.Channel) bool {
+			return slices.ContainsFunc(channel.GetModels(), func(name string) bool {
+				return HwModelFamily(name) == family
+			})
+		})
+		if idx < 0 {
+			continue
+		}
+		// The full row is loaded, so UpdateAbilities rebuilds the rows with the
+		// status, the priority and the weight the channel actually has.
+		channel := &channels[idx]
+		channel.Models = strings.Join(append(channel.GetModels(), sold.Name), ",")
+		if err := model.DB.Model(&model.Channel{}).Where("id = ?", channel.Id).Update("models", channel.Models).Error; err != nil {
+			return err
+		}
+		if err := channel.UpdateAbilities(nil); err != nil {
 			return err
 		}
 	}
