@@ -104,12 +104,17 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 
 	err = common.Unmarshal(responseBody, &errResponse)
 	if err != nil {
-		if showBodyWhenFail {
-			newApiErr.Err = buildErrWithBody("")
-		} else {
-			logger.LogError(ctx, common.LogText("bad response status code %d, body: %s", resp.StatusCode, responseBodyPreview))
-			newApiErr.Err = fmt.Errorf("bad response status code %d", resp.StatusCode)
+		// A non-JSON body is usually an upstream HTML page: a proxy, CDN or
+		// firewall block page. Copying it into our log, or into the error the
+		// channel test logs, froze that HTML in the container log (HIS-5575),
+		// so only its shape is kept. showBodyWhenFail is no exception: its
+		// caller logs the error it gets back. The full body stays available
+		// through the debug log.
+		if common.DebugEnabled {
+			logger.LogDebug(ctx, "bad response status code %d, body: %s", resp.StatusCode, responseBodyPreview)
 		}
+		logger.LogError(ctx, common.LogText("bad response status code %d, non-JSON body (content-type %q, %d bytes)", resp.StatusCode, resp.Header.Get("Content-Type"), len(responseBody)))
+		newApiErr.Err = fmt.Errorf("bad response status code %d", resp.StatusCode)
 		return
 	}
 

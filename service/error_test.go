@@ -63,7 +63,10 @@ func TestResetStatusCode(t *testing.T) {
 	}
 }
 
-func TestRelayErrorHandlerTruncatesInvalidJSONBodyInLog(t *testing.T) {
+// A huge non-JSON body must never reach the error log, not even truncated: the
+// truncation this test used to assert is replaced by the stricter rule that the
+// body stays out of the error log entirely (HIS-5575).
+func TestRelayErrorHandlerKeepsInvalidJSONBodyOutOfErrorLog(t *testing.T) {
 	withDebugEnabled(t, false)
 
 	body := strings.Repeat("b", common.LocalLogContentLimit+256)
@@ -88,9 +91,8 @@ func TestRelayErrorHandlerTruncatesInvalidJSONBodyInLog(t *testing.T) {
 
 	require.NotNil(t, newAPIError)
 	require.Equal(t, "bad response status code 500", newAPIError.Error())
-	require.Contains(t, logBuffer.String(), "[truncated")
-	require.Contains(t, logBuffer.String(), fmt.Sprintf("original_length=%d", len(body)))
-	require.NotContains(t, logBuffer.String(), strings.Repeat("b", common.LocalLogContentLimit+1))
+	require.NotContains(t, logBuffer.String(), strings.Repeat("b", 64))
+	require.Contains(t, logBuffer.String(), fmt.Sprintf("%d bytes", len(body)))
 }
 
 func TestRelayErrorHandlerKeepsStructuredErrorMessage(t *testing.T) {
@@ -157,4 +159,38 @@ func withDebugEnabled(t *testing.T, enabled bool) {
 	t.Cleanup(func() {
 		common.DebugEnabled = oldDebug
 	})
+}
+
+// A non-JSON upstream body is nearly always a proxy or firewall block page in
+// HTML. Copying it into our own error log made that HTML show up in the
+// container log of hisarweb-ai (HIS-5575), so only its shape may be logged.
+func TestRelayErrorHandlerDoesNotCopyHTMLBodyIntoErrorLog(t *testing.T) {
+	withDebugEnabled(t, false)
+
+	body := `<html><head><title>Access denied</title></head><body>Visit <a href="https://www.cloudflare.com/?utm_source=errorcode_error">cloudflare.com</a> for more information.</body></html>`
+	var logBuffer bytes.Buffer
+
+	common.LogWriterMu.Lock()
+	oldWriter := gin.DefaultErrorWriter
+	gin.DefaultErrorWriter = &logBuffer
+	common.LogWriterMu.Unlock()
+	t.Cleanup(func() {
+		common.LogWriterMu.Lock()
+		gin.DefaultErrorWriter = oldWriter
+		common.LogWriterMu.Unlock()
+	})
+
+	resp := &http.Response{
+		StatusCode: http.StatusForbidden,
+		Header:     http.Header{"Content-Type": []string{"text/html; charset=UTF-8"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+
+	newAPIError := RelayErrorHandler(context.Background(), resp, false)
+
+	require.NotNil(t, newAPIError)
+	require.NotContains(t, logBuffer.String(), "cloudflare.com")
+	require.NotContains(t, logBuffer.String(), "<html>")
+	require.Contains(t, logBuffer.String(), "non-JSON body")
+	require.Contains(t, logBuffer.String(), "text/html")
 }
