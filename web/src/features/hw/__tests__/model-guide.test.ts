@@ -55,7 +55,7 @@ describe('model guide', () => {
     expect(all).not.toContain('lu' + 'mia')
   })
 
-  it('puts Opus first and Sonnet second, and unknown models last', () => {
+  it('puts Opus first, then Sonnet, and unknown models last', () => {
     expect(recommendedRank('claude-opus-5-5')).toBe(0)
     expect(recommendedRank('claude-sonnet-5-5')).toBe(1)
     expect(recommendedRank('something-else')).toBe(RECOMMENDED_ORDER.length)
