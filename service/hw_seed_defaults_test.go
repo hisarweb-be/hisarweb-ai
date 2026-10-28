@@ -366,6 +366,36 @@ func TestHwSeedRetiredModels(t *testing.T) {
 	}
 }
 
+// TestHwSeedSoldModelChannels protects the startup step that re-attaches a sold
+// model which has no ability row: without it, a name that returns to
+// hwSoldModels is sold by the comparator and the status page while no channel
+// answers it (measured on 28 Oct 2026, gpt-6-luna, gpt-6.1-sol, gpt-6-astra).
+func TestHwSeedSoldModelChannels(t *testing.T) {
+	setupHwSeedDefaultsTest(t)
+	channel := model.Channel{
+		Name: "sonnet-only", Key: "k1", Status: common.ChannelStatusEnabled,
+		Group: model.HwPaidGroupName, Models: "claude-sonnet-5",
+	}
+	require.NoError(t, channel.Insert())
+
+	for range 2 {
+		require.NoError(t, HwSeedDefaultOptions())
+
+		var stored model.Channel
+		require.NoError(t, model.DB.First(&stored, "id = ?", channel.Id).Error)
+		assert.Contains(t, stored.GetModels(), "claude-sonnet-5-5",
+			"the sold model of the family is attached to the channel of its family")
+		assert.NotContains(t, stored.GetModels(), "claude-sonnet-5",
+			"a retired name is not put back")
+
+		var routed []string
+		require.NoError(t, model.DB.Model(&model.Ability{}).
+			Where("channel_id = ?", channel.Id).Distinct("model").Pluck("model", &routed).Error)
+		assert.ElementsMatch(t, []string{"claude-sonnet-5-5"}, routed,
+			"the ability row is derived from the channel models")
+	}
+}
+
 // TestHwSeedRetiredModelsRefreshesTheChannelCache protects a running database
 // against the window between the seed and the next cache rebuild: the channel
 // cache that was built before the seed (startup builds it after the seed, but a
