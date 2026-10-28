@@ -3,7 +3,8 @@ package service
 // The admin agent: a chat in the admin panel where the owner reports an error
 // or a hard word. It runs through the gateway's own customer route (so it
 // uses, and is metered like, our own product) with the best model for the
-// best price: gpt-6-luna, 0.05/0.25 dollar per million tokens, the fastest of
+// best price: claude-haiku-5-5, 0.05/0.25 dollar per million tokens, the
+// cheapest of
 // the sold models in the 24-hour measurements. The agent answers in a fixed
 // JSON shape: a reply, an optional text fix that an admin applies with one
 // click, and an optional escalation card for the bureau.
@@ -26,9 +27,10 @@ const (
 	HwAdminAgentModelEnv   = "HW_ADMIN_AGENT_MODEL"
 	// HwAdminAgentDefaultModel is the cheapest model that answers the owner in
 	// Dutch and Turkish, follows the JSON instruction and replies fastest:
-	// the 24-hour gateway measurements put gpt-6-luna around 7 seconds against
-	// 11 for claude-haiku-5-5, at the same lowest price tier.
-	HwAdminAgentDefaultModel = "gpt-6-luna"
+	// the cheapest sold model that answers the owner in Dutch and Turkish and
+	// follows the JSON instruction: claude-haiku-5-5, the lowest price tier of
+	// the catalog (no gpt name is sold since HIS-5417, 28 Oct 2026).
+	HwAdminAgentDefaultModel = "claude-haiku-5-5"
 
 	HwAdminAgentMaxTurns        = 12
 	HwAdminAgentMaxMessageRunes = 2000

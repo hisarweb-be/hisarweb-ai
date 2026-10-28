@@ -847,7 +847,9 @@ func TestHwNewCatalogModelsKeepsOnlyNewerChatModelsOfSoldFamilies(t *testing.T) 
 	for _, candidate := range found {
 		names = append(names, candidate.Name)
 	}
-	assert.Equal(t, []string{"claude-opus-6", "gemini-3.8-pro", "gpt-6.2-sol", "grok-4.1-fast"}, names)
+	// gpt-6.2-sol is not a candidate: no gpt name is sold since 28 Oct 2026
+	// (HIS-5417), so the family has no floor in hwSoldModels to compare against.
+	assert.Equal(t, []string{"claude-opus-6", "gemini-3.8-pro", "grok-4.1-fast"}, names)
 	assert.Equal(t, model.HwModelPrice{InputMicroUsd: 5_000_000, OutputMicroUsd: 25_000_000}, found[0].Price)
 }
 
@@ -888,12 +890,12 @@ func TestHwReportNewModelsFilesOneCardPerNewModelOnce(t *testing.T) {
 
 	day2, err := hwParsePriceList([]byte(`{
   "claude-opus-6": {"input_cost_per_token": 5e-06, "output_cost_per_token": 2.5e-05, "mode": "chat"},
-  "gpt-6.2-sol": {"input_cost_per_token": 2e-06, "output_cost_per_token": 1e-05, "mode": "chat"}
+  "gemini-3.8-pro": {"input_cost_per_token": 2e-06, "output_cost_per_token": 1.2e-05, "mode": "chat"}
 }`))
 	require.NoError(t, err)
 	require.NoError(t, hwReportNewModels(context.Background(), config, day2))
 	require.Len(t, cards, 2)
-	assert.Contains(t, cards[1].Description, "gpt-6.2-sol")
+	assert.Contains(t, cards[1].Description, "gemini-3.8-pro")
 	assert.NotContains(t, cards[1].Description, "claude-opus-6")
 }
 

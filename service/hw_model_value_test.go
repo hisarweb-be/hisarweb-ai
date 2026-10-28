@@ -158,12 +158,12 @@ func TestHwRetiredModelsAreNotSoldAndPointAtASoldModel(t *testing.T) {
 		}
 		assert.Equal(t, retiredFamily, successorFamily, retired)
 	}
-	// The 27 Oct exception cases: the retired gpt 5.6 generation and the bare
-	// gpt-6 name have no namesake among the sold 6.x names, so their successors
-	// live in another sold family. The sold 6 families themselves exist.
-	assert.True(t, soldFamily["gpt-luna"])
-	assert.True(t, soldFamily["gpt-sol"])
-	assert.True(t, soldFamily["gpt-astra"])
+	// The retired gpt names have no namesake among the sold models (no gpt name
+	// is sold since 28 Oct 2026, HIS-5417), so their successors live in another
+	// sold family and no gpt family is sold any more.
+	assert.False(t, soldFamily["gpt-luna"])
+	assert.False(t, soldFamily["gpt-sol"])
+	assert.False(t, soldFamily["gpt-astra"])
 	assert.False(t, soldFamily["gpt-terra"])
 	assert.False(t, soldFamily["gpt-6"])
 }
