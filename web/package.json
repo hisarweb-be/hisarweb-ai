@@ -119,6 +119,8 @@
     "minimist": "1.2.8",
     "postcss": "8.5.18",
     "qs": "6.15.2",
+    "seroval": "1.6.12",
+    "systeminformation": "5.33.18",
     "uuid": "14.0.0",
     "zod": "4.6.6"
   },
