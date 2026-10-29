@@ -572,6 +572,12 @@ type hwTelegramMessageRequest struct {
 	ReplyMarkup     *hwTelegramKeyboard        `json:"reply_markup,omitempty"`
 }
 
+// hwTelegramChatAction shows a status such as "typing" in the chat.
+type hwTelegramChatAction struct {
+	ChatId int64  `json:"chat_id"`
+	Action string `json:"action"`
+}
+
 // hwTelegramReplyParameters makes the message a reply to an earlier one; the
 // message still goes out when that one was deleted in the meantime.
 type hwTelegramReplyParameters struct {

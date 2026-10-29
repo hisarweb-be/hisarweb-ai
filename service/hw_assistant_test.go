@@ -384,6 +384,58 @@ func TestHwAssistantChatAnswersABareGreetingInThePageLanguage(t *testing.T) {
 	}
 }
 
+// 29 Oct 2026: the default model moved to claude-haiku-5-5 while the
+// assistant's own key was still limited to the retired gpt-6 names, so every
+// channel answered with the delay line. The assistant repairs its own key and
+// answers; a key an admin disabled stays disabled.
+func TestHwAssistantChatRepairsItsOwnKeyAndAnswers(t *testing.T) {
+	db := hwAssistantFeedbackDB(t)
+	require.NoError(t, db.AutoMigrate(&model.Token{}))
+	cases := []struct {
+		name       string
+		token      model.Token
+		wantOK     bool
+		wantLimits string
+	}{
+		{"limited to retired models", model.Token{Key: "own-key", Status: common.TokenStatusEnabled, ModelLimitsEnabled: true, ModelLimits: "gpt-6-luna,gpt-6.1-sol", RemainQuota: 1000}, true, "gpt-6-luna,gpt-6.1-sol," + HwAdminAgentDefaultModel},
+		{"balance spent", model.Token{Key: "own-key", Status: common.TokenStatusExhausted, RemainQuota: 0}, true, ""},
+		{"disabled by an admin", model.Token{Key: "own-key", Status: common.TokenStatusDisabled, RemainQuota: 1000}, false, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, db.Unscoped().Where("1 = 1").Delete(&model.Token{}).Error)
+			require.NoError(t, db.Create(&tc.token).Error)
+			gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				request := hwChatRequest{}
+				_ = common.DecodeJson(r.Body, &request)
+				token, err := model.GetTokenByKey(strings.TrimPrefix(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), "sk-"), true)
+				usable := err == nil && token.Status == common.TokenStatusEnabled &&
+					(token.UnlimitedQuota || token.RemainQuota > 0) &&
+					(!token.ModelLimitsEnabled || token.GetModelLimitsMap()[request.Model])
+				if !usable {
+					w.WriteHeader(http.StatusForbidden)
+					_, _ = w.Write([]byte(`{"error":{"message":"This token has no access to model"}}`))
+					return
+				}
+				_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"Natuurlijk, waarmee?"}}]}`))
+			}))
+			t.Cleanup(gateway.Close)
+			config := HwAdminAgentConfig{BaseURL: gateway.URL, APIKey: "sk-own-key", Model: HwAdminAgentDefaultModel}
+
+			reply, ok := HwAssistantChat(context.Background(), config, HwAssistantChannelTelegram, "nl", []HwAdminAgentTurn{{Role: "user", Content: "Kan je me helpen"}})
+			assert.Equal(t, tc.wantOK, ok)
+			stored, err := model.GetTokenByKey("own-key", true)
+			require.NoError(t, err)
+			if !tc.wantOK {
+				assert.Equal(t, common.TokenStatusDisabled, stored.Status)
+				return
+			}
+			assert.Equal(t, "Natuurlijk, waarmee?", reply)
+			assert.Equal(t, tc.wantLimits, stored.ModelLimits)
+		})
+	}
+}
+
 func TestHwAssistantChatFallsBackWithoutShowingTheCause(t *testing.T) {
 	hwAssistantFeedbackDB(t)
 	for _, status := range []int{http.StatusForbidden, http.StatusInternalServerError} {

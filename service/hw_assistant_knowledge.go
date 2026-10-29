@@ -88,7 +88,8 @@ func HwAssistantFacts() string {
 - Every model is billed %d%% below the official list price. Price per million tokens, input / output:
 %s
 - Payment in TRY, EUR and USD; the customer receives the full credit they buy, HisarWeb carries the currency conversion cost.
-- A free trial credit exists; the customer starts it in the panel.`, HwListPriceDiscountPercent, strings.Join(hwAssistantModelLines(), "\n"))
+- A free trial credit exists; the customer starts it in the panel.
+- Telegram: the customer links their account with the Link Telegram button on the dashboard of the panel; the link opens the HisarWeb bot, which asks for their phone number as one step of the trial credit. In the bot they can also ask questions like here.`, HwListPriceDiscountPercent, strings.Join(hwAssistantModelLines(), "\n"))
 }
 
 // HwAssistantSetupKnowledge is how a customer connects a tool to the gateway.
@@ -231,9 +232,12 @@ func hwAssistantCall(ctx context.Context, config HwAdminAgentConfig, instruction
 		}
 		messages = append(messages, hwAssistantMessage(turn.Role, content, turn.Attachments))
 	}
-	text, _, err := hwCallChat(ctx, client, config.BaseURL, config.APIKey, hwChatRequest{
-		Model: config.Model, Messages: messages, MaxTokens: hwAssistantMaxTokens,
-	})
+	request := hwChatRequest{Model: config.Model, Messages: messages, MaxTokens: hwAssistantMaxTokens}
+	text, _, err := hwCallChat(ctx, client, config.BaseURL, config.APIKey, request)
+	var statusErr *hwChatStatusError
+	if errors.As(err, &statusErr) && (statusErr.StatusCode == http.StatusUnauthorized || statusErr.StatusCode == http.StatusForbidden) && HwAssistantRepairKey(config) {
+		text, _, err = hwCallChat(ctx, client, config.BaseURL, config.APIKey, request)
+	}
 	if err != nil {
 		return "", err
 	}

@@ -113,7 +113,22 @@ func hwTelegramChatReply(ctx context.Context, message *hwTelegramMessage, budget
 			{Role: "user", Content: question},
 		}
 	}
+	// Telegram shows "typing" for five seconds per call and a model answer can
+	// take twenty, so the bot keeps showing it until the answer is there: the
+	// customer never stares at a silent chat.
+	typing, stopTyping := context.WithCancel(ctx)
+	go func() {
+		for {
+			_ = hwTelegramCall(typing, "sendChatAction", hwTelegramChatAction{ChatId: message.Chat.Id, Action: "typing"})
+			select {
+			case <-typing.Done():
+				return
+			case <-time.After(4 * time.Second):
+			}
+		}
+	}()
 	reply, ok := HwAssistantChat(ctx, config, HwAssistantChannelTelegram, lang, turns)
+	stopTyping()
 	if !ok {
 		hwAnswerTelegramChat(ctx, chatID, reply, "")
 		return

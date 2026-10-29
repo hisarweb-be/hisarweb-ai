@@ -419,6 +419,9 @@ func InitResources() error {
 	// Point the Telegram bot at this server once its token is known.
 	if common.IsMasterNode {
 		service.HwRegisterTelegramWebhookInBackground()
+		// A model switch in the code must never leave the assistant's own key
+		// behind: repair it before the first question arrives.
+		service.HwAssistantRepairKey(service.HwAdminAgentConfigFromEnv())
 	}
 
 	return nil
