@@ -849,7 +849,9 @@ func TestHwNewCatalogModelsKeepsOnlyNewerChatModelsOfSoldFamilies(t *testing.T) 
 	}
 	// gpt-6.2-sol is not a candidate: no gpt name is sold since 28 Oct 2026
 	// (HIS-5417), so the family has no floor in hwSoldModels to compare against.
-	assert.Equal(t, []string{"claude-opus-6", "gemini-3.8-pro", "grok-4.1-fast"}, names)
+	// gemini-3.8-pro is not one either, for the same reason: gemini-3.8-flash-cyber
+	// was the last sold gemini name and left the catalog on 29 Oct 2026 (HIS-5810).
+	assert.Equal(t, []string{"claude-opus-6", "grok-4.1-fast"}, names)
 	assert.Equal(t, model.HwModelPrice{InputMicroUsd: 5_000_000, OutputMicroUsd: 25_000_000}, found[0].Price)
 }
 
@@ -888,14 +890,18 @@ func TestHwReportNewModelsFilesOneCardPerNewModelOnce(t *testing.T) {
 	assert.Equal(t, HwBureauAgentModelverkenner, cards[0].AssigneeAgentID)
 	assert.Contains(t, cards[0].Description, "claude-opus-6: officieel $5 / $25, voorstel HisarWeb $2.5 / $12.5")
 
+	// A second model of a sold family is a fresh card, and the first is not
+	// repeated. grok-4.1-fast is newer than the sold grok-4-fast, so the grok
+	// family still has a floor in hwSoldModels; gemini-3.8-pro is deliberately
+	// not used here, because no gemini name is sold since HIS-5810.
 	day2, err := hwParsePriceList([]byte(`{
   "claude-opus-6": {"input_cost_per_token": 5e-06, "output_cost_per_token": 2.5e-05, "mode": "chat"},
-  "gemini-3.8-pro": {"input_cost_per_token": 2e-06, "output_cost_per_token": 1.2e-05, "mode": "chat"}
+  "grok-4.1-fast": {"input_cost_per_token": 2e-07, "output_cost_per_token": 5e-07, "mode": "chat"}
 }`))
 	require.NoError(t, err)
 	require.NoError(t, hwReportNewModels(context.Background(), config, day2))
 	require.Len(t, cards, 2)
-	assert.Contains(t, cards[1].Description, "gemini-3.8-pro")
+	assert.Contains(t, cards[1].Description, "grok-4.1-fast")
 	assert.NotContains(t, cards[1].Description, "claude-opus-6")
 }
 
