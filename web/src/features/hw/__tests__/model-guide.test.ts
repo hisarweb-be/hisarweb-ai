@@ -29,7 +29,7 @@ import { MODEL_PRICES } from '../data/model-prices'
 
 describe('model guide', () => {
   it('describes every recommended model in Turkish and English', () => {
-    expect(RECOMMENDED_ORDER).toHaveLength(6)
+    expect(RECOMMENDED_ORDER).toHaveLength(5)
     for (const name of RECOMMENDED_ORDER) {
       const guide = modelGuide(name)
       expect(guide, name).toBeDefined()

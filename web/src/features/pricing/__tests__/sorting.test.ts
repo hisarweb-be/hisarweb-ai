@@ -127,7 +127,7 @@ describe('price sorting', () => {
 
 describe('recommended sorting', () => {
   const catalogue = [
-    'gemini-3.8-flash-cyber',
+    'grok-4',
     'zz-unknown',
     'claude-opus-5-5',
     'aa-unknown',
@@ -142,7 +142,7 @@ describe('recommended sorting', () => {
       'claude-opus-5-5',
       'claude-sonnet-5-5',
       'claude-haiku-5-5',
-      'gemini-3.8-flash-cyber',
+      'grok-4',
       'aa-unknown',
       'zz-unknown',
     ])
