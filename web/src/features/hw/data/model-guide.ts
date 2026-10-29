@@ -43,7 +43,6 @@ export const RECOMMENDED_ORDER = [
   'claude-opus-5-5',
   'claude-sonnet-5-5',
   'claude-haiku-5-5',
-  'gemini-3.8-flash-cyber',
   'grok-4',
   'grok-4-fast',
 ] as const
@@ -74,16 +73,6 @@ export const MODEL_GUIDE: Readonly<Record<string, ModelGuide>> = {
     description: {
       tr: 'Çok hızlı ve çok ucuz. Sohbet botu, metin özetleme ya da yüzlerce küçük işi (sınıflandırma, bilgi çıkarma) arka arkaya yapmak için uygundur.',
       en: 'Very fast and very cheap. A good fit for a chatbot, summarising text, or running hundreds of small jobs (sorting, extracting facts) in a row.',
-    },
-  },
-  'gemini-3.8-flash-cyber': {
-    tag: {
-      tr: 'Hassas kod düzenleme',
-      en: 'Precise code editing',
-    },
-    description: {
-      tr: 'Google’ın kod doğruluğuna odaklanan Gemini sürümü. Mevcut kodu okuyup en küçük değişiklikle hedeflenen düzeltmeyi yapmak ve sonucu testlerle doğrulamak için; Flash’tan biraz pahalıdır.',
-      en: 'Google’s Gemini variant focused on code correctness. For reading existing code, making the smallest targeted fix and verifying the result with tests; a little pricier than Flash.',
     },
   },
   'grok-4': {

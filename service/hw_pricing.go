@@ -86,7 +86,6 @@ var hwSoldModels = []HwSoldModel{
 	{Name: "claude-opus-5-5", PriceKey: "claude-opus-5-5", InputMicroUsd: 4_000_000, OutputMicroUsd: 20_000_000},
 	{Name: "claude-sonnet-5-5", PriceKey: "claude-sonnet-5-5", InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000},
 	{Name: "claude-haiku-5-5", PriceKey: "claude-haiku-5-5", InputMicroUsd: 100_000, OutputMicroUsd: 500_000},
-	{Name: "gemini-3.8-flash-cyber", PriceKey: "gemini-3.8-flash-cyber", InputMicroUsd: 1_500_000, OutputMicroUsd: 7_500_000},
 	// grok-4 and grok-4-fast sell at the xAI standard tier the upstream bills;
 	// xAI delisted both from its own price pages, so no official list price
 	// exists and the daily refresh keeps the operator ratio.
@@ -121,6 +120,12 @@ var hwRetiredModels = map[string]string{
 	// price tier.
 	"claude-fable-5-1": "claude-opus-5-5",
 	"gemini-3.8-flash": "claude-haiku-5-5",
+	// gemini-3.8-flash-cyber left the catalog on 29 Oct 2026 (CEO decision on
+	// HIS-5805, option 1): measured through the relay it was twice as slow as
+	// grok-4 (median 12.35 s against 6.12 s, 6 of 10 calls above 10 s, all
+	// HTTP 200), so the name is no longer sold. It has no newer namesake in its
+	// family, so it points at the sold model of its own price tier.
+	"gemini-3.8-flash-cyber": "claude-haiku-5-5",
 }
 
 // HwRetiredModelSuccessor returns the model that replaces a retired model name.

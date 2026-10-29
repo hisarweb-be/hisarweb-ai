@@ -25,8 +25,8 @@ For commercial licensing, please contact support@quantumnous.com
  * Every amount is USD per 1 million tokens, copied from the verified
  * measurement: the providers' own pricing pages, the OpenRouter models list
  * and HisarWeb's `/api/pricing`. A source that does not list a model (xAI
- * delisted grok-4 and grok-4-fast; OpenRouter does not carry cyber or the
- * grok names) is `null`, and the table then shows a dash instead of a guess.
+ * delisted grok-4 and grok-4-fast; OpenRouter does not carry the grok
+ * names) is `null`, and the table then shows a dash instead of a guess.
  * Lira amounts are computed from `MODEL_PRICES_TRY_PER_USD`, nothing here is
  * stored in lira.
  */
@@ -122,15 +122,6 @@ export const MODEL_PRICES: readonly ModelPrice[] = [
     official: { input: 0.1, output: 0.5 },
     openrouter: { input: 0.1, output: 0.5 },
     hisarweb: { input: 0.05, output: 0.25 },
-  },
-  {
-    // Google's own pages do not list the cyber variant; the official price is
-    // the one the LiteLLM price list carries.
-    model: 'gemini-3.8-flash-cyber',
-    provider: 'Google',
-    official: { input: 1.5, output: 7.5 },
-    openrouter: null,
-    hisarweb: { input: 0.75, output: 3.75 },
   },
   {
     // xAI delisted both grok names from its own pricing pages; no official
