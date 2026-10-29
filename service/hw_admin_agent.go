@@ -15,10 +15,12 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 )
 
 const (
@@ -61,6 +63,49 @@ func HwAdminAgentConfigFromEnv() HwAdminAgentConfig {
 		APIKey:  pick(HwAdminAgentAPIKeyEnv, HwQualityAPIKeyEnv),
 		Model:   model,
 	}
+}
+
+// HwAssistantRepairKey keeps the assistant's own key on this server able to
+// call the assistant model, and reports whether it changed the key. On 29 Oct
+// 2026 the default model had moved to claude-haiku-5-5 while the key was still
+// limited to the retired gpt-6 names, and every channel (admin panel, widget,
+// Telegram) answered with the delay line. The key belongs to the assistant, so
+// the model it needs joins its limit and a spent balance is lifted; a key that
+// an admin disabled or that expired stays as it is and is logged. A key of
+// another gateway is not in this database and is left alone. It runs at
+// startup and after a refused call, never in a loop.
+func HwAssistantRepairKey(config HwAdminAgentConfig) bool {
+	key := strings.TrimPrefix(strings.TrimSpace(config.APIKey), "sk-")
+	if key == "" || config.Model == "" || model.DB == nil {
+		return false
+	}
+	token, err := model.GetTokenByKey(key, true)
+	if err != nil {
+		return false
+	}
+	if token.Status == common.TokenStatusDisabled || token.Status == common.TokenStatusExpired {
+		common.SysError(common.LogText("hw assistant key %d is disabled or expired: every channel answers with the fallback", token.Id))
+		return false
+	}
+	changed := false
+	if limits := token.GetModelLimits(); token.ModelLimitsEnabled && !slices.Contains(limits, config.Model) {
+		token.ModelLimits = strings.Join(append(limits, config.Model), ",")
+		changed = true
+	}
+	if token.Status == common.TokenStatusExhausted || (!token.UnlimitedQuota && token.RemainQuota <= 0) {
+		token.Status = common.TokenStatusEnabled
+		token.UnlimitedQuota = true
+		changed = true
+	}
+	if !changed {
+		return false
+	}
+	if err := token.Update(); err != nil {
+		common.SysError(common.LogText("hw assistant key %d could not be repaired: %s", token.Id, err.Error()))
+		return false
+	}
+	common.SysLog(common.LogText("hw assistant key %d repaired for model %s", token.Id, config.Model))
+	return true
 }
 
 // HwAdminAgentResolveModel makes sure the agent never runs on a retired or
