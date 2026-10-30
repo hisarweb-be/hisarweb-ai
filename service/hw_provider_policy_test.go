@@ -844,8 +844,8 @@ func hwRouteOrder(t *testing.T, c *gin.Context, state *HwRouteState, apiErr *typ
 // failures and a paused retry before Portix answers (30 Oct 2026: about 50 s
 // per request). A failed Lumia channel cools down process-wide: while it
 // cools a paid route goes straight to the alternative supplier, but a route
-// without another candidate still tries it, so the free group keeps its route
-// and a recovered Lumia is noticed.
+// without another candidate still probes it once, so the free group keeps its
+// route and a recovered Lumia is noticed.
 func TestHwLumiaCooldownSkipsLumiaOnlyWhileAnotherCandidateRemains(t *testing.T) {
 	previousPause := common.HwLumiaRetryPauseMs
 	common.HwLumiaRetryPauseMs = 0
@@ -882,12 +882,27 @@ func TestHwLumiaCooldownSkipsLumiaOnlyWhileAnotherCandidateRemains(t *testing.T)
 		assert.Equal(t, []int{43, 41, 42, 42}, hwRouteOrder(t, c, state, rateLimited), "Portix first; the cooling Lumia aliases only when nothing else is left")
 	})
 
-	t.Run("a free request still tries every cooling Lumia channel", func(t *testing.T) {
-		assert.True(t, freeRoute().claim(lumia), "without another candidate the cooling channel is the probe")
+	// 30 Oct 2026: a free Playground request waited for two 429s on the same
+	// cooling channel and the paused retry (about 29 s) before its busy answer.
+	t.Run("a free request probes one cooling Lumia channel and then gets the busy answer", func(t *testing.T) {
+		assert.False(t, freeRoute().claim(spare), "the probe is the first cooling alias")
 		c := hwClientErrorContext("")
 		state := freeRoute()
 		c.Set(hwRouteContextKey, state)
-		assert.Equal(t, []int{41, 42, 42}, hwRouteOrder(t, c, state, rateLimited), "both aliases and the paused retry, as without the cooldown")
+		require.True(t, state.claim(lumia), "without another candidate the cooling channel is the probe")
+		decision, handled := HwDecideRetry(c, rateLimited)
+		require.True(t, handled)
+		assert.Equal(t, "stop", decision.Action, "no second cooling alias, no paused retry, never Portix")
+		assert.False(t, HwRetryLoopExtends(c))
+		busy := HwTerminalError(c, rateLimited, decision)
+		require.NotNil(t, busy)
+		assert.Equal(t, http.StatusServiceUnavailable, busy.StatusCode)
+		assert.Equal(t, HwErrorCodeServiceBusy, busy.GetErrorCode())
+
+		c = hwClientErrorContext("")
+		state = freeRoute()
+		c.Set(hwRouteContextKey, state)
+		assert.Equal(t, []int{41}, hwRouteOrder(t, c, state, rateLimited), "the route's own pick is the probe as well")
 		assert.True(t, state.finished)
 	})
 
@@ -908,5 +923,46 @@ func TestHwLumiaCooldownSkipsLumiaOnlyWhileAnotherCandidateRemains(t *testing.T)
 		hwLumiaCooldown.Unlock()
 		assert.False(t, hwLumiaCooling(spare.Id))
 		assert.True(t, hwPolicyRoute([]*model.Channel{spare}, []*model.Channel{portix}).claim(spare))
+	})
+}
+
+// The Lumia probe only shortens a route that meets a cooling alias; a free
+// route on a healthy Lumia keeps both aliases and the paused outage retry, and
+// a free route never reaches an alternative supplier.
+func TestHwLumiaProbeOnlyWhereLumiaIsCooling(t *testing.T) {
+	previousPause := common.HwLumiaRetryPauseMs
+	common.HwLumiaRetryPauseMs = 0
+	t.Cleanup(func() { common.HwLumiaRetryPauseMs = previousPause })
+
+	lumia := hwPolicyChannel(51, HwProviderLumia, "")
+	spare := hwPolicyChannel(52, HwProviderLumia, "")
+	portix := hwPolicyChannel(53, HwProviderPortix, "")
+	rateLimited := hwPolicyError(http.StatusTooManyRequests, types.ErrorCodeBadResponseStatusCode)
+	freeRoute := func() (*gin.Context, *HwRouteState) {
+		state := hwPolicyRoute([]*model.Channel{lumia, spare}, []*model.Channel{portix})
+		state.group, state.userGroup = "free", "free"
+		c := hwClientErrorContext("")
+		c.Set(hwRouteContextKey, state)
+		return c, state
+	}
+
+	t.Run("without a cooldown the free route keeps the outage retry", func(t *testing.T) {
+		hwResetLumiaCooldown(t, 60000)
+		c, state := freeRoute()
+		assert.Equal(t, []int{51, 52, 52}, hwRouteOrder(t, c, state, rateLimited))
+		assert.True(t, state.finished)
+	})
+
+	t.Run("with the cooldown switched off the free route is unchanged", func(t *testing.T) {
+		hwResetLumiaCooldown(t, 0)
+		c, state := freeRoute()
+		assert.Equal(t, []int{51, 52, 52}, hwRouteOrder(t, c, state, rateLimited))
+	})
+
+	t.Run("one cooling alias leaves only the healthy one to try", func(t *testing.T) {
+		hwResetLumiaCooldown(t, 60000)
+		hwStartLumiaCooldown(lumia.Id)
+		c, state := freeRoute()
+		assert.Equal(t, []int{52}, hwRouteOrder(t, c, state, rateLimited), "no cooling probe after the healthy alias, no paused retry")
 	})
 }
