@@ -24,8 +24,8 @@ import { StaticDataTable } from '@/components/data-table'
 import { Badge } from '@/components/ui/badge'
 import { formatDecimal } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { useSystemConfigStore } from '@/stores/system-config-store'
 
+import { usePricingCurrency } from '../hooks/use-pricing-currency'
 import {
   BILLING_PRICING_VARS,
   MATCH_CONTAINS,
@@ -294,9 +294,13 @@ export function DynamicPricingBreakdown({
 }: DynamicPricingBreakdownProps) {
   const { t, i18n } = useTranslation()
   const expr = billingExpr || ''
-  const currency = useSystemConfigStore((s) => s.config.currency)
+  const pricingCurrency = usePricingCurrency()
 
   const { symbol, rate } = useMemo(() => {
+    const { system: currency, override } = pricingCurrency
+    if (override) {
+      return { symbol: override.symbol, rate: override.rate }
+    }
     if (currency.quotaDisplayType === 'CNY') {
       return { symbol: '¥', rate: currency.usdExchangeRate || 7 }
     }
@@ -307,7 +311,7 @@ export function DynamicPricingBreakdown({
       }
     }
     return { symbol: '$', rate: 1 }
-  }, [currency])
+  }, [pricingCurrency])
 
   const { tiers, ruleGroups } = useMemo(() => {
     const split = splitBillingExprAndRequestRules(expr)

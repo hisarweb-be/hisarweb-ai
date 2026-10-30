@@ -527,6 +527,32 @@ export function formatBillingCurrencyFromUSD(
 }
 
 /**
+ * Format an amount that is already in the given ISO currency (for example the
+ * EUR price of a model after converting with the shop's EUR rate).
+ *
+ * Unlike the functions above this ignores the console's display setting: no
+ * exchange rate is applied, only the notation and fraction digits are shared.
+ *
+ * @param amount - Amount already expressed in `currencyCode`
+ * @param currencyCode - ISO 4217 code such as "EUR" or "USD"
+ * @param options - Optional formatting configuration
+ */
+export function formatCurrencyAmount(
+  amount: number | null | undefined,
+  currencyCode: string,
+  options?: CurrencyFormatOptions
+): string {
+  if (amount == null || Number.isNaN(amount)) return '-'
+
+  return formatCurrencyValue(amount, mergeOptions(options), {
+    kind: 'currency',
+    symbol: '',
+    currencyCode,
+    exchangeRate: 1,
+  })
+}
+
+/**
  * Format raw quota values (token units) to display currency.
  *
  * Converts raw quota/token amounts to USD first, then formats according
