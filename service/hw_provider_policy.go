@@ -81,6 +81,7 @@ type HwRouteState struct {
 
 	outage          bool
 	lumiaRetried    bool
+	lumiaProbe      bool
 	lastChannel     *model.Channel
 	finished        bool
 	blockedByFamily int
@@ -425,6 +426,9 @@ func (s *HwRouteState) claim(channel *model.Channel) bool {
 	if !hwChannelServesFamily(channel, s.model, s.family) {
 		return false
 	}
+	if provider == HwProviderLumia {
+		s.startLumiaProbe()
+	}
 	s.tried[channel.Id] = true
 	s.recordAttempt(channel, provider)
 	return true
@@ -465,9 +469,9 @@ func (s *HwRouteState) hasNext() bool {
 // hasNext asks the same question: a route whose last attempt failed on another
 // supplier has no retry left and must end with that attempt's own error. A
 // cooling channel earns no paused retry while an alternative supplier can
-// still answer.
+// still answer, and a route after its Lumia probe earns none at all.
 func (s *HwRouteState) outageRetryPending() bool {
-	if !s.outage || s.lumiaRetried || s.lastChannel == nil || HwChannelProvider(s.lastChannel) != HwProviderLumia {
+	if !s.outage || s.lumiaRetried || s.lumiaProbe || s.lastChannel == nil || HwChannelProvider(s.lastChannel) != HwProviderLumia {
 		return false
 	}
 	return !hwLumiaCooling(s.lastChannel.Id) || s.peekAlternate() == nil
@@ -485,7 +489,8 @@ func (s *HwRouteState) peekFree() *model.Channel {
 // peekLumia returns the next untried Lumia channel. A cooling channel is passed
 // over while the request still has a healthy Lumia alias or an alternative
 // supplier; when it is the last candidate left it is tried anyway, so a group
-// without alternatives keeps its route and a recovered Lumia is noticed.
+// without alternatives keeps its route and a recovered Lumia is noticed. After
+// the route's Lumia probe no cooling channel is tried any more.
 func (s *HwRouteState) peekLumia() *model.Channel {
 	var cooling *model.Channel
 	for _, channel := range s.lumia {
@@ -499,10 +504,35 @@ func (s *HwRouteState) peekLumia() *model.Channel {
 			cooling = channel
 		}
 	}
-	if cooling != nil && s.peekAlternate() != nil {
+	if cooling != nil && (s.lumiaProbe || s.peekAlternate() != nil) {
 		return nil
 	}
 	return cooling
+}
+
+// startLumiaProbe runs just before the route spends an attempt on a Lumia
+// channel. On a route without an alternative supplier (the free group) a
+// cooling alias among the untried ones, the pick included, means Lumia is
+// failing right now: this attempt becomes the route's probe, and after it the
+// route tries no cooling alias and makes no paused retry. A free request then
+// gets its busy answer after one slow Lumia failure instead of two or three,
+// while every request still probes, so a recovered Lumia is noticed at once. A
+// route that meets no cooling alias keeps every attempt it had before.
+func (s *HwRouteState) startLumiaProbe() {
+	if s.lumiaProbe {
+		return
+	}
+	for _, channel := range s.alternates {
+		if HwChannelAllowedForGroup(channel, s.group, s.userGroup) {
+			return
+		}
+	}
+	for _, channel := range s.lumia {
+		if !s.tried[channel.Id] && hwLumiaCooling(channel.Id) {
+			s.lumiaProbe = true
+			return
+		}
+	}
 }
 
 func (s *HwRouteState) peekAlternate() *model.Channel {
@@ -522,8 +552,9 @@ func (s *HwRouteState) peekAlternate() *model.Channel {
 // (after the fixed pause), then the alternative suppliers for the paying group,
 // Portix and Kie cheapest first and OpenRouter last, then nothing at all.
 // Lumia aliases in their cooldown and the extra attempt on them are skipped
-// while an alternative supplier remains; they are tried last otherwise.
-// Another family is never part of the route.
+// while an alternative supplier remains; they are tried last otherwise. A
+// route without an alternative supplier that meets a cooling alias ends after
+// its Lumia probe (startLumiaProbe). Another family is never part of the route.
 func (s *HwRouteState) next() *model.Channel {
 	if s == nil || s.finished {
 		return nil
@@ -534,6 +565,7 @@ func (s *HwRouteState) next() *model.Channel {
 		return channel
 	}
 	if channel := s.peekLumia(); channel != nil {
+		s.startLumiaProbe()
 		s.tried[channel.Id] = true
 		s.recordAttempt(channel, HwProviderLumia)
 		return channel
@@ -867,7 +899,7 @@ func HwAppendRelayLogAdminInfo(c *gin.Context, other *model.LogOther) {
 	}
 }
 
-// HwTerminalError replaces an exhausted supplier route's last upstream error// HwTerminalError replaces an exhausted supplier route's last upstream error
+// HwTerminalError replaces an exhausted supplier route's last upstream error
 // with the fork's own service_busy error, so an outage never surfaces upstream
 // wording or a supplier-flavoured status. Client-side failures (4xx) keep their
 // own class; masking replaces their text instead.
