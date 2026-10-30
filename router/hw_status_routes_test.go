@@ -153,7 +153,9 @@ func TestHwStatusRouteIsPublicAndNamesNoSupplier(t *testing.T) {
 	for _, entry := range payload.Data.Models {
 		seen[entry.Model] = true
 		assert.Equal(t, service.HwStatusOperational, entry.Status)
-		assert.Equal(t, 100.0, entry.AvailabilityPercent)
+		// The percentage follows the outage the page lists: ten minutes of a
+		// 30-day window is 99.98 %, not the 100 % the healthy samples alone give.
+		assert.Equal(t, 99.98, entry.AvailabilityPercent)
 		assert.NotEmpty(t, entry.MessageTR)
 		assert.NotEmpty(t, entry.MessageEN)
 		// The supplier of a model is never part of the public name or text.

@@ -199,7 +199,19 @@ func buildRankingsSnapshot(config rankingPeriodConfig, now time.Time) (*Rankings
 		}
 	}
 
-	meta := buildRankingModelMeta()
+	return assembleRankings(config, currentTotals, currentBuckets, previousTotals, buildRankingModelMeta()), nil
+}
+
+// assembleRankings shapes the usage rows into the public answer. Only models of
+// the public pricing catalog (meta) are ranked: quota_data keeps the usage of
+// internal, test and retired models for good, and those would otherwise show up
+// as "by Unknown" and take a share of the leaderboard nobody can buy.
+func assembleRankings(config rankingPeriodConfig, currentTotals []model.RankingQuotaTotal, currentBuckets []model.RankingQuotaBucket, previousTotals []model.RankingQuotaTotal, meta map[string]rankingModelMeta) *RankingsResponse {
+	totalName := func(row model.RankingQuotaTotal) string { return row.ModelName }
+	currentTotals = keepCatalogModels(currentTotals, meta, totalName)
+	previousTotals = keepCatalogModels(previousTotals, meta, totalName)
+	currentBuckets = keepCatalogModels(currentBuckets, meta, func(row model.RankingQuotaBucket) string { return row.ModelName })
+
 	totalTokens := sumRankingTokens(currentTotals)
 	previousRankByModel := rankingRankMap(previousTotals)
 	previousTokensByModel := rankingTokenMap(previousTotals)
@@ -217,7 +229,18 @@ func buildRankingsSnapshot(config rankingPeriodConfig, now time.Time) (*Rankings
 		TopDroppers:        droppers,
 		ModelsHistory:      modelHistory,
 		VendorShareHistory: vendorHistory,
-	}, nil
+	}
+}
+
+// keepCatalogModels drops the rows of models that are not in meta, in order.
+func keepCatalogModels[T any](rows []T, meta map[string]rankingModelMeta, modelName func(T) string) []T {
+	kept := make([]T, 0, len(rows))
+	for _, row := range rows {
+		if _, ok := meta[modelName(row)]; ok {
+			kept = append(kept, row)
+		}
+	}
+	return kept
 }
 
 func rankingTimeRange(config rankingPeriodConfig, now time.Time) (int64, int64) {
@@ -240,8 +263,14 @@ func buildRankingModelMeta() map[string]rankingModelMeta {
 		vendorByID[vendor.ID] = vendor
 	}
 
+	// The catalog an anonymous visitor of /api/pricing sees: a model counts when
+	// one of its groups is usable by everyone (controller.filterPricingByUsableGroups).
+	usableGroups := GetUserUsableGroups("")
 	meta := make(map[string]rankingModelMeta)
 	for _, pricing := range model.GetPricing() {
+		if !rankingPricingIsPublic(pricing.EnableGroup, usableGroups) {
+			continue
+		}
 		item := rankingModelMeta{vendor: rankingUnknownVendor}
 		if vendor, ok := vendorByID[pricing.VendorID]; ok {
 			item.vendor = vendor.Name
@@ -252,6 +281,24 @@ func buildRankingModelMeta() map[string]rankingModelMeta {
 		meta[pricing.ModelName] = item
 	}
 	return meta
+}
+
+// rankingPricingIsPublic reports whether a model with these enabled groups is in
+// the public pricing catalog: enabled for "all" or for a group in usableGroups,
+// and nothing at all when no group is usable (as /api/pricing does).
+func rankingPricingIsPublic(enableGroups []string, usableGroups map[string]string) bool {
+	if len(usableGroups) == 0 {
+		return false
+	}
+	if slices.Contains(enableGroups, "all") {
+		return true
+	}
+	for _, group := range enableGroups {
+		if _, ok := usableGroups[group]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func modelMeta(modelName string, meta map[string]rankingModelMeta) rankingModelMeta {

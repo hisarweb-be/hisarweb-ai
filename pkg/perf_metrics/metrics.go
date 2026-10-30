@@ -104,6 +104,15 @@ func RecordTaskResult(task *model.Task, result *relaycommon.TaskInfo) {
 	Record(sample)
 }
 
+// countsForSpeed reports whether the sample may feed the tokens-per-second
+// figure: it needs a measured generation time and a real answer. A request with
+// a handful of output tokens (a ping, a health probe) is dominated by start-up
+// time, so dividing its few tokens by its duration only drags the average to
+// about one token per second; requests without output carry no speed at all.
+func (s Sample) countsForSpeed() bool {
+	return s.OutputTokens >= model.HwSpeedMinOutputTokens && s.GenerationMs > 0
+}
+
 func Record(sample Sample) {
 	setting := perf_metrics_setting.GetSetting()
 	if !setting.Enabled || sample.Model == "" {
@@ -569,7 +578,7 @@ func recordRedis(key bucketKey, sample Sample) {
 		pipe.HIncrBy(ctx, redisKey, "ttft", sample.TtftMs)
 		pipe.HIncrBy(ctx, redisKey, "ttft_n", 1)
 	}
-	if sample.OutputTokens > 0 && sample.GenerationMs > 0 {
+	if sample.countsForSpeed() {
 		pipe.HIncrBy(ctx, redisKey, "out", sample.OutputTokens)
 		pipe.HIncrBy(ctx, redisKey, "gen_ms", sample.GenerationMs)
 	}

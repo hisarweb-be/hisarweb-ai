@@ -95,15 +95,26 @@ func HwLatestQualityRun() (*HwQualityRun, []HwQualityScore, error) {
 	return &run, scores, nil
 }
 
+// HwSpeedMinOutputTokens is the output a served request needs before it counts
+// as a speed sample. The relay stores the duration of the whole request, start-up
+// included, so a ping that answers with one token in nine seconds says nothing
+// about how fast the model writes: dividing its handful of tokens by its
+// duration is what showed Opus at 0.2 tokens per second. Short answers and
+// answers without output are left out of every tokens-per-second figure.
+const HwSpeedMinOutputTokens = 32
+
 // HwQualityLatencyBucket counts the served customer requests of one own model
-// that took the same whole number of seconds, with the output tokens they
-// produced. The relay stores the duration in whole seconds, so these buckets
-// carry the full latency distribution without loading one row per request.
+// that took the same whole number of seconds. The relay stores the duration in
+// whole seconds, so these buckets carry the full latency distribution without
+// loading one row per request. SpeedRequests and SpeedTokens cover only the
+// requests that produced at least HwSpeedMinOutputTokens, the ones that say
+// something about the generation speed.
 type HwQualityLatencyBucket struct {
-	ModelName    string `gorm:"column:model_name"`
-	UseTime      int    `gorm:"column:use_time"`
-	Requests     int64  `gorm:"column:requests"`
-	OutputTokens int64  `gorm:"column:output_tokens"`
+	ModelName     string `gorm:"column:model_name"`
+	UseTime       int    `gorm:"column:use_time"`
+	Requests      int64  `gorm:"column:requests"`
+	SpeedRequests int64  `gorm:"column:speed_requests"`
+	SpeedTokens   int64  `gorm:"column:speed_tokens"`
 }
 
 // HwQualityFailedRequests is the number of customer requests of one own model
@@ -134,7 +145,10 @@ func HwReadQualityTraffic(from int64, to int64, models []string) ([]HwQualityLat
 
 	buckets := make([]HwQualityLatencyBucket, 0)
 	if err := LOG_DB.Model(&Log{}).
-		Select("model_name, use_time, COUNT(*) AS requests, SUM(completion_tokens) AS output_tokens").
+		Select("model_name, use_time, COUNT(*) AS requests,"+
+			" SUM(CASE WHEN completion_tokens >= ? THEN 1 ELSE 0 END) AS speed_requests,"+
+			" SUM(CASE WHEN completion_tokens >= ? THEN completion_tokens ELSE 0 END) AS speed_tokens",
+			HwSpeedMinOutputTokens, HwSpeedMinOutputTokens).
 		Where("type = ?", LogTypeConsume).
 		Where("created_at >= ? AND created_at < ?", from, to).
 		Where(customer).
