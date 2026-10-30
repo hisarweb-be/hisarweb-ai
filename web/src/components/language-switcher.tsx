@@ -89,7 +89,7 @@ export function LanguageSwitcher(props: LanguageSwitcherProps = {}) {
               aria-pressed={isActive}
               title={lang.label}
               onClick={() => handleChangeLanguage(lang.code)}
-              className='h-7 rounded-md px-2 text-xs font-semibold'
+              className='h-7 rounded-md px-1.5 text-xs font-semibold sm:px-2'
             >
               {lang.short}
               <span className='sr-only'> {lang.label}</span>
