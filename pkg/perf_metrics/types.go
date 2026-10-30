@@ -123,7 +123,7 @@ func (b *atomicBucket) add(sample Sample) {
 		b.ttftSumMs.Add(sample.TtftMs)
 		b.ttftCount.Add(1)
 	}
-	if sample.OutputTokens > 0 && sample.GenerationMs > 0 {
+	if sample.countsForSpeed() {
 		b.outputTokens.Add(sample.OutputTokens)
 		b.generationMs.Add(sample.GenerationMs)
 	}

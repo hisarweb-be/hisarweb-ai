@@ -399,7 +399,7 @@ func TestHwObservedModelQualityEdges(t *testing.T) {
 	assert.Nil(t, allFailed.MedianSeconds)
 	assert.Nil(t, allFailed.OutputTokensPerSecond)
 
-	subSecond := HwObservedModelQuality("m", []model.HwQualityLatencyBucket{{ModelName: "m", UseTime: 0, Requests: 20, OutputTokens: 400}}, 0)
+	subSecond := HwObservedModelQuality("m", []model.HwQualityLatencyBucket{{ModelName: "m", UseTime: 0, Requests: 20, SpeedRequests: 20, SpeedTokens: 400}}, 0)
 	require.NotNil(t, subSecond.MedianSeconds)
 	assert.Equal(t, 0, *subSecond.MedianSeconds)
 	require.NotNil(t, subSecond.SuccessPercent)
@@ -409,6 +409,76 @@ func TestHwObservedModelQualityEdges(t *testing.T) {
 	justBelow := HwObservedModelQuality("m", []model.HwQualityLatencyBucket{{ModelName: "m", UseTime: 1, Requests: HwQualityTrafficMinRequests - 1}}, 0)
 	assert.False(t, justBelow.EnoughData)
 	assert.Equal(t, int64(HwQualityTrafficMinRequests-1), justBelow.Requests)
+}
+
+// The speed is the output of the requests that really answered over their
+// duration. Pings of a few tokens and answers without output do not count, and
+// a window with fewer than HwQualitySpeedMinSamples samples shows no speed.
+func TestHwObservedModelQualitySpeedUsesOnlyRealAnswers(t *testing.T) {
+	bucket := func(useTime int, requests, speedRequests, speedTokens int64) model.HwQualityLatencyBucket {
+		return model.HwQualityLatencyBucket{ModelName: "m", UseTime: useTime, Requests: requests, SpeedRequests: speedRequests, SpeedTokens: speedTokens}
+	}
+
+	answered := HwObservedModelQuality("m", []model.HwQualityLatencyBucket{
+		bucket(2, 12, 12, 768), // twelve answers of 64 tokens in 2 s
+		bucket(9, 40, 0, 0),    // pings of one token
+		bucket(3, 5, 0, 0),     // answers without output
+	}, 0)
+	require.NotNil(t, answered.OutputTokensPerSecond)
+	assert.Equal(t, 32.0, *answered.OutputTokensPerSecond, "768 tokens over 24 s, the pings do not drag it down")
+	assert.Equal(t, int64(57), answered.Requests, "the pings still count as requests")
+
+	tooFew := HwObservedModelQuality("m", []model.HwQualityLatencyBucket{bucket(2, 30, HwQualitySpeedMinSamples-1, 576)}, 0)
+	assert.True(t, tooFew.EnoughData)
+	require.NotNil(t, tooFew.MedianSeconds, "latency still shows")
+	assert.Nil(t, tooFew.OutputTokensPerSecond, "too few samples show nothing")
+
+	onlyPings := HwObservedModelQuality("m", []model.HwQualityLatencyBucket{bucket(9, 40, 0, 0)}, 0)
+	require.NotNil(t, onlyPings.MedianSeconds)
+	assert.Nil(t, onlyPings.OutputTokensPerSecond, "no real answer, no speed")
+
+	empty := HwObservedModelQuality("m", nil, 0)
+	assert.Nil(t, empty.OutputTokensPerSecond, "an empty window shows nothing")
+}
+
+// On the real log path both windows use the same formula over the requests that
+// produced output: the internal pings of one token and the rows without output
+// leave the figure alone, and the thirty-day window only differs by its traffic.
+func TestHwQualityTrafficSpeedLeavesOutPingsAndEmptyAnswers(t *testing.T) {
+	hwTrafficTestSetup(t)
+	now := time.Unix(1_800_000_000, 0)
+	recent := now.Unix() - 3600
+	const opus = "claude-opus-5-5"
+
+	for i := range 12 {
+		hwTrafficTestLog(t, model.LogTypeConsume, opus, model.HwPaidGroupName, recent, 2, 64, fmt.Sprintf("real-%d", i))
+	}
+	for i := range 40 {
+		hwTrafficTestLog(t, model.LogTypeConsume, opus, model.HwPaidGroupName, recent, 9, 1, fmt.Sprintf("ping-%d", i))
+	}
+	for i := range 5 {
+		hwTrafficTestLog(t, model.LogTypeConsume, opus, model.HwPaidGroupName, recent, 3, 0, fmt.Sprintf("empty-%d", i))
+	}
+	// Twelve older answers of 90 tokens in 3 s: only in the thirty-day window.
+	for i := range 12 {
+		hwTrafficTestLog(t, model.LogTypeConsume, opus, model.HwPaidGroupName, now.Unix()-10*24*3600, 3, 90, fmt.Sprintf("old-%d", i))
+	}
+
+	traffic, err := HwReadQualityTrafficAt(now)
+	require.NoError(t, err)
+	require.Len(t, traffic.Windows, 2)
+
+	week := traffic.Windows[0].Models
+	require.Len(t, week, 1)
+	assert.Equal(t, int64(57), week[0].Requests)
+	require.NotNil(t, week[0].OutputTokensPerSecond)
+	assert.Equal(t, 32.0, *week[0].OutputTokensPerSecond, "768 tokens over 24 s")
+
+	month := traffic.Windows[1].Models
+	require.Len(t, month, 1)
+	assert.Equal(t, int64(69), month[0].Requests)
+	require.NotNil(t, month[0].OutputTokensPerSecond)
+	assert.Equal(t, 30.8, *month[0].OutputTokensPerSecond, "(768 + 1080) tokens over (24 + 36) s")
 }
 
 // TestHwQualityTrafficNowRefreshesAfterTenMinutes keeps the public read cheap:
