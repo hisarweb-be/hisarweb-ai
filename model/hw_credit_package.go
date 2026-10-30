@@ -605,7 +605,10 @@ func hwDecreaseUserQuota(tx *gorm.DB, userID int, quota int) error {
 // last interval still sits in memory; retiring a package against the stored
 // balance would deduct that consumption a second time when the buffer flushes.
 // Flushing always works here because the batch updater lives in this package; a
-// node that does not hold the buffer flushes it on its own interval.
+// node that does not hold the buffer flushes it on its own interval. The flush
+// narrows the window but does not close it: consumption buffered between this
+// call and the caller's row lock is still deducted twice, so production keeps
+// batch updates off (deploy/docker-compose.yml).
 func hwFlushPendingQuotaUpdates() {
 	if !common.BatchUpdateEnabled {
 		return
