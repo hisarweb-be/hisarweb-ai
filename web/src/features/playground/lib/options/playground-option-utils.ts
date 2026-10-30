@@ -62,19 +62,24 @@ export function shouldClearModelForGroup(
   return !models.some((model) => model.value === currentModel)
 }
 
+/**
+ * Returns the group to switch to, or null to keep the current one. A missing
+ * group falls back to the account's own group, so a paid customer never lands
+ * in another group by accident, then to 'default', then to the first group.
+ */
 export function getGroupFallback(
   groups: GroupOption[],
-  currentGroup: string
+  currentGroup: string,
+  userGroup?: string
 ): string | null {
-  const hasCurrentGroup = groups.some((group) => group.value === currentGroup)
+  const has = (value: string | undefined) =>
+    value !== undefined && groups.some((group) => group.value === value)
 
-  if (hasCurrentGroup || groups.length === 0) {
+  if (has(currentGroup) || groups.length === 0) {
     return null
   }
 
-  return (
-    groups.find((group) => group.value === 'default')?.value ?? groups[0].value
-  )
+  return [userGroup, 'default'].find(has) ?? groups[0].value
 }
 
 export function getOptionLoadErrorMessage(

@@ -40,6 +40,7 @@ import { useTranslation } from 'react-i18next'
 
 import { handleServerError } from '@/lib/handle-server-error'
 import { requireServerSuccess } from '@/lib/server-error-message'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { getUserGroups, getUserModels } from '../api'
 import {
@@ -69,6 +70,7 @@ export function usePlaygroundOptions({
   updateConfig,
 }: UsePlaygroundOptionsParams) {
   const { t } = useTranslation()
+  const userGroup = useAuthStore((state) => state.auth.user?.group)
 
   const {
     data: modelsData,
@@ -135,12 +137,12 @@ export function usePlaygroundOptions({
     if (!groupsData) return
 
     setGroups(groupsData)
-    const fallback = getGroupFallback(groupsData, currentGroup)
+    const fallback = getGroupFallback(groupsData, currentGroup, userGroup)
 
     if (fallback) {
       updateConfig('group', fallback)
     }
-  }, [groupsData, currentGroup, setGroups, updateConfig])
+  }, [groupsData, currentGroup, userGroup, setGroups, updateConfig])
 
   return {
     isLoadingModels,

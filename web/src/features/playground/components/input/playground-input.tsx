@@ -38,7 +38,8 @@ import { PlaygroundInputTools } from './playground-input-tools'
 
 interface PlaygroundInputProps {
   config: PlaygroundConfig
-  onSubmit: (text: string) => void
+  /** Returns false when the text was not sent, so the input keeps it. */
+  onSubmit: (text: string) => boolean
   onStop?: () => void
   disabled?: boolean
   isGenerating?: boolean
@@ -87,8 +88,7 @@ export function PlaygroundInput({
   const handleSubmit = (message: PromptInputMessage) => {
     const submittableText = getSubmittableInputText(message, disabled)
 
-    if (!submittableText) return
-    onSubmit(submittableText)
+    if (!submittableText || !onSubmit(submittableText)) return
     setText('')
   }
 
