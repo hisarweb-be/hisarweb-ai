@@ -22,12 +22,12 @@ import { useTranslation } from 'react-i18next'
 
 import { Dialog } from '@/components/dialog'
 import { LanguageSwitcher } from '@/components/language-switcher'
-import { HwCurrencySwitch } from '@/features/hw/components/currency-switch'
 import { NotificationPopover } from '@/components/notification-popover'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { HwCurrencySwitch } from '@/features/hw/components/currency-switch'
 import { SystemUpdateAction } from '@/features/system-update/system-update-action'
 import { useNotifications } from '@/hooks/use-notifications'
 import { useSystemConfig } from '@/hooks/use-system-config'
@@ -209,7 +209,7 @@ export function PublicHeader(props: PublicHeaderProps) {
         >
           <nav
             className={cn(
-              'flex items-center justify-between gap-2 transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]',
+              'flex items-center justify-between gap-1 transition-all sm:gap-2 duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]',
               scrolled
                 ? 'bg-background/85 ring-border/60 h-12 rounded-2xl pr-1.5 pl-4 shadow-[0_2px_16px_-6px_rgba(0,0,0,0.08),0_0_0_0.5px_rgba(0,0,0,0.02)] ring-[0.5px] backdrop-blur-2xl dark:shadow-[0_2px_16px_-6px_rgba(0,0,0,0.4)]'
                 : 'h-16 px-2'
@@ -219,7 +219,7 @@ export function PublicHeader(props: PublicHeaderProps) {
             <div className='@container/system-brand flex min-w-0 flex-1 items-center gap-1 xl:min-w-36'>
               <Link
                 to={homeUrl}
-                className='group flex min-w-0 items-center gap-2.5'
+                className='group flex min-w-0 items-center gap-2 sm:gap-2.5'
               >
                 <div className='flex size-7 shrink-0 items-center justify-center transition-all duration-300 group-hover:scale-105'>
                   {logoContent}
@@ -313,10 +313,16 @@ export function PublicHeader(props: PublicHeaderProps) {
             </div>
 
             {/* Mobile: compact actions + hamburger */}
-            <div className='flex shrink-0 items-center gap-2 xl:hidden'>
+            <div className='flex shrink-0 items-center gap-1 sm:gap-2 xl:hidden'>
               {showLanguageSwitcher && <LanguageSwitcher variant='toggle' />}
               {showLanguageSwitcher && <HwCurrencySwitch />}
-              {showThemeSwitch && <ThemeSwitch />}
+              {/* Below 640 px the theme switch moves into the menu: with it
+                  the controls leave the brand name 15 px at 375 px. */}
+              {showThemeSwitch && (
+                <div className='hidden sm:block'>
+                  <ThemeSwitch />
+                </div>
+              )}
               {showAuthButtons && !loading && isAuthenticated && (
                 <ProfileDropdown />
               )}
@@ -324,7 +330,7 @@ export function PublicHeader(props: PublicHeaderProps) {
                 type='button'
                 variant='ghost'
                 size='icon'
-                className='size-9'
+                className='size-8 sm:size-9'
                 onClick={() => setMobileOpen((v) => !v)}
                 aria-label={t('Toggle navigation menu')}
               >
@@ -419,6 +425,11 @@ export function PublicHeader(props: PublicHeaderProps) {
             )}
             style={{ transitionDelay: mobileOpen ? '250ms' : '0ms' }}
           >
+            {showThemeSwitch && (
+              <div className='flex justify-center sm:hidden'>
+                <ThemeSwitch />
+              </div>
+            )}
             {showAuthButtons && (
               <Link
                 to={isAuthenticated ? '/dashboard' : '/sign-in'}

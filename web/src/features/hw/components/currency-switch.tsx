@@ -18,9 +18,9 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect } from 'react'
 
+import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/stores/auth-store'
 import { useHwCurrencyStore } from '@/stores/hw-currency-store'
 
@@ -98,7 +98,7 @@ export function HwCurrencySwitch(props: { className?: string }) {
             aria-pressed={isActive}
             title={hw(TITLE_KEYS[code])}
             onClick={() => choose(code)}
-            className='h-7 w-7 rounded-md px-0 text-xs font-semibold'
+            className='h-7 w-6 rounded-md px-0 text-xs font-semibold sm:w-7'
           >
             {HW_CURRENCY_SYMBOLS[code]}
             <span className='sr-only'> {hw(TITLE_KEYS[code])}</span>

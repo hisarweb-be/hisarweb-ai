@@ -30,7 +30,7 @@ import { pickHwLanguage, useHwCurrencyText, type HwTextVars } from './texts'
 const tr = {
   whatTitle: 'HisarWeb AI nedir?',
   whatBody:
-    'HisarWeb AI, Claude ve Gemini gibi yapay zekâ modellerini tek bir yerden, aylık abonelik olmadan ve yalnızca kullandığınız kadar ödeyerek kullanmanızı sağlar. Bakiyeyi kredi kartı ile {currencyLong} üzerinden yüklersiniz. Bir hesap açarsınız, bir anahtar oluşturursunuz ve modeli kendi araçlarınızda, örneğin Claude Code’da, kullanırsınız. Kod bilmeniz gerekmez.',
+    'HisarWeb AI, Claude ve Grok gibi yapay zekâ modellerini tek bir yerden, aylık abonelik olmadan ve yalnızca kullandığınız kadar ödeyerek kullanmanızı sağlar. Bakiyeyi kredi kartı ile {currencyLong} üzerinden yüklersiniz. Bir hesap açarsınız, bir anahtar oluşturursunuz ve modeli kendi araçlarınızda, örneğin Claude Code’da, kullanırsınız. Kod bilmeniz gerekmez.',
   whatFree:
     'Telefonunu Telegram ile doğrulayan yeni hesaplar {bonus} başlangıç bonusu alır; bonus 14 gün geçerlidir ve denemek için kredi kartı gerekmez. Aşağıdaki adımlarla ilk yanıtınızı birkaç dakikada görürsünüz.',
 
@@ -44,7 +44,7 @@ const tr = {
 
   step1Title: 'Hesap açın',
   step1Body:
-    'Sağ üstteki “Deneme hesabı aç” düğmesine basın. Bir kullanıcı adı ve en az 8 karakterlik bir parola seçin, sözleşmeyi onaylayın ve “Hesap oluştur” düğmesine basın.',
+    'Sağ üstteki “Giriş yap” düğmesine basın ve açılan sayfada “Kayıt ol” bağlantısını seçin (ana sayfadaki “Ücretsiz hesap aç” düğmesi sizi doğrudan oraya götürür). Bir kullanıcı adı ve en az 8 karakterlik bir parola seçin, parolayı bir kez daha yazın, sözleşmeyi onaylayın ve “Hesap oluştur” düğmesine basın. Sonra aynı bilgilerle giriş yapın.',
   step1Alt: 'Hesap oluşturma formu: kullanıcı adı, parola ve onay kutusu',
 
   step2Title: '{bonus} başlangıç bonusunu alın',
@@ -81,7 +81,7 @@ const tr = {
 const en: typeof tr = {
   whatTitle: 'What is HisarWeb AI?',
   whatBody:
-    'HisarWeb AI lets you use AI models such as Claude and Gemini from one place, without a monthly subscription and paying only for what you use. You top up your balance by credit card in {currencyLong}. You open an account, create a key and use the model in your own tools, for example Claude Code. You do not need to know how to code.',
+    'HisarWeb AI lets you use AI models such as Claude and Grok from one place, without a monthly subscription and paying only for what you use. You top up your balance by credit card in {currencyLong}. You open an account, create a key and use the model in your own tools, for example Claude Code. You do not need to know how to code.',
   whatFree:
     'New accounts that verify their phone through Telegram receive a {bonus} start bonus, valid for 14 days, and you need no credit card to try it. The steps below take you to your first answer in a few minutes.',
 
@@ -95,7 +95,7 @@ const en: typeof tr = {
 
   step1Title: 'Create an account',
   step1Body:
-    'Press “Open a trial account” at the top right. Choose a username and a password of at least 8 characters, accept the agreement and press “Create account”.',
+    'Press “Sign in” at the top right and choose the “Sign up” link on the page that opens (the “Create a free account” button on the home page takes you straight there). Choose a username and a password of at least 8 characters, type the password once more, accept the agreement and press “Create account”. Then sign in with the same details.',
   step1Alt: 'Sign-up form with username, password and the agreement checkbox',
 
   step2Title: 'Claim your {bonus} start bonus',

@@ -21,6 +21,7 @@ import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
+import { searchShortcutHint } from '@/lib/shortcut-key'
 import { cn } from '@/lib/utils'
 
 export interface SearchBarProps {
@@ -79,7 +80,7 @@ export function SearchBar(props: SearchBarProps) {
           </Button>
         ) : (
           <kbd className='bg-muted text-muted-foreground pointer-events-none hidden rounded border px-1.5 py-0.5 font-mono text-[10px] sm:inline-block'>
-            ⌘K
+            {searchShortcutHint()}
           </kbd>
         )}
       </div>

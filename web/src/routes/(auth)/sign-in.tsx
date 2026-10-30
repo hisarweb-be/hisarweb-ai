@@ -21,7 +21,7 @@ import { z } from 'zod'
 
 import { sanitizeAuthRedirect } from '@/features/auth/lib/auth-redirect'
 import { SignIn } from '@/features/auth/sign-in'
-import { resolveAuthentication } from '@/lib/auth-session'
+import { bootstrapAuthentication } from '@/lib/auth-session'
 import { useAuthStore } from '@/stores/auth-store'
 
 const searchSchema = z.object({
@@ -32,9 +32,10 @@ export const Route = createFileRoute('/(auth)/sign-in')({
   component: SignIn,
   validateSearch: searchSchema,
   beforeLoad: async ({ search }) => {
-    // 根 guard 可能因为没有会话提示而跳过了 refresh。此处必须回源确认，
-    // 否则持有有效 Refresh Cookie 的用户会被要求重新输入密码。
-    await resolveAuthentication()
+    // 没有会话提示（服务端的 new_api_has_session）说明匿名访客，refresh 必然 401，
+    // 所以此处与根 guard 一样跳过；有提示的用户仍会回源恢复会话。
+    // 受保护路由（_authenticated）依旧回源确认。
+    await bootstrapAuthentication()
 
     const { auth } = useAuthStore.getState()
 

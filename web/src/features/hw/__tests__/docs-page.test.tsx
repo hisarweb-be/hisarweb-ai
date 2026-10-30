@@ -22,6 +22,8 @@ import { createInstance } from 'i18next'
 import { I18nextProvider } from 'react-i18next'
 import { describe, expect, it, vi } from 'vitest'
 
+import trLocale from '@/i18n/locales/tr.json'
+
 import { DocsPage } from '../components/docs-page'
 import { VibeFilm, VibePage } from '../components/vibe-page'
 import { vibeTexts } from '../vibe-texts'
@@ -117,6 +119,33 @@ describe('documentation page', () => {
     expect(
       screen.getByRole('link', { name: 'Satın al sayfasına git' })
     ).toHaveAttribute('href', '/satin-al')
+  })
+
+  // Sign-up is a username and password; there is no e-mail link and the header
+  // has no trial button. Every button the step names must exist in the app.
+  it('describes the real sign-up form in Turkish with labels the app uses', () => {
+    renderPage(trI18n)
+
+    const step = screen.getByText(/Bir kullanıcı adı ve en az 8 karakterlik/)
+    expect(step.textContent).toContain('“Giriş yap”')
+    expect(step.textContent).toContain('“Kayıt ol”')
+    expect(step.textContent).toContain('“Hesap oluştur”')
+    expect(step.textContent).not.toContain('Deneme hesabı aç')
+    expect(trLocale.translation['Sign in']).toBe('Giriş yap')
+    expect(trLocale.translation['Sign up']).toBe('Kayıt ol')
+    expect(trLocale.translation['Create account']).toBe('Hesap oluştur')
+  })
+
+  it('describes the real sign-up form in English', () => {
+    renderPage(enI18n)
+
+    const step = screen.getByText(
+      /Choose a username and a password of at least/
+    )
+    expect(step.textContent).toContain('“Sign in”')
+    expect(step.textContent).toContain('“Sign up”')
+    expect(step.textContent).toContain('“Create account”')
+    expect(step.textContent).not.toContain('Open a trial account')
   })
 
   it('gives Claude Code the gateway address without a trailing /v1', () => {

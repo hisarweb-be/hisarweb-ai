@@ -85,4 +85,22 @@ describe('site footer', () => {
     ).toBeVisible()
     expect(screen.getByTestId('build-stamp')).toBeInTheDocument()
   })
+
+  // The floating assistant button (size-14 at right-4 bottom-4, 72 px of the
+  // bottom edge) covered the last footer lines on a phone. Below 640 px the
+  // footer keeps at least that much room under its last line.
+  test('both footers leave room below the last line for the floating button on a phone', () => {
+    const full = render(<Footer />)
+    expect(full.container.querySelector('footer > div')).toHaveClass(
+      'pb-24',
+      'sm:pb-12'
+    )
+    full.unmount()
+
+    const compact = render(<Footer variant='compact' />)
+    expect(compact.container.querySelector('footer')).toHaveClass(
+      'pb-20',
+      'sm:pb-3'
+    )
+  })
 })

@@ -48,20 +48,20 @@ const tr = {
   landingBadgeForeign: 'Fiyatlar {currencyName} cinsinden',
   landingBadge: 'Türkiye için: TL fiyatlar, KDV dahil',
   landingTitle:
-    'Claude ve Gemini API’si resmî fiyatın yarısına, {currencyName} ile ödeyin',
+    'Claude API’si resmî fiyatın yarısına, {currencyName} ile ödeyin',
   landingLead:
     'HisarWeb AI, yapay zekâ uygulamanız için tek bir API anahtarı sunar. Her model resmî liste fiyatının %50 altında ve diğer API aracılarından ucuz. Aylık abonelik yok; yalnızca kullandığınız kadar ödersiniz.',
   landingCtaPrimary: 'Ücretsiz hesap aç',
   landingCtaSecondary: 'Fiyatları karşılaştır',
   landingTitleAccent: 'resmî fiyatın yarısına',
   landingCatalogNote:
-    'Claude ve Gemini ailelerinden seçilmiş modeller tek katalogda; her modelin güncel fiyatı karşılaştırma sayfasında yazar.',
+    'Claude ve Grok ailelerinden seçilmiş modeller tek katalogda; her modelin güncel fiyatı karşılaştırma sayfasında yazar.',
 
   filmTitle: 'HisarWeb AI’yı 54 saniyede izleyin',
   filmBodyForeign:
-    'Claude ve Gemini resmî API liste fiyatının yarısına, {currencyLong} ile: beş saatlik veya haftalık limit yok, yalnızca kullandığınız kadar ödersiniz. Film Türkçe seslendirmeli ve Türkçe ekran metinlidir; görseller yapay zekâ ile üretilmiştir.',
+    'Claude resmî API liste fiyatının yarısına, {currencyLong} ile: beş saatlik veya haftalık limit yok, yalnızca kullandığınız kadar ödersiniz. Film Türkçe seslendirmeli ve Türkçe ekran metinlidir; görseller yapay zekâ ile üretilmiştir.',
   filmBody:
-    'Claude ve Gemini resmî API liste fiyatının yarısına, Türk lirasıyla ve KDV dahil: beş saatlik veya haftalık limit yok, yalnızca kullandığınız kadar ödersiniz. Film Türkçe seslendirmeli ve Türkçe ekran metinlidir; görseller yapay zekâ ile üretilmiştir.',
+    'Claude resmî API liste fiyatının yarısına, Türk lirasıyla ve KDV dahil: beş saatlik veya haftalık limit yok, yalnızca kullandığınız kadar ödersiniz. Film Türkçe seslendirmeli ve Türkçe ekran metinlidir; görseller yapay zekâ ile üretilmiştir.',
   filmLabel: 'HisarWeb AI tanıtım filmi',
 
   benefitTitle: 'Neden HisarWeb AI?',
@@ -85,9 +85,10 @@ const tr = {
 
   stepsTitle: 'Dört adımda başlayın',
   step1Title: 'Kayıt olun',
-  step1Body: 'E-posta adresinizle hesap açın.',
-  step2Title: 'E-postanızı doğrulayın',
-  step2Body: 'Gelen kutunuza gelen bağlantıya dokunun.',
+  step1Body: 'Bir kullanıcı adı ve parola seçerek hesap açın.',
+  step2Title: 'E-postanızı ekleyip onaylayın',
+  step2Body:
+    'Giriş yaptıktan sonra Güvenlik sayfasında e-posta adresinizi girin ve size gelen kodu yazın. Başlangıç bonusu için gerekir.',
   step3Title: 'Telefonunuzu doğrulayın',
   step3Body: 'Telegram üzerinden tek seferlik doğrulama.',
   stepsPhoneWhyTitle: 'Neden telefon doğrulaması?',
@@ -454,21 +455,20 @@ const en: Record<HwTextKey, string> = {
 
   landingBadgeForeign: 'Prices in {currencyName}',
   landingBadge: 'For Turkey: prices in TRY, VAT included',
-  landingTitle:
-    'Claude and Gemini APIs at half the official price, paid in {currencyName}',
+  landingTitle: 'Claude API at half the official price, paid in {currencyName}',
   landingLead:
     'HisarWeb AI gives your application one API key. Every model is 50% below the official list price and cheaper than other API routers. No monthly subscription; you only pay for what you use.',
   landingCtaPrimary: 'Create a free account',
   landingCtaSecondary: 'Compare prices',
   landingTitleAccent: 'half the official price',
   landingCatalogNote:
-    'Selected models from the Claude and Gemini families in one catalog; every current price is on the comparison page.',
+    'Selected models from the Claude and Grok families in one catalog; every current price is on the comparison page.',
 
   filmTitle: 'Watch HisarWeb AI in 54 seconds',
   filmBodyForeign:
-    'Claude and Gemini at half the official API list price, in {currencyLong}: no five-hour or weekly limits, you pay only for what you use. The film has an English voice-over and English on-screen text; the images are AI-generated.',
+    'Claude at half the official API list price, in {currencyLong}: no five-hour or weekly limits, you pay only for what you use. The film has an English voice-over and English on-screen text; the images are AI-generated.',
   filmBody:
-    'Claude and Gemini at half the official API list price, in Turkish lira and VAT (KDV) included: no five-hour or weekly limits, you pay only for what you use. The film has an English voice-over and English on-screen text; the images are AI-generated.',
+    'Claude at half the official API list price, in Turkish lira and VAT (KDV) included: no five-hour or weekly limits, you pay only for what you use. The film has an English voice-over and English on-screen text; the images are AI-generated.',
   filmLabel: 'HisarWeb AI launch film',
 
   benefitTitle: 'Why HisarWeb AI?',
@@ -491,9 +491,10 @@ const en: Record<HwTextKey, string> = {
 
   stepsTitle: 'Start in four steps',
   step1Title: 'Sign up',
-  step1Body: 'Create an account with your email address.',
-  step2Title: 'Verify your email',
-  step2Body: 'Open the link we send to your inbox.',
+  step1Body: 'Create an account with a username and a password.',
+  step2Title: 'Add and confirm your email',
+  step2Body:
+    'After you sign in, enter your email address on the Security page and type the code we send you. The start bonus needs it.',
   step3Title: 'Verify your phone',
   step3Body: 'A one-time check through Telegram.',
   stepsPhoneWhyTitle: 'Why phone verification?',
@@ -629,9 +630,9 @@ const en: Record<HwTextKey, string> = {
   compareOfficialUsd: 'Official list price (USD)',
   compareOfficialTry: 'Official list price ({currencyName})',
   compareOursFirst: 'HisarWeb AI price (first purchase)',
-  compareOursRepeat: 'HisarWeb AI price (later purchases)',
+  compareOursRepeat: 'HisarWeb AI price (every purchase)',
   compareSavingFirst: 'Saving on the first purchase: {amount}',
-  compareSavingRepeat: 'Saving on later purchases: {amount}',
+  compareSavingRepeat: 'Saving on every purchase: {amount}',
   compareSource: 'Price source',
   comparePriceDate: 'Price date',
   compareFxSource: 'Rate source',

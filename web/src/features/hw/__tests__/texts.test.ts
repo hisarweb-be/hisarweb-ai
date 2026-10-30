@@ -69,6 +69,24 @@ describe('HisarWeb page texts', () => {
     }
   })
 
+  // Turkish said "her alışverişte" (every purchase) while English said "later
+  // purchases"; the price without the welcome discount applies to every
+  // purchase, so both languages name it that way.
+  it('calls the standard price the price of every purchase in both languages', () => {
+    expect(hwTexts.tr.compareOursRepeat).toBe(
+      'HisarWeb AI fiyatı (her alışverişte)'
+    )
+    expect(hwTexts.en.compareOursRepeat).toBe(
+      'HisarWeb AI price (every purchase)'
+    )
+    expect(hwTexts.tr.compareSavingRepeat).toBe(
+      'Her alışverişte tasarruf: {amount}'
+    )
+    expect(hwTexts.en.compareSavingRepeat).toBe(
+      'Saving on every purchase: {amount}'
+    )
+  })
+
   it('fills a placeholder and leaves an unknown one alone', () => {
     expect(fillHwText('{ms} ms', { ms: 1200 })).toBe('1200 ms')
     expect(fillHwText('{ms} ms', {})).toBe('{ms} ms')

@@ -27,10 +27,10 @@ import { Hint } from '@/features/hw/components/hint'
 import { guideText, modelGuide } from '@/features/hw/data/model-guide'
 import { getLobeIcon } from '@/lib/lobe-icon'
 import { cn } from '@/lib/utils'
-import { useSystemConfigStore } from '@/stores/system-config-store'
 
 import { DEFAULT_TOKEN_UNIT } from '../constants'
 import { useBillingTime } from '../hooks/use-billing-time'
+import { usePricingCurrency } from '../hooks/use-pricing-currency'
 import {
   getCardExamplePrice,
   getDynamicDisplayGroupRatio,
@@ -80,7 +80,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   const initial = props.model.model_name?.charAt(0).toUpperCase() || '?'
   const isUnconfiguredTaskUsage = isUnconfiguredTaskUsageModel(props.model)
   const billingTime = useBillingTime(props.model.billing_expr)
-  const currency = useSystemConfigStore((state) => state.config.currency)
+  const currency = usePricingCurrency()
   const dynamicPriceOptions = useMemo(
     () => ({
       now: billingTime === undefined ? undefined : new Date(billingTime),

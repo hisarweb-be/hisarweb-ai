@@ -196,7 +196,7 @@ export function Footer(props: FooterProps) {
     return (
       <footer
         className={cn(
-          'border-border/40 shrink-0 border-t px-4 py-3',
+          'border-border/40 shrink-0 border-t px-4 pt-3 pb-20 sm:pb-3',
           props.className
         )}
       >
@@ -210,7 +210,7 @@ export function Footer(props: FooterProps) {
     <footer
       className={cn('border-border/40 relative z-10 border-t', props.className)}
     >
-      <div className='mx-auto flex max-w-3xl flex-col items-center gap-8 px-6 py-12 text-center md:py-14'>
+      <div className='mx-auto flex max-w-3xl flex-col items-center gap-8 px-6 pt-12 pb-24 text-center sm:pb-12 md:pt-14 md:pb-14'>
         {footerHtml ? (
           <div
             className='custom-footer text-muted-foreground text-sm'

@@ -20,10 +20,10 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { getCurrencyLabel } from '@/lib/currency'
-import { useSystemConfigStore } from '@/stores/system-config-store'
 
 import { DEFAULT_TOKEN_UNIT } from '../constants'
 import { useBillingTime } from '../hooks/use-billing-time'
+import { usePricingCurrency } from '../hooks/use-pricing-currency'
 import {
   getDynamicDisplayGroupRatio,
   getDynamicPriceUnitLabelKey,
@@ -49,9 +49,10 @@ export function ModelPriceCell(props: {
   showExpression?: boolean
 }) {
   const { t, i18n } = useTranslation()
-  const currency = useSystemConfigStore((state) => state.config.currency)
+  const currency = usePricingCurrency()
   const currencyLabel =
-    currency.quotaDisplayType === 'TOKENS' ? 'USD' : getCurrencyLabel()
+    currency.override?.code ??
+    (currency.system.quotaDisplayType === 'TOKENS' ? 'USD' : getCurrencyLabel())
   const options = props.options ?? {}
   const tokenUnit = options.tokenUnit ?? DEFAULT_TOKEN_UNIT
   const tokenUnitLabel = tokenUnit === 'K' ? '1K' : '1M'
