@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/service"
 
 	"github.com/stretchr/testify/assert"
@@ -137,6 +138,23 @@ func TestHwMaskKeepsOwnErrorText(t *testing.T) {
 	body := recorder.Body.String()
 	assert.NotContains(t, body, "billing limit reached", "upstream wording is replaced:\n%s", body)
 	assert.NotContains(t, body, "lumia", "no supplier name in the replacement:\n%s", body)
+}
+
+// A playground message without a model is rejected by the distributor before
+// any supplier runs. The customer must read that reason, not the generic
+// "The request is invalid." the mask writes over upstream errors.
+func TestHwMaskKeepsDistributorRejectionText(t *testing.T) {
+	require.NoError(t, i18n.Init())
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.POST("/pg/chat/completions", HwMask(), Distribute())
+
+	recorder := hwMaskDo(t, engine, http.MethodPost, "/pg/chat/completions", "application/json",
+		[]byte(`{"model":"","group":"default","messages":[{"role":"user","content":"Code"}]}`))
+	require.Equal(t, http.StatusBadRequest, recorder.Code, recorder.Body.String())
+	body := recorder.Body.String()
+	assert.Contains(t, body, "model name cannot be empty", "the distributor's reason reaches the customer:\n%s", body)
+	assert.NotContains(t, body, "The request is invalid.", "no generic replacement of our own rejection:\n%s", body)
 }
 
 // Own /api routes may start a session and redirect; relay routes may not,
