@@ -366,9 +366,10 @@ function currentValidAuthBundle(): AuthBundle | null {
  * Resolve authentication from memory, or from the server when memory is empty.
  *
  * Use this wherever the answer decides what the user sees: route guards that
- * redirect on the result, and the sign-in page. It contacts the server on a
- * cold cache even when no session hint is present, so a usable Refresh Cookie
- * is always honoured.
+ * redirect on the result. It contacts the server on a cold cache even when no
+ * session hint is present, so a usable Refresh Cookie is always honoured. The
+ * public sign-in page uses `bootstrapAuthentication` instead, so an anonymous
+ * visitor does not trigger a refresh that is certain to 401.
  */
 export async function resolveAuthentication(): Promise<RefreshOutcome> {
   const bundle = currentValidAuthBundle()
