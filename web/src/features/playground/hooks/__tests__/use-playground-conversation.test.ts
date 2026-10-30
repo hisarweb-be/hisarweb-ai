@@ -63,5 +63,4 @@ describe('sending without a model', () => {
     expect(sent).toBe(true)
     expect(sendChat).toHaveBeenCalledTimes(1)
   })
-
 })

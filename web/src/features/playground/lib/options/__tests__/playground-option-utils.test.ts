@@ -40,9 +40,9 @@ describe('getGroupFallback', () => {
   })
 
   it('falls back to default when the account group is not offered', () => {
-    expect(
-      getGroupFallback(groups('free', 'default'), 'vip', 'paid')
-    ).toBe('default')
+    expect(getGroupFallback(groups('free', 'default'), 'vip', 'paid')).toBe(
+      'default'
+    )
   })
 
   it('falls back to the first group without account or default group', () => {
