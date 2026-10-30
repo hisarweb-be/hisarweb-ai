@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -216,6 +217,8 @@ func TestHwDecideRetryFollowsTheSupplierRoute(t *testing.T) {
 	previousPause := common.HwLumiaRetryPauseMs
 	common.HwLumiaRetryPauseMs = 0
 	t.Cleanup(func() { common.HwLumiaRetryPauseMs = previousPause })
+	// These subtests share channel ids; the cooldown has its own test.
+	hwResetLumiaCooldown(t, 0)
 
 	lumia := hwPolicyChannel(1, HwProviderLumia, "")
 	spare := hwPolicyChannel(2, HwProviderLumia, "")
@@ -611,6 +614,30 @@ func TestHwStartRouteBuildsTheRouteFromTaggedChannels(t *testing.T) {
 		assert.Equal(t, HwPaidGroup, state.group)
 	})
 
+	t.Run("the operator reaches the paid route without a paid account group", func(t *testing.T) {
+		testCases := []struct {
+			name       string
+			group      string
+			userGroup  string
+			role       int
+			alternates []int
+		}{
+			{name: "root on the paid group", group: HwPaidGroup, userGroup: "default", role: common.RoleRootUser, alternates: []int{3103}},
+			{name: "admin on the paid group", group: HwPaidGroup, userGroup: "default", role: common.RoleAdminUser, alternates: []int{3103}},
+			{name: "default customer on the paid group", group: HwPaidGroup, userGroup: "default", role: common.RoleCommonUser, alternates: []int{}},
+			{name: "free customer on the paid group", group: HwPaidGroup, userGroup: "free", role: common.RoleCommonUser, alternates: []int{}},
+			{name: "root on the free group", group: "free", userGroup: "default", role: common.RoleRootUser, alternates: []int{}},
+		}
+		for _, testCase := range testCases {
+			c := hwClientErrorContext("")
+			common.SetContextKey(c, constant.ContextKeyUserGroup, testCase.userGroup)
+			c.Set("role", testCase.role)
+			state := hwStartRoute(c, testCase.group, modelName, nil)
+			require.NotNil(t, state, testCase.name)
+			assert.Equal(t, testCase.alternates, hwRouteIDs(state.alternates), testCase.name)
+		}
+	})
+
 	t.Run("the emergency supplier never serves a free group", func(t *testing.T) {
 		c := hwClientErrorContext("")
 		common.SetContextKey(c, constant.ContextKeyUserGroup, "free")
@@ -724,6 +751,9 @@ func TestHwRouteTriesFreeThenLumiaThenOpenRouterLast(t *testing.T) {
 	previousPause := common.HwLumiaRetryPauseMs
 	common.HwLumiaRetryPauseMs = 0
 	t.Cleanup(func() { common.HwLumiaRetryPauseMs = previousPause })
+	// The full order, retry included, holds with the cooldown off; the
+	// cooldown order is TestHwLumiaCooldownSkipsLumiaOnlyWhileAnotherCandidateRemains.
+	hwResetLumiaCooldown(t, 0)
 
 	approved := map[string]any{"approved": true, "data_class": "K", "region": "eu"}
 	free := hwFreeChannel(21, approved)
@@ -774,4 +804,109 @@ func TestHwRouteRefusesOpenRouterBeforeOtherAlternates(t *testing.T) {
 	assert.False(t, state.claim(openRouter))
 	assert.True(t, state.claim(portix))
 	assert.True(t, state.claim(openRouter), "OpenRouter is fine once the others are tried")
+}
+
+// hwResetLumiaCooldown starts a test with no channel in its cooldown and the
+// given cooldown length, and leaves no cooling channel behind.
+func hwResetLumiaCooldown(t *testing.T, cooldownMs int) {
+	t.Helper()
+	previous := common.HwLumiaCooldownMs
+	common.HwLumiaCooldownMs = cooldownMs
+	empty := func() {
+		hwLumiaCooldown.Lock()
+		clear(hwLumiaCooldown.until)
+		hwLumiaCooldown.Unlock()
+	}
+	empty()
+	t.Cleanup(func() {
+		empty()
+		common.HwLumiaCooldownMs = previous
+	})
+}
+
+// hwRouteOrder runs a route to its end with every attempt failing on apiErr
+// and returns the channel ids in the order they were tried.
+func hwRouteOrder(t *testing.T, c *gin.Context, state *HwRouteState, apiErr *types.NewAPIError) []int {
+	t.Helper()
+	var order []int
+	for channel := state.next(); channel != nil; channel = state.next() {
+		order = append(order, channel.Id)
+		decision, handled := HwDecideRetry(c, apiErr)
+		require.True(t, handled)
+		if decision.Action != "retry" {
+			break
+		}
+	}
+	return order
+}
+
+// A Lumia-wide rate limit must not cost every paying request two slow Lumia
+// failures and a paused retry before Portix answers (30 Oct 2026: about 50 s
+// per request). A failed Lumia channel cools down process-wide: while it
+// cools a paid route goes straight to the alternative supplier, but a route
+// without another candidate still tries it, so the free group keeps its route
+// and a recovered Lumia is noticed.
+func TestHwLumiaCooldownSkipsLumiaOnlyWhileAnotherCandidateRemains(t *testing.T) {
+	previousPause := common.HwLumiaRetryPauseMs
+	common.HwLumiaRetryPauseMs = 0
+	t.Cleanup(func() { common.HwLumiaRetryPauseMs = previousPause })
+	hwResetLumiaCooldown(t, 60000)
+
+	lumia := hwPolicyChannel(41, HwProviderLumia, "")
+	spare := hwPolicyChannel(42, HwProviderLumia, "")
+	portix := hwPolicyChannel(43, HwProviderPortix, "")
+	rateLimited := hwPolicyError(http.StatusTooManyRequests, types.ErrorCodeBadResponseStatusCode)
+	paidRoute := func() *HwRouteState {
+		return hwPolicyRoute([]*model.Channel{lumia, spare}, []*model.Channel{portix})
+	}
+	freeRoute := func() *HwRouteState {
+		state := paidRoute()
+		state.group, state.userGroup = "free", "free"
+		return state
+	}
+
+	t.Run("the first paid request skips the paused retry while Portix remains", func(t *testing.T) {
+		c := hwClientErrorContext("")
+		state := paidRoute()
+		c.Set(hwRouteContextKey, state)
+		assert.Equal(t, []int{41, 42, 43}, hwRouteOrder(t, c, state, rateLimited))
+		assert.True(t, hwLumiaCooling(lumia.Id))
+		assert.True(t, hwLumiaCooling(spare.Id))
+	})
+
+	t.Run("a later paid request goes straight to Portix", func(t *testing.T) {
+		c := hwClientErrorContext("")
+		state := paidRoute()
+		c.Set(hwRouteContextKey, state)
+		assert.False(t, state.claim(lumia), "the stock pick of a cooling Lumia channel is refused")
+		assert.Equal(t, []int{43, 41, 42, 42}, hwRouteOrder(t, c, state, rateLimited), "Portix first; the cooling Lumia aliases only when nothing else is left")
+	})
+
+	t.Run("a free request still tries every cooling Lumia channel", func(t *testing.T) {
+		assert.True(t, freeRoute().claim(lumia), "without another candidate the cooling channel is the probe")
+		c := hwClientErrorContext("")
+		state := freeRoute()
+		c.Set(hwRouteContextKey, state)
+		assert.Equal(t, []int{41, 42, 42}, hwRouteOrder(t, c, state, rateLimited), "both aliases and the paused retry, as without the cooldown")
+		assert.True(t, state.finished)
+	})
+
+	t.Run("a success ends the cooldown of the channel that answered", func(t *testing.T) {
+		c := hwClientErrorContext("")
+		state := freeRoute()
+		c.Set(hwRouteContextKey, state)
+		require.Same(t, lumia, state.next())
+		HwNoteSupplierSuccess(c)
+		assert.False(t, hwLumiaCooling(lumia.Id))
+		assert.True(t, hwLumiaCooling(spare.Id), "the other alias keeps cooling")
+		assert.True(t, paidRoute().claim(lumia), "a paid request uses the recovered channel again")
+	})
+
+	t.Run("an expired cooldown lets Lumia lead again", func(t *testing.T) {
+		hwLumiaCooldown.Lock()
+		hwLumiaCooldown.until[spare.Id] = time.Now().Add(-time.Second)
+		hwLumiaCooldown.Unlock()
+		assert.False(t, hwLumiaCooling(spare.Id))
+		assert.True(t, hwPolicyRoute([]*model.Channel{spare}, []*model.Channel{portix}).claim(spare))
+	})
 }
