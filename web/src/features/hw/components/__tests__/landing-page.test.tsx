@@ -240,6 +240,26 @@ test('teases the vibe coding guide with a button to its page', async () => {
   ).toHaveAttribute('href', '/vibe-kodlama')
 })
 
+// Sign-up asks for a username and a password only. The e-mail address is added
+// and confirmed afterwards, on the Security page, with a code.
+test.each([
+  ['tr', /kullanıcı adı ve parola/, /Güvenlik sayfasında.*kodu/],
+  ['en', /username and a password/, /Security page.*code/],
+] as const)(
+  'describes the real sign-up steps on the landing page (%s)',
+  async (language, signUp, emailCode) => {
+    await useLanguage(language)
+    renderLanding()
+
+    await screen.findByRole('heading', { level: 1 })
+    const page = document.body.textContent ?? ''
+    expect(page).toMatch(signUp)
+    expect(page).toMatch(emailCode)
+    expect(page).not.toMatch(/bağlantıya dokunun|E-posta adresinizle/)
+    expect(page).not.toMatch(/tap the link|with your email address/i)
+  }
+)
+
 test('explains below the four steps why the phone is verified', async () => {
   renderLanding()
 

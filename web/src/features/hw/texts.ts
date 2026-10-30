@@ -85,9 +85,10 @@ const tr = {
 
   stepsTitle: 'Dört adımda başlayın',
   step1Title: 'Kayıt olun',
-  step1Body: 'E-posta adresinizle hesap açın.',
-  step2Title: 'E-postanızı doğrulayın',
-  step2Body: 'Gelen kutunuza gelen bağlantıya dokunun.',
+  step1Body: 'Bir kullanıcı adı ve parola seçerek hesap açın.',
+  step2Title: 'E-postanızı ekleyip onaylayın',
+  step2Body:
+    'Giriş yaptıktan sonra Güvenlik sayfasında e-posta adresinizi girin ve size gelen kodu yazın. Başlangıç bonusu için gerekir.',
   step3Title: 'Telefonunuzu doğrulayın',
   step3Body: 'Telegram üzerinden tek seferlik doğrulama.',
   stepsPhoneWhyTitle: 'Neden telefon doğrulaması?',
@@ -490,9 +491,10 @@ const en: Record<HwTextKey, string> = {
 
   stepsTitle: 'Start in four steps',
   step1Title: 'Sign up',
-  step1Body: 'Create an account with your email address.',
-  step2Title: 'Verify your email',
-  step2Body: 'Open the link we send to your inbox.',
+  step1Body: 'Create an account with a username and a password.',
+  step2Title: 'Add and confirm your email',
+  step2Body:
+    'After you sign in, enter your email address on the Security page and type the code we send you. The start bonus needs it.',
   step3Title: 'Verify your phone',
   step3Body: 'A one-time check through Telegram.',
   stepsPhoneWhyTitle: 'Why phone verification?',

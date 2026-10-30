@@ -44,7 +44,7 @@ const tr = {
 
   step1Title: 'Hesap açın',
   step1Body:
-    'Sağ üstteki “Deneme hesabı aç” düğmesine basın. Bir kullanıcı adı ve en az 8 karakterlik bir parola seçin, sözleşmeyi onaylayın ve “Hesap oluştur” düğmesine basın.',
+    'Sağ üstteki “Giriş yap” düğmesine basın ve açılan sayfada “Kayıt ol” bağlantısını seçin (ana sayfadaki “Ücretsiz hesap aç” düğmesi sizi doğrudan oraya götürür). Bir kullanıcı adı ve en az 8 karakterlik bir parola seçin, parolayı bir kez daha yazın, sözleşmeyi onaylayın ve “Hesap oluştur” düğmesine basın. Sonra aynı bilgilerle giriş yapın.',
   step1Alt: 'Hesap oluşturma formu: kullanıcı adı, parola ve onay kutusu',
 
   step2Title: '{bonus} başlangıç bonusunu alın',
@@ -95,7 +95,7 @@ const en: typeof tr = {
 
   step1Title: 'Create an account',
   step1Body:
-    'Press “Open a trial account” at the top right. Choose a username and a password of at least 8 characters, accept the agreement and press “Create account”.',
+    'Press “Sign in” at the top right and choose the “Sign up” link on the page that opens (the “Create a free account” button on the home page takes you straight there). Choose a username and a password of at least 8 characters, type the password once more, accept the agreement and press “Create account”. Then sign in with the same details.',
   step1Alt: 'Sign-up form with username, password and the agreement checkbox',
 
   step2Title: 'Claim your {bonus} start bonus',
