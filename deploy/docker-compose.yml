@@ -41,7 +41,11 @@ services:
       SESSION_COOKIE_TRUSTED_URL: ${SESSION_COOKIE_TRUSTED_URL:?SESSION_COOKIE_TRUSTED_URL is required}
       DEFAULT_LANGUAGE: ${DEFAULT_LANGUAGE:-tr}
       ERROR_LOG_ENABLED: "true"
-      BATCH_UPDATE_ENABLED: "true"
+      # Fixed off, never interpolated: with batch updates on, consumption waits
+      # in memory while the credit package expiry run reads users.quota, so the
+      # same consumption is deducted twice. Traffic is low enough for direct
+      # quota writes.
+      BATCH_UPDATE_ENABLED: "false"
       NODE_NAME: ${NODE_NAME:-hisarweb-ai-1}
       # Card payments (Revolut Merchant). Empty means the payment route refuses
       # to start a payment instead of failing at the provider.

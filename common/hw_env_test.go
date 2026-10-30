@@ -152,6 +152,20 @@ func TestHwDeployComposePinsProductionAppEnv(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(text, "APP_ENV:"), "only the app service sets APP_ENV")
 }
 
+// TestHwDeployComposeKeepsBatchUpdateOff requires the production compose to pin
+// batch updates off. With them on, consumption waits in memory while the credit
+// package expiry run reads users.quota, so that consumption is deducted twice:
+// once by the expiry and once when the buffer flushes. A fixed value cannot be
+// switched on from the deployment platform.
+func TestHwDeployComposeKeepsBatchUpdateOff(t *testing.T) {
+	compose, err := os.ReadFile(filepath.Join("..", "deploy", "docker-compose.yml"))
+	require.NoError(t, err)
+	text := string(compose)
+
+	assert.Contains(t, text, "\n      BATCH_UPDATE_ENABLED: \"false\"\n", "the app service pins batch updates off")
+	assert.Equal(t, 1, strings.Count(text, "BATCH_UPDATE_ENABLED:"), "no other line sets or interpolates the flag")
+}
+
 // TestHwDeployComposePassesQualityEnv requires the production compose to pass
 // the four quality-meter variables to the app container. The meter refuses to
 // start without them; a compose that drops them turns a configured deployment
