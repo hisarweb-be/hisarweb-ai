@@ -220,6 +220,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 		if newAPIError == nil {
 			service.MarkRequestPolicySuccess(c, relayInfo.StreamStatus)
+			service.HwNoteSupplierSuccess(c)
 			relayInfo.LastError = nil
 			return
 		}

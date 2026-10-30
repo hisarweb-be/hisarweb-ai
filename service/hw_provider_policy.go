@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -309,6 +310,11 @@ func hwStartRoute(c *gin.Context, group, modelName string, filters []dto.Channel
 	if group == "" {
 		group = userGroup
 	}
+	if group == HwPaidGroup && c.GetInt("role") >= common.RoleAdminUser {
+		// The operator keeps the default account group (HwPromoteToPaidGroup
+		// leaves admins alone) but must be able to test the paid route.
+		userGroup = HwPaidGroup
+	}
 
 	candidates := model.HwChannelsForGroupModel(group, modelName)
 	if len(candidates) == 0 {
@@ -403,6 +409,10 @@ func (s *HwRouteState) claim(channel *model.Channel) bool {
 	if tier > 1 && s.peekLumia() != nil {
 		return false
 	}
+	// A cooling Lumia pick waits for the candidate the route prefers over it.
+	if provider == HwProviderLumia && hwLumiaCooling(channel.Id) && s.peekLumia() != channel {
+		return false
+	}
 	// OpenRouter stays last even when the stock selection lands on it first.
 	if provider == HwProviderOpenRouter {
 		if next := s.peekAlternate(); next != nil && HwChannelProvider(next) != HwProviderOpenRouter {
@@ -453,10 +463,14 @@ func (s *HwRouteState) hasNext() bool {
 // outageRetryPending reports whether the single extra Lumia attempt after an
 // outage still remains. next is the only consumer that can deliver it, so
 // hasNext asks the same question: a route whose last attempt failed on another
-// supplier has no retry left and must end with that attempt's own error.
+// supplier has no retry left and must end with that attempt's own error. A
+// cooling channel earns no paused retry while an alternative supplier can
+// still answer.
 func (s *HwRouteState) outageRetryPending() bool {
-	return s.outage && !s.lumiaRetried && s.lastChannel != nil &&
-		HwChannelProvider(s.lastChannel) == HwProviderLumia
+	if !s.outage || s.lumiaRetried || s.lastChannel == nil || HwChannelProvider(s.lastChannel) != HwProviderLumia {
+		return false
+	}
+	return !hwLumiaCooling(s.lastChannel.Id) || s.peekAlternate() == nil
 }
 
 func (s *HwRouteState) peekFree() *model.Channel {
@@ -468,13 +482,27 @@ func (s *HwRouteState) peekFree() *model.Channel {
 	return nil
 }
 
+// peekLumia returns the next untried Lumia channel. A cooling channel is passed
+// over while the request still has a healthy Lumia alias or an alternative
+// supplier; when it is the last candidate left it is tried anyway, so a group
+// without alternatives keeps its route and a recovered Lumia is noticed.
 func (s *HwRouteState) peekLumia() *model.Channel {
+	var cooling *model.Channel
 	for _, channel := range s.lumia {
-		if !s.tried[channel.Id] && HwChannelAllowedForGroup(channel, s.group, s.userGroup) {
+		if s.tried[channel.Id] || !HwChannelAllowedForGroup(channel, s.group, s.userGroup) {
+			continue
+		}
+		if !hwLumiaCooling(channel.Id) {
 			return channel
 		}
+		if cooling == nil {
+			cooling = channel
+		}
 	}
-	return nil
+	if cooling != nil && s.peekAlternate() != nil {
+		return nil
+	}
+	return cooling
 }
 
 func (s *HwRouteState) peekAlternate() *model.Channel {
@@ -493,6 +521,8 @@ func (s *HwRouteState) peekAlternate() *model.Channel {
 // Lumia alias once, then exactly one extra Lumia attempt after a Lumia outage
 // (after the fixed pause), then the alternative suppliers for the paying group,
 // Portix and Kie cheapest first and OpenRouter last, then nothing at all.
+// Lumia aliases in their cooldown and the extra attempt on them are skipped
+// while an alternative supplier remains; they are tried last otherwise.
 // Another family is never part of the route.
 func (s *HwRouteState) next() *model.Channel {
 	if s == nil || s.finished {
@@ -520,6 +550,55 @@ func (s *HwRouteState) next() *model.Channel {
 		return channel
 	}
 	return nil
+}
+
+// hwLumiaCooldown is the process-wide circuit breaker of the Lumia channels:
+// channel id to the moment its cooldown ends. A supplier-wide rate limit can
+// last for hours; without it every paying request first waits for two or three
+// slow Lumia failures before an alternative supplier answers.
+var hwLumiaCooldown = struct {
+	sync.Mutex
+	until map[int]time.Time
+}{until: make(map[int]time.Time)}
+
+// hwStartLumiaCooldown passes channelID over for the configured cooldown.
+func hwStartLumiaCooldown(channelID int) {
+	if common.HwLumiaCooldownMs <= 0 {
+		return
+	}
+	hwLumiaCooldown.Lock()
+	defer hwLumiaCooldown.Unlock()
+	hwLumiaCooldown.until[channelID] = time.Now().Add(time.Duration(common.HwLumiaCooldownMs) * time.Millisecond)
+}
+
+// hwLumiaCooling reports whether channelID is still in its cooldown.
+func hwLumiaCooling(channelID int) bool {
+	if common.HwLumiaCooldownMs <= 0 {
+		return false
+	}
+	hwLumiaCooldown.Lock()
+	defer hwLumiaCooldown.Unlock()
+	until, ok := hwLumiaCooldown.until[channelID]
+	if !ok {
+		return false
+	}
+	if time.Now().Before(until) {
+		return true
+	}
+	delete(hwLumiaCooldown.until, channelID)
+	return false
+}
+
+// HwNoteSupplierSuccess ends the cooldown of the Lumia channel that just
+// answered, so a recovered supplier carries the traffic again at once.
+func HwNoteSupplierSuccess(c *gin.Context) {
+	state := HwRoute(c)
+	if state == nil || state.lastChannel == nil || HwChannelProvider(state.lastChannel) != HwProviderLumia {
+		return
+	}
+	hwLumiaCooldown.Lock()
+	defer hwLumiaCooldown.Unlock()
+	delete(hwLumiaCooldown.until, state.lastChannel.Id)
 }
 
 // hwPauseBeforeLumiaRetry waits the configured pause, but never longer than the
@@ -611,6 +690,7 @@ func HwDecideRetry(c *gin.Context, apiErr *types.NewAPIError) (PolicyDecision, b
 	// running out of quota simply moves on to the next supplier.
 	if hwIsOutageError(apiErr) && HwChannelProvider(state.lastChannel) == HwProviderLumia {
 		state.outage = true
+		hwStartLumiaCooldown(state.lastChannel.Id)
 	}
 	if state.streamWrites > 0 {
 		// The customer already received data; switching supplier now would

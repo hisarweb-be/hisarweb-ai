@@ -370,6 +370,7 @@ func hwNewEnv(t *testing.T, group string, quota int) *hwEnv {
 	previousMaster := common.IsMasterNode
 	previousSQLitePath := common.SQLitePath
 	previousRetryDelay := common.HwLumiaRetryPauseMs
+	previousCooldown := common.HwLumiaCooldownMs
 	previousRelayTimeout := common.RelayTimeout
 	previousStreamingTimeout := constant.StreamingTimeout
 	previousModelRatios := ratio_setting.GetModelRatioCopy()
@@ -383,6 +384,9 @@ func hwNewEnv(t *testing.T, group string, quota int) *hwEnv {
 	// while loading options, a test binary does not.
 	constant.StreamingTimeout = 30
 	common.HwLumiaRetryPauseMs = 5
+	// The Lumia cooldown is process-wide and these route tests reuse channel
+	// ids across environments, so it stays off here; service/ covers it.
+	common.HwLumiaCooldownMs = 0
 	common.RelayTimeout = 1
 	// The shared HTTP client snapshots the relay timeout, so it must be built
 	// after the override to make the timeout path real.
@@ -407,6 +411,7 @@ func hwNewEnv(t *testing.T, group string, quota int) *hwEnv {
 		common.IsMasterNode = previousMaster
 		common.SQLitePath = previousSQLitePath
 		common.HwLumiaRetryPauseMs = previousRetryDelay
+		common.HwLumiaCooldownMs = previousCooldown
 		common.RelayTimeout = previousRelayTimeout
 		constant.StreamingTimeout = previousStreamingTimeout
 		hwRestoreRatios(t, previousModelRatios, previousCompletionRatios)
