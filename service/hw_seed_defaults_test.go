@@ -226,6 +226,16 @@ func TestHwSeedDefaultOptions(t *testing.T) {
 			assert.NotContains(t, strings.ToLower(text), "openrouter")
 		}
 		assert.Contains(t, legal.PrivacyPolicy, "KVKK madde 11")
+		// The texts say what the shop really does: the payment providers and the
+		// Telegram bot are named as processors, credit lasts 30 days (14 for the
+		// trial) and the agreement no longer promises that unused credit never
+		// expires.
+		for _, processor := range []string{"Stripe", "Revolut", "Telegram"} {
+			assert.Contains(t, legal.PrivacyPolicy, processor)
+		}
+		assert.Contains(t, legal.UserAgreement, "30 gün")
+		assert.Contains(t, legal.UserAgreement, "14 gün")
+		assert.NotContains(t, legal.UserAgreement, "kullanılmayan kredi sonraki isteklerde")
 	})
 
 	t.Run("public identity entries the operator set are kept", func(t *testing.T) {

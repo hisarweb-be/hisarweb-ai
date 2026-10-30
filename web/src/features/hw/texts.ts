@@ -58,6 +58,8 @@ const tr = {
     'Claude ve Gemini ailelerinden seçilmiş modeller tek katalogda; her modelin güncel fiyatı karşılaştırma sayfasında yazar.',
 
   filmTitle: 'HisarWeb AI’yı 54 saniyede izleyin',
+  filmBodyForeign:
+    'Claude ve Gemini resmî API liste fiyatının yarısına, {currencyLong} ile: beş saatlik veya haftalık limit yok, yalnızca kullandığınız kadar ödersiniz. Film Türkçe seslendirmeli ve Türkçe ekran metinlidir; görseller yapay zekâ ile üretilmiştir.',
   filmBody:
     'Claude ve Gemini resmî API liste fiyatının yarısına, Türk lirasıyla ve KDV dahil: beş saatlik veya haftalık limit yok, yalnızca kullandığınız kadar ödersiniz. Film Türkçe seslendirmeli ve Türkçe ekran metinlidir; görseller yapay zekâ ile üretilmiştir.',
   filmLabel: 'HisarWeb AI tanıtım filmi',
@@ -67,7 +69,7 @@ const tr = {
   benefitPaymentBodyForeign:
     'Kredi kartı ile {currencyLong} üzerinden ödeme yapın.',
   benefitPaymentBody:
-    'Kredi kartı veya Revolut ile Türk lirası üzerinden ödeme yapın. Gösterilen tüm fiyatlara KDV dahildir.',
+    'Kredi kartı ile Türk lirası üzerinden ödeme yapın. Gösterilen tüm fiyatlara KDV dahildir.',
   benefitDiscountTitle: 'Her zaman resmî fiyatın yarısı',
   benefitDiscountBody:
     'Tüm modellerde token fiyatı resmî liste fiyatının %50 altındadır, her istekte ve anında. İlk alışverişinizde {firstCap} değerine kadar ayrıca %50 hoş geldin indirimi alırsınız. Aylık abonelik ücreti yok.',
@@ -77,7 +79,7 @@ const tr = {
 
   trialTitle: 'Önce ücretsiz deneyin',
   trialBody:
-    'Hesap açtığınızda {bonus} deneme bakiyesi tanımlanır ve 14 gün geçerlidir. Kredi kartı gerekmez.',
+    'Hesabınızı açıp telefonunuzu Telegram ile doğruladığınızda {bonus} deneme bakiyesi tanımlanır ve 14 gün geçerlidir. Kredi kartı gerekmez.',
   trialCta: 'Deneme hesabı aç',
   trialFigure: '{bonus}',
 
@@ -108,7 +110,7 @@ const tr = {
   faq2AForeign:
     'Kredi kartı ile {currencyLong} olarak ödeyebilirsiniz. Ödeme sayfası sipariş sırasında açılır.',
   faq2A:
-    'Kredi kartı veya Revolut ile TL olarak ödeyebilirsiniz. Ödeme sayfası sipariş sırasında açılır.',
+    'Kredi kartı ile TL olarak ödeyebilirsiniz. Ödeme sayfası sipariş sırasında açılır.',
   faq3Q: 'Bakiyem ne kadar süre geçerli?',
   faq3A:
     'Satın aldığınız bakiye {validityDays} gün, ücretsiz deneme bakiyesi 14 gün geçerlidir. Süresi dolan bakiye kullanılamaz.',
@@ -405,7 +407,7 @@ const tr = {
   aboutDefaultIntro:
     'HisarWeb AI, yapay zekâ uygulamanız için tek bir API anahtarı sunar. Bakiyeyi Türk lirası ile yüklersiniz ve yalnızca kullandığınız kadar ödersiniz; gösterilen tüm fiyatlara KDV dahildir.',
   aboutDefaultPayment:
-    'Ödemeyi kartla veya Revolut ile yapabilirsiniz. Faturalarınızı ve bakiye hareketlerinizi panodan görürsünüz.',
+    'Ödemeyi kredi kartı ile yapabilirsiniz. Faturalarınızı ve bakiye hareketlerinizi panodan görürsünüz.',
   aboutDefaultStatus:
     'Hizmet durumunu 7/24 durum sayfasından izleyebilirsiniz.',
   aboutDefaultStatusLink: 'Durum sayfasına git',
@@ -463,6 +465,8 @@ const en: Record<HwTextKey, string> = {
     'Selected models from the Claude and Gemini families in one catalog; every current price is on the comparison page.',
 
   filmTitle: 'Watch HisarWeb AI in 54 seconds',
+  filmBodyForeign:
+    'Claude and Gemini at half the official API list price, in {currencyLong}: no five-hour or weekly limits, you pay only for what you use. The film has an English voice-over and English on-screen text; the images are AI-generated.',
   filmBody:
     'Claude and Gemini at half the official API list price, in Turkish lira and VAT (KDV) included: no five-hour or weekly limits, you pay only for what you use. The film has an English voice-over and English on-screen text; the images are AI-generated.',
   filmLabel: 'HisarWeb AI launch film',
@@ -471,7 +475,7 @@ const en: Record<HwTextKey, string> = {
   benefitPaymentTitle: 'Pay in {currencyName}',
   benefitPaymentBodyForeign: 'Pay in {currencyLong} with a card.',
   benefitPaymentBody:
-    'Pay in Turkish lira with a card or Revolut. Every price shown includes VAT.',
+    'Pay in Turkish lira with a credit card. Every price shown includes VAT.',
   benefitDiscountTitle: 'Always half the official price',
   benefitDiscountBody:
     'Every model costs 50% less per token than the official list price, on every request and in real time. Your first purchase also gets a 50% welcome discount on up to {firstCap} of value. No monthly subscription.',
@@ -481,7 +485,7 @@ const en: Record<HwTextKey, string> = {
 
   trialTitle: 'Try it for free first',
   trialBody:
-    'A new account receives {bonus} of trial credit, valid for 14 days. No card needed.',
+    'Once you have opened an account and verified your phone through Telegram, it receives {bonus} of trial credit, valid for 14 days. No card needed.',
   trialCta: 'Create a trial account',
   trialFigure: '{bonus}',
 
@@ -512,7 +516,7 @@ const en: Record<HwTextKey, string> = {
   faq2AForeign:
     'With a card, in {currencyLong}. The payment page opens while you order.',
   faq2A:
-    'With a card or Revolut, in Turkish lira. The payment page opens while you order.',
+    'With a credit card, in Turkish lira. The payment page opens while you order.',
   faq3Q: 'How long is my balance valid?',
   faq3A:
     'Balance you buy is valid for {validityDays} days; trial credit for 14 days. Expired balance cannot be used.',
@@ -806,7 +810,7 @@ const en: Record<HwTextKey, string> = {
   aboutDefaultIntro:
     'HisarWeb AI gives your AI application one API key. You top up the balance in Turkish lira and pay only for what you use; every price shown includes VAT.',
   aboutDefaultPayment:
-    'You can pay by card or with Revolut. Your invoices and balance movements are in the console.',
+    'You can pay by credit card. Your invoices and balance movements are in the console.',
   aboutDefaultStatus:
     'You can follow the service status around the clock on the status page.',
   aboutDefaultStatusLink: 'Go to the status page',

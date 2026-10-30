@@ -141,7 +141,8 @@ Veri sorumlusu: HisarWeb AI (hisarweb.be). İletişim: hisarweb.be@gmail.com.
 İşlenen veriler
 - Hesap verileri: e-posta adresi, şifrenin geri döndürülemez özeti ve telefon numarasının geri döndürülemez özeti (yalnızca doğrulama amacıyla).
 - Kullanım verileri: istek sayısı, seçilen model, kullanılan token sayısı, tutar ve zaman.
-- Ödeme verileri: ödeme sağlayıcısı Revolut üzerinden yürütülen işlem bilgileri; kart bilgileri tarafımızda saklanmaz.
+- Ödeme verileri: ödeme kredi kartı ile, ödeme sağlayıcıları Stripe ve Revolut üzerinden yapılır; işlem bilgileri bu sağlayıcılarda işlenir, kart bilgileri tarafımızda saklanmaz.
+- Telegram verileri: telefon doğrulaması ve sorularınızın yanıtlanması için Telegram botumuz (@HisarWebAI_bot) kullanılır. Bota Telegram kullanıcı kimliğiniz, sohbet kimliğiniz, dil ayarınız, kendi isteğinizle paylaştığınız telefon numaranız ve yazdığınız mesajlar ulaşır. Telegram kullanıcı kimliğiniz hesabınıza kaydedilir; telefon numaranızın kendisi saklanmaz, yalnızca geri döndürülemez özeti tutulur. Bota serbest yazdığınız metin yanıtlanmak üzere yapay zekâ modeline iletilir. Bağlantı kodları 15 dakika geçerli ve tek kullanımlıktır. Yazışma ayrıca Telegram tarafından işlenir.
 - Güvenlik verileri: oturum kayıtları, IP adresi ve cihaz bilgisi.
 
 İşleme amacı
@@ -151,13 +152,35 @@ Saklama süresi
 Hesap verileri hesap açık olduğu sürece, kullanım kayıtları en çok 12 ay, faturalama kayıtları yasal saklama süresi boyunca saklanır.
 
 Aktarım
-İsteklerin işlenmesi için veriler yurt dışında bulunabilecek yapay zekâ model sağlayıcılarına ve ödeme sağlayıcısına aktarılabilir. Veriler reklam amacıyla satılmaz veya kiraya verilmez.
+İsteklerin işlenmesi için veriler yurt dışında bulunabilecek yapay zekâ model sağlayıcılarına, ödeme sağlayıcılarına (Stripe, Revolut) ve Telegram'a aktarılabilir. Veriler reklam amacıyla satılmaz veya kiraya verilmez.
 
 KVKK madde 11 kapsamındaki haklarınız
 Kişisel verilerinizin işlenip işlenmediğini öğrenme, işlenmişse buna ilişkin bilgi talep etme, işlenme amacını ve amacına uygun kullanılıp kullanılmadığını öğrenme, eksik veya yanlış işlenmiş olması hâlinde düzeltilmesini isteme, silinmesini veya yok edilmesini isteme, aktarıldığı üçüncü kişileri öğrenme, münhasıran otomatik sistemlerle yapılan analiz sonucu aleyhinize bir sonucun ortaya çıkmasına itiraz etme ve zararın giderilmesini talep etme hakkına sahipsiniz. Başvurunuzu hisarweb.be@gmail.com adresine iletebilirsiniz; talebiniz en geç otuz gün içinde yanıtlanır.
 
 Çerezler
-Oturumun sürdürülmesi için yalnızca gerekli çerezler kullanılır.`
+Oturumun sürdürülmesi için yalnızca gerekli çerezler kullanılır.
+
+---
+
+English version of this privacy policy
+
+Controller: HisarWeb AI (hisarweb.be). Contact: hisarweb.be@gmail.com.
+
+Data we process
+- Account data: email address, an irreversible digest of your password and an irreversible digest of your phone number (for verification only).
+- Usage data: number of requests, chosen model, tokens used, amount and time.
+- Payment data: you pay by credit card through our payment providers Stripe and Revolut; the payment details are processed by those providers and we do not store card details.
+- Telegram data: our Telegram bot (@HisarWebAI_bot) is used for phone verification and to answer your questions. The bot receives your Telegram user id, chat id, language setting, the phone number you choose to share and the messages you type. Your Telegram user id is stored on your account; your phone number itself is not stored, only an irreversible digest of it. Free text you type to the bot is sent to the AI model to be answered. Link codes are valid for 15 minutes and can be used once. The conversation is also processed by Telegram.
+- Security data: session records, IP address and device information.
+
+Purpose, retention and transfer
+We process this data to open and manage your account, deliver the service, calculate your balance and invoice you, prevent fraud and abuse and meet legal duties. Account data is kept while the account is open, usage records for at most 12 months and invoicing records for the legal retention period. Data may be transferred to AI model providers, payment providers (Stripe, Revolut) and Telegram, which may be located abroad. Data is not sold or rented for advertising.
+
+Your rights
+You have the rights listed in article 11 of the Turkish KVKK. Send your request to hisarweb.be@gmail.com; it is answered within thirty days.
+
+Cookies
+Only the cookies needed to keep your session are used.`
 
 // hwDefaultUserAgreementTR is the user agreement the signup page shows: what is
 // sold, how credit is spent, what is forbidden and what is not promised. It is a
@@ -171,7 +194,7 @@ HisarWeb AI, yapay zekâ modellerine API üzerinden erişim sunar.
 Hesap sahibi, hesabı altında yapılan tüm kullanımdan sorumludur ve API anahtarını gizli tutar. Anahtarın paylaşılmasından doğan kullanım da hesap sahibine aittir.
 
 3. Ödeme ve kredi
-Hizmet ön ödemeli kredi ile çalışır. Fiyatlar TL olarak ve KDV dahil gösterilir. Kredi yalnızca gerçekleşen kullanım oranında düşülür; kullanılmayan kredi sonraki isteklerde kullanılmaya devam eder.
+Hizmet ön ödemeli kredi ile çalışır. Ödeme kredi kartı ile yapılır; ödeme sayfasını ödeme sağlayıcımız Stripe veya Revolut sunar. Bakiyeyi Türk lirası, euro veya ABD doları olarak yükleyebilirsiniz. Türk lirası fiyatlara KDV dahildir; euro ve ABD doları fiyatlarına KDV eklenmez. Kredi yalnızca gerçekleşen kullanım oranında düşülür. Satın aldığınız kredi, son ödemeli yüklemeden itibaren 30 gün geçerlidir. Ücretsiz deneme kredisi 14 gün geçerlidir ve yalnızca Telegram ile telefon doğrulamasından sonra tanımlanır. Süresi dolan kredi kullanılamaz ve bakiyeden düşülür; yeni bir yükleme süresi dolmuş krediyi geri getirmez.
 
 4. İade
 Kullanılmış kredi iade edilmez. Kullanılmamış bakiye için talep hisarweb.be@gmail.com adresine iletilebilir.
@@ -191,4 +214,14 @@ Bu koşullar değiştirilebilir. Değişiklik bu sayfada yayımlanır ve yayımd
 9. Uygulanacak hukuk
 Yürürlükteki zorunlu tüketici mevzuatından doğan haklar saklıdır.
 
-Sorular için: hisarweb.be@gmail.com.`
+Sorular için: hisarweb.be@gmail.com.
+
+---
+
+English version of sections 3 and 4 (payment, credit and refunds)
+
+3. Payment and credit
+The service runs on prepaid credit. You pay by credit card; the payment page is provided by our payment provider, Stripe or Revolut. You can top up in Turkish lira, euro or US dollars. Turkish lira prices include VAT (KDV); euro and US dollar prices do not include KDV. Credit is deducted only in proportion to actual use. Credit you buy is valid for 30 days after your last paid top-up. Free trial credit is valid for 14 days and is granted only after phone verification through Telegram. Expired credit can no longer be used and is removed from the balance; a new top-up does not bring expired credit back.
+
+4. Refunds
+Used credit is not refunded. A request for unused balance can be sent to hisarweb.be@gmail.com.`

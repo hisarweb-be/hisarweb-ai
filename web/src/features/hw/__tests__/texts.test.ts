@@ -41,6 +41,34 @@ describe('HisarWeb page texts', () => {
     expect(all).not.toContain('orijinal')
   })
 
+  it('offers card payment only: Revolut is named as processor, never as a choice', () => {
+    for (const language of ['tr', 'en'] as const) {
+      const dictionary = hwTexts[language] as Record<string, string>
+      const naming = Object.keys(dictionary).filter((key) =>
+        /revolut/i.test(dictionary[key])
+      )
+      expect(naming).toEqual(['trustPayments'])
+    }
+  })
+
+  it('gives every lira or KDV wording a variant for the other currencies', () => {
+    const lira = {
+      tr: /Türk lira|TL olarak|KDV dahil/,
+      en: /Turkish lira|VAT/,
+    }
+    for (const language of ['tr', 'en'] as const) {
+      const dictionary = hwTexts[language] as Record<string, string>
+      const missing = Object.keys(dictionary).filter(
+        (key) =>
+          !key.endsWith('Foreign') &&
+          !key.endsWith('TRY') &&
+          lira[language].test(dictionary[key]) &&
+          !(`${key}Foreign` in dictionary)
+      )
+      expect(missing).toEqual([])
+    }
+  })
+
   it('fills a placeholder and leaves an unknown one alone', () => {
     expect(fillHwText('{ms} ms', { ms: 1200 })).toBe('1200 ms')
     expect(fillHwText('{ms} ms', {})).toBe('{ms} ms')
