@@ -272,11 +272,14 @@ func HwAdminAgentValidate(turns []HwAdminAgentTurn) ([]HwAdminAgentTurn, error) 
 func HwAdminAgentAsk(ctx context.Context, config HwAdminAgentConfig, turns []HwAdminAgentTurn) (HwAdminAgentAnswer, error) {
 	question := hwAssistantLastQuestion(turns)
 	instruction := hwAssistantInstructionWith(HwAssistantChannelAdmin, question, hwAdminAgentRules)
-	text, err := hwAssistantCall(ctx, config, instruction, "Owner message:", turns)
+	text, cut, err := hwAssistantCall(ctx, config, instruction, "Owner message:", turns)
 	if err != nil {
 		return HwAdminAgentAnswer{}, fmt.Errorf("admin agent call failed: %w", err)
 	}
 	answer := HwAdminAgentParse(text)
+	if cut {
+		answer.Reply = hwAssistantDropCutLine(answer.Reply)
+	}
 	answer.Reply = hwAssistantGuardChannel(answer.Reply, HwAssistantChannelAdmin, hwAssistantReplyLang(question, "nl"))
 	return answer, nil
 }
@@ -298,5 +301,47 @@ func HwAdminAgentParse(text string) HwAdminAgentAnswer {
 			return answer
 		}
 	}
+	if reply := hwAdminAgentCutReply(trimmed); reply != "" {
+		return HwAdminAgentAnswer{Reply: reply}
+	}
 	return HwAdminAgentAnswer{Reply: trimmed}
+}
+
+// hwAdminAgentCutReply reads the reply of a JSON answer that the token limit
+// broke off: it has no closing quote or brace, and without this the panel
+// showed the raw {"reply": ...} with a literal \n (30 Oct).
+func hwAdminAgentCutReply(text string) string {
+	key := strings.Index(text, `"reply"`)
+	if key < 0 {
+		return ""
+	}
+	rest := strings.TrimLeft(text[key+len(`"reply"`):], " \t\r\n")
+	if !strings.HasPrefix(rest, ":") {
+		return ""
+	}
+	rest = strings.TrimLeft(rest[1:], " \t\r\n")
+	if !strings.HasPrefix(rest, `"`) {
+		return ""
+	}
+	raw := rest[1:]
+	escaped := false
+	for index, char := range raw {
+		if escaped {
+			escaped = false
+		} else if char == '\\' {
+			escaped = true
+		} else if char == '"' {
+			raw = raw[:index]
+			break
+		}
+	}
+	// An escape the limit cut in half (a lone \ or \u00) is dropped byte by byte.
+	for try := 0; try < 6 && raw != ""; try++ {
+		var reply string
+		if common.UnmarshalJsonStr(`"`+raw+`"`, &reply) == nil {
+			return strings.TrimSpace(reply)
+		}
+		raw = raw[:len(raw)-1]
+	}
+	return ""
 }

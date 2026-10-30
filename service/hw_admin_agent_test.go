@@ -127,3 +127,37 @@ func TestHwBureauCardConfigFromEnvTrimsAndLeavesTheClientToTheDefault(t *testing
 	_, err := HwBureauCreateCard(context.Background(), HwBureauCardConfigFromEnv(), "t", "s", "")
 	assert.EqualError(t, err, "the bureau board is not connected")
 }
+
+// TestHwAdminAgentAskShowsACutAnswerAsCleanText repeats the owner's report of 30
+// Oct: the model ran into the token limit inside its JSON, and the panel showed
+// the raw {"reply": ...} with literal \n, broken off in the middle of a word.
+func TestHwAdminAgentAskShowsACutAnswerAsCleanText(t *testing.T) {
+	cut := `{"reply": "Yardımcı olurum.\n\n1. Claude Code'u kur.\n2. Ortam değişkenlerini ayarla: \"ANTHROPIC_BASE_URL\".\n3. Proje klasörüne gir.\n\n5. 400 \"Extra inputs are not permitted\" hatası alırs`
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := common.Marshal(map[string]any{
+			"choices": []map[string]any{{"message": map[string]string{"role": "assistant", "content": cut}}},
+			"usage":   map[string]int{"prompt_tokens": 100, "completion_tokens": hwAssistantMaxTokens},
+		})
+		require.NoError(t, err)
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(gateway.Close)
+	answer, err := HwAdminAgentAsk(context.Background(),
+		HwAdminAgentConfig{BaseURL: gateway.URL, APIKey: "k", Model: HwAdminAgentDefaultModel},
+		[]HwAdminAgentTurn{{Role: "user", Content: "Bana yardimci ola bilirmisin nasil vibe code yazman gerkeiyor"}})
+	require.NoError(t, err)
+	assert.Equal(t, "Yardımcı olurum.\n\n1. Claude Code'u kur.\n2. Ortam değişkenlerini ayarla: \"ANTHROPIC_BASE_URL\".\n3. Proje klasörüne gir.", answer.Reply)
+}
+
+func TestHwAssistantDropCutLine(t *testing.T) {
+	cases := []struct{ name, text, want string }{
+		{"partial last line goes", "Eerste regel.\n2. Tweede stap is hal", "Eerste regel."},
+		{"one sentence stays whole up to the last end", "Dit klopt. En dit is afgebro", "Dit klopt."},
+		{"nothing to cut back to", "afgebroken zonder einde", "afgebroken zonder einde"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, c.want, hwAssistantDropCutLine(c.text))
+		})
+	}
+}

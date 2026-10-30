@@ -29,7 +29,9 @@ const (
 	// HwAssistantChannelTelegram is the Telegram bot.
 	HwAssistantChannelTelegram = "telegram"
 
-	hwAssistantMaxTokens = 900
+	// hwAssistantMaxTokens leaves room for a full answer of the length the
+	// voice asks for, also in Turkish and inside the admin JSON.
+	hwAssistantMaxTokens = 1500
 	hwAssistantTimeout   = 40 * time.Second
 	// hwAssistantInstructionMaxRunes bounds the instruction before the closing
 	// language rule, so a long learned section can never crowd out the rule.
@@ -43,6 +45,7 @@ const hwAssistantLanguageRule = `Language rule: always answer in the language of
 
 const hwAssistantVoice = `How you write: like Altuner, the founder of HisarWeb AI. First person, warm and direct, short active sentences. When someone asks for steps, give numbered steps (1., 2., 3.). Plain text only: no em-dash, no emoji, no bold, no markdown headers, no tables. Commands and configuration lines may stand on their own lines, exactly as given below.
 Use only the facts and setup knowledge below, and answer with certainty from them. Never send the customer off to find something out, and never answer with "we have not tested it" or "I am not sure" when the setup knowledge gives a rule that holds. Only for account matters (a payment, a balance, an error on their account) offer that support looks into it. Never invent numbers, prices, features, links, menu names or commands.
+Keep the answer short enough for a chat window: at most about 150 words. For a setup give only the steps that are needed, at most five, and offer to explain one step further.
 End with one concrete question or next step.
 Never name the model or the supplier that writes your answers, and never say which AI you run on.
 Coding requests: you do not write or run code in this chat, but say so warmly and offer what helps: the customer can do their coding work with Claude Code or Codex on our models, and you gladly walk them through the setup. Never a stiff refusal.
@@ -207,14 +210,15 @@ var errHwAssistantInvalidTurns = errors.New("invalid conversation")
 
 // hwAssistantCall sends the conversation with the instruction in the first
 // user message (the primary supplier replaces a customer system message) and
-// returns the raw text of the answer.
-func hwAssistantCall(ctx context.Context, config HwAdminAgentConfig, instruction, label string, turns []HwAdminAgentTurn) (string, error) {
+// returns the raw text of the answer. cut says the answer ran into the token
+// limit, so its last line is broken off.
+func hwAssistantCall(ctx context.Context, config HwAdminAgentConfig, instruction, label string, turns []HwAdminAgentTurn) (text string, cut bool, err error) {
 	if config.BaseURL == "" || config.APIKey == "" {
-		return "", errHwAssistantNotConfigured
+		return "", false, errHwAssistantNotConfigured
 	}
-	turns, err := HwAdminAgentValidate(turns)
+	turns, err = HwAdminAgentValidate(turns)
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", errHwAssistantInvalidTurns, err)
+		return "", false, fmt.Errorf("%w: %w", errHwAssistantInvalidTurns, err)
 	}
 	// The last turn is the user's, so this never empties the conversation.
 	for turns[0].Role != "user" {
@@ -233,18 +237,36 @@ func hwAssistantCall(ctx context.Context, config HwAdminAgentConfig, instruction
 		messages = append(messages, hwAssistantMessage(turn.Role, content, turn.Attachments))
 	}
 	request := hwChatRequest{Model: config.Model, Messages: messages, MaxTokens: hwAssistantMaxTokens}
-	text, _, err := hwCallChat(ctx, client, config.BaseURL, config.APIKey, request)
+	text, usage, err := hwCallChat(ctx, client, config.BaseURL, config.APIKey, request)
 	var statusErr *hwChatStatusError
 	if errors.As(err, &statusErr) && (statusErr.StatusCode == http.StatusUnauthorized || statusErr.StatusCode == http.StatusForbidden) && HwAssistantRepairKey(config) {
-		text, _, err = hwCallChat(ctx, client, config.BaseURL, config.APIKey, request)
+		text, usage, err = hwCallChat(ctx, client, config.BaseURL, config.APIKey, request)
 	}
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	if strings.TrimSpace(text) == "" {
-		return "", errHwAssistantEmpty
+		return "", false, errHwAssistantEmpty
 	}
-	return text, nil
+	cut = usage.CompletionTokens >= hwAssistantMaxTokens
+	if cut {
+		common.SysLog(fmt.Sprintf("hw assistant answer hit the token limit of %d", hwAssistantMaxTokens))
+	}
+	return text, cut, nil
+}
+
+// hwAssistantDropCutLine removes the line the token limit broke off, or else
+// the broken sentence, so a customer never reads an answer that stops in the
+// middle of a word.
+func hwAssistantDropCutLine(text string) string {
+	text = strings.TrimSpace(text)
+	if end := strings.LastIndex(text, "\n"); end > 0 {
+		return strings.TrimSpace(text[:end])
+	}
+	if end := strings.LastIndexAny(text, ".!?"); end > 0 {
+		return text[:end+1]
+	}
+	return text
 }
 
 // hwAssistantLastQuestion is the latest user message of the conversation.
@@ -288,7 +310,10 @@ func HwAssistantChat(ctx context.Context, config HwAdminAgentConfig, channel, la
 	// guessed German on a Dutch page. It answers in the page language instead.
 	shortRule := "If the latest message is too short to tell its language (only a greeting such as Hallo, Hi or Merhaba), answer in " +
 		hwAssistantPick(hwAssistantReplyLang(question, lang), "Turkish", "English", "Dutch") + "."
-	text, err := hwAssistantCall(ctx, config, HwAssistantInstruction(channel, question)+"\n\n"+shortRule, label, turns)
+	text, cut, err := hwAssistantCall(ctx, config, HwAssistantInstruction(channel, question)+"\n\n"+shortRule, label, turns)
+	if cut {
+		text = hwAssistantDropCutLine(text)
+	}
 	if err != nil {
 		common.SysError(common.LogText("hw assistant %s answer fell back: %s", channel, HwAssistantFailureClass(err)))
 		return HwAssistantFallback(channel, lang, question), false
