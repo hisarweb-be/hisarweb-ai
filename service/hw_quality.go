@@ -558,6 +558,11 @@ const (
 	// requests says nothing.
 	HwQualityTrafficMinRequests = 20
 
+	// HwQualitySpeedMinSamples is the number of speed samples (served requests
+	// with at least model.HwSpeedMinOutputTokens of output) a window needs before
+	// it shows a tokens-per-second figure; with fewer it shows nothing.
+	HwQualitySpeedMinSamples = 10
+
 	hwQualityTrafficRefresh = 10 * time.Minute
 	hwQualityTrafficDay     = 24 * 3600
 )
@@ -580,8 +585,11 @@ type HwQualityTrafficModel struct {
 	// request in whole seconds, as the relay records it.
 	MedianSeconds *int `json:"median_seconds"`
 	P95Seconds    *int `json:"p95_seconds"`
-	// OutputTokensPerSecond is the output tokens of the served requests over
-	// their total response time, one decimal.
+	// OutputTokensPerSecond is the output tokens of the served requests with a
+	// real answer (at least model.HwSpeedMinOutputTokens) over their total
+	// response time, one decimal. Pings, answers without output and failed
+	// requests are left out, and it is null below HwQualitySpeedMinSamples
+	// samples. Both windows use the same formula.
 	OutputTokensPerSecond *float64 `json:"output_tokens_per_second"`
 }
 
@@ -669,12 +677,16 @@ func HwObservedModelQuality(name string, buckets []model.HwQualityLatencyBucket,
 	entry := HwQualityTrafficModel{Model: name, Failed: max(failed, 0)}
 	sorted := slices.Clone(buckets)
 	slices.SortFunc(sorted, func(a, b model.HwQualityLatencyBucket) int { return cmp.Compare(a.UseTime, b.UseTime) })
-	var served, outputTokens, busySeconds int64
+	// Only requests with a real answer measure the speed: the bucket query keeps
+	// out pings and answers without output, and a request under a second has no
+	// measurable time.
+	var served, speedSamples, speedTokens, speedSeconds int64
 	for _, bucket := range sorted {
 		served += bucket.Requests
 		if bucket.UseTime > 0 {
-			outputTokens += bucket.OutputTokens
-			busySeconds += int64(bucket.UseTime) * bucket.Requests
+			speedSamples += bucket.SpeedRequests
+			speedTokens += bucket.SpeedTokens
+			speedSeconds += int64(bucket.UseTime) * bucket.SpeedRequests
 		}
 	}
 	entry.Requests = served + entry.Failed
@@ -691,8 +703,8 @@ func HwObservedModelQuality(name string, buckets []model.HwQualityLatencyBucket,
 	p95 := hwLatencyAtRank(sorted, (served*95+99)/100)
 	entry.MedianSeconds = &median
 	entry.P95Seconds = &p95
-	if busySeconds > 0 {
-		speed := math.Round(float64(outputTokens)*10/float64(busySeconds)) / 10
+	if speedSamples >= HwQualitySpeedMinSamples && speedSeconds > 0 {
+		speed := math.Round(float64(speedTokens)*10/float64(speedSeconds)) / 10
 		entry.OutputTokensPerSecond = &speed
 	}
 	return entry

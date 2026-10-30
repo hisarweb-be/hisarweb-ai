@@ -22,8 +22,8 @@ func TestHwBuildStatusAnswerAggregatesTheWorstStateAndSplitsIncidents(t *testing
 	now := time.Unix(1_800_000_000, 0)
 	snapshot := model.HwStatusSnapshot{
 		Models: []model.HwStatusModelState{
-			{Model: "own-a", GoodMinutes: 9990, TotalMinutes: 10000},
-			{Model: "own-b", BadRecent: true, GoodMinutes: 1, TotalMinutes: 3},
+			{Model: "own-a", TotalMinutes: 10000, OutageSeconds: 2592},
+			{Model: "own-b", BadRecent: true, TotalMinutes: 3},
 			{Model: "own-c", InOpenIncident: true, BadRecent: true},
 		},
 		Incidents: []model.HwIncident{
@@ -40,9 +40,9 @@ func TestHwBuildStatusAnswerAggregatesTheWorstStateAndSplitsIncidents(t *testing
 	assert.Equal(t, HwStatusOutage, answer.Overall, "an outage outranks a degraded model")
 	require.Len(t, answer.Models, 3)
 	assert.Equal(t, HwStatusOperational, answer.Models[0].Status)
-	assert.Equal(t, 99.9, answer.Models[0].AvailabilityPercent)
+	assert.Equal(t, 99.9, answer.Models[0].AvailabilityPercent, "2592 s of outage in 30 days")
 	assert.Equal(t, HwStatusDegraded, answer.Models[1].Status)
-	assert.Equal(t, 33.33, answer.Models[1].AvailabilityPercent)
+	assert.Equal(t, 100.0, answer.Models[1].AvailabilityPercent, "a bad minute that opened no outage keeps the figure")
 	assert.Equal(t, HwStatusOutage, answer.Models[2].Status)
 	assert.Zero(t, answer.Models[2].AvailabilityPercent, "no samples is not claimed healthy")
 

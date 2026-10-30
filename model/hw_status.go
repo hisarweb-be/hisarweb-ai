@@ -45,9 +45,12 @@ const (
 	// extend: the rule is "more than 15 minutes".
 	HwStatusExtensionThresholdSeconds = 15 * 60
 
+	// hwStatusAvailabilityWindowSeconds is the availability window in seconds.
+	hwStatusAvailabilityWindowSeconds = HwStatusAvailabilityDays * 24 * 3600
+
 	// hwStatusSampleRetentionSeconds keeps raw samples for the availability
 	// window plus one day of margin; incidents are kept on their own.
-	hwStatusSampleRetentionSeconds = (HwStatusAvailabilityDays + 1) * 24 * 3600
+	hwStatusSampleRetentionSeconds = hwStatusAvailabilityWindowSeconds + 24*3600
 
 	// hwStatusBadShareMicro (parts per million, so 50 000 is five percent) is
 	// the failed share of paid customer requests above which a minute is bad.
@@ -400,9 +403,13 @@ type HwStatusModelState struct {
 	// InOpenIncident is true when the model had a bad minute since the running
 	// outage started.
 	InOpenIncident bool `json:"in_open_incident"`
-	// GoodMinutes and TotalMinutes cover the availability window.
-	GoodMinutes  int64 `json:"good_minutes"`
+	// TotalMinutes is the number of measured minutes in the availability window;
+	// zero means the model was not measured and is not claimed healthy.
 	TotalMinutes int64 `json:"total_minutes"`
+	// OutageSeconds is the time the estate was in an outage inside the window,
+	// summed from the same incident rows the status page lists. The availability
+	// figure derives from it, so figure and incident list cannot disagree.
+	OutageSeconds int64 `json:"outage_seconds"`
 }
 
 // HwStatusSnapshot is what the public status answer needs.
@@ -411,11 +418,10 @@ type HwStatusSnapshot struct {
 	Incidents []HwIncident
 }
 
-// hwStatusAvailabilityRow is one aggregate row of the availability query.
+// hwStatusAvailabilityRow is one aggregate row of the measured-minutes query.
 type hwStatusAvailabilityRow struct {
 	Model string
 	Total int64
-	Good  int64
 }
 
 // HwPaidCounts is the number of failed and served paid requests of one model in
@@ -500,10 +506,35 @@ func HwCountPaidRequests(from int64, to int64) (map[string]HwPaidCounts, error) 
 	return counts, nil
 }
 
+// hwIncidentSecondsIn adds up the seconds the incidents cover inside [from, to].
+// An incident that still runs (EndedAt 0) lasts until to. One outage of the
+// estate is open at a time (HwReconcileStatusIncidents), so incidents do not
+// overlap and the sum is the total time in outage.
+func hwIncidentSecondsIn(incidents []HwIncident, from int64, to int64) int64 {
+	var seconds int64
+	for _, incident := range incidents {
+		start := max(incident.StartedAt, from)
+		end := to
+		if incident.EndedAt > 0 && incident.EndedAt < to {
+			end = incident.EndedAt
+		}
+		if end > start {
+			seconds += end - start
+		}
+	}
+	return seconds
+}
+
 // HwReadStatusSnapshot reads the public status of the named own models: their
 // availability over the window, the recent bad minutes and the outages. It
 // aggregates in the database, because thirty days of minute samples are too
 // many to load per request.
+//
+// The availability figure derives from the incident rows, the same outages the
+// page lists, and not from the per-model samples: an outage opens on the minute
+// verdict of every model measured at that time, so a model that was healthy in
+// it (or that left the offer since) would otherwise read 99.97 % beside an
+// outage of 4 h 9 min.
 func HwReadStatusSnapshot(now int64, models []string) (HwStatusSnapshot, error) {
 	if now <= 0 {
 		return HwStatusSnapshot{}, errors.New("invalid status read time")
@@ -514,12 +545,20 @@ func HwReadStatusSnapshot(now int64, models []string) (HwStatusSnapshot, error) 
 		states[name] = &HwStatusModelState{Model: name}
 	}
 
+	windowStart := now - hwStatusAvailabilityWindowSeconds
+	var windowIncidents []HwIncident
+	if err := DB.Select("started_at, ended_at").
+		Where("ended_at = 0 OR ended_at > ?", windowStart).
+		Find(&windowIncidents).Error; err != nil {
+		return HwStatusSnapshot{}, err
+	}
+	outageSeconds := hwIncidentSecondsIn(windowIncidents, windowStart, now)
+
 	var availability []hwStatusAvailabilityRow
 	if err := DB.Model(&HwStatusSample{}).
-		Select("model, SUM(CASE WHEN reason = ? THEN 0 ELSE 1 END) AS total, "+
-			"SUM(CASE WHEN ok = ? AND reason <> ? THEN 1 ELSE 0 END) AS good",
-			HwStatusReasonProbeUnavailable, commonTrueVal, HwStatusReasonProbeUnavailable).
-		Where("minute >= ?", now-HwStatusAvailabilityDays*24*3600).
+		Select("model, SUM(CASE WHEN reason = ? THEN 0 ELSE 1 END) AS total",
+			HwStatusReasonProbeUnavailable).
+		Where("minute >= ?", windowStart).
 		Group("model").
 		Scan(&availability).Error; err != nil {
 		return HwStatusSnapshot{}, err
@@ -527,7 +566,9 @@ func HwReadStatusSnapshot(now int64, models []string) (HwStatusSnapshot, error) 
 	for _, row := range availability {
 		if state, ok := states[row.Model]; ok {
 			state.TotalMinutes = row.Total
-			state.GoodMinutes = row.Good
+			if row.Total > 0 {
+				state.OutageSeconds = outageSeconds
+			}
 		}
 	}
 
@@ -588,12 +629,14 @@ func HwStatusCodeOf(state HwStatusModelState) string {
 }
 
 // HwStatusAvailabilityPercent is the availability over the window as a rounded
-// percentage. A model without any sample reports 0 and is not claimed healthy.
+// percentage: the window minus the time in outage. A model without any sample
+// reports 0 and is not claimed healthy.
 func HwStatusAvailabilityPercent(state HwStatusModelState) float64 {
 	if state.TotalMinutes <= 0 {
 		return 0
 	}
-	ratio := float64(state.GoodMinutes) / float64(state.TotalMinutes) * 100
+	up := max(0, hwStatusAvailabilityWindowSeconds-state.OutageSeconds)
+	ratio := float64(up) / float64(hwStatusAvailabilityWindowSeconds) * 100
 	return float64(int64(ratio*100+0.5)) / 100
 }
 

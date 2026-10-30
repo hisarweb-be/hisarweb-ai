@@ -548,9 +548,13 @@ func TestHwStatusCodeAndAvailabilityPercent(t *testing.T) {
 		percent float64
 	}{
 		{"no samples is not claimed healthy", HwStatusModelState{}, "operational", 0},
-		{"all good", HwStatusModelState{GoodMinutes: 60, TotalMinutes: 60}, "operational", 100},
-		{"recent bad minute is degraded", HwStatusModelState{BadRecent: true, GoodMinutes: 2, TotalMinutes: 3}, "degraded", 66.67},
-		{"open incident wins over degraded", HwStatusModelState{InOpenIncident: true, BadRecent: true, GoodMinutes: 1, TotalMinutes: 3}, "outage", 33.33},
+		{"all good", HwStatusModelState{TotalMinutes: 60}, "operational", 100},
+		{"a bad minute that is no outage keeps the figure", HwStatusModelState{BadRecent: true, TotalMinutes: 3}, "degraded", 100},
+		{"open incident wins over degraded", HwStatusModelState{InOpenIncident: true, BadRecent: true, TotalMinutes: 3, OutageSeconds: 3600}, "outage", 99.86},
+		// The 28 Oct 2026 outage (4 h 9 min) plus the one of 27 Oct (7 min): the page
+		// listed both and still showed 99.97 %.
+		{"4h9m and 7 min over 30 days", HwStatusModelState{TotalMinutes: 9996, OutageSeconds: 14940 + 420}, "operational", 99.41},
+		{"outage longer than the window floors at zero", HwStatusModelState{TotalMinutes: 1, OutageSeconds: 2 * hwStatusAvailabilityWindowSeconds}, "operational", 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -611,12 +615,49 @@ func TestHwReadStatusSnapshotCountsWindowRecentBadAndOpenIncident(t *testing.T) 
 	require.Len(t, snap.Models, 2)
 	got := snap.Models[0]
 	assert.Equal(t, int64(3), got.TotalMinutes)
-	assert.Equal(t, int64(2), got.GoodMinutes)
+	assert.Equal(t, int64(120), got.OutageSeconds, "the running incident lasts until now")
 	assert.True(t, got.BadRecent)
 	assert.True(t, got.InOpenIncident)
 	assert.Equal(t, "outage", HwStatusCodeOf(got))
 	assert.Equal(t, HwStatusModelState{Model: "unsampled-model"}, snap.Models[1])
 	assert.Len(t, snap.Incidents, 1)
+}
+
+func TestHwIncidentSecondsInClipsToTheWindow(t *testing.T) {
+	from, to := int64(1_000_000), int64(2_000_000)
+	incidents := []HwIncident{
+		{StartedAt: from + 100, EndedAt: from + 400}, // inside: 300
+		{StartedAt: from - 500, EndedAt: from + 200}, // starts before the window: 200
+		{StartedAt: from - 900, EndedAt: from - 100}, // ended before the window: 0
+		{StartedAt: to - 50, EndedAt: 0},             // still running: 50
+		{StartedAt: to - 80, EndedAt: to + 30},       // ends after now: 80
+	}
+	assert.Equal(t, int64(300+200+50+80), hwIncidentSecondsIn(incidents, from, to))
+	assert.Zero(t, hwIncidentSecondsIn(nil, from, to))
+}
+
+// The 28 Oct 2026 report: /durum listed an outage of 4 h 9 min and still read
+// 99.97 % over 30 days, because the figure came from the per-model samples while
+// the outage was opened by other models. The figure now derives from the incident
+// rows the page lists: a model that never had a bad minute reads the same figure
+// as the list, an outage older than the window no longer counts, and a model
+// without any measurement stays unclaimed.
+func TestHwReadStatusSnapshotAvailabilityDerivesFromIncidents(t *testing.T) {
+	hwStatusTestSetup(t)
+	now := int64(1_800_000_000)
+	for minute := now - 3600; minute < now; minute += 60 {
+		hwStatusTestSample(t, minute, true, "")
+	}
+	hwStatusTestIncident(t, now-10*24*3600, 14940)
+	hwStatusTestIncident(t, now-11*24*3600, 420)
+	hwStatusTestIncident(t, now-hwStatusAvailabilityWindowSeconds-7200, 3600) // outside the window
+
+	snap, err := HwReadStatusSnapshot(now, []string{"claude-sonnet-5-5", "unsampled-model"})
+	require.NoError(t, err)
+	require.Len(t, snap.Models, 2)
+	assert.Equal(t, int64(15360), snap.Models[0].OutageSeconds)
+	assert.InDelta(t, 99.41, HwStatusAvailabilityPercent(snap.Models[0]), 0.001)
+	assert.Zero(t, HwStatusAvailabilityPercent(snap.Models[1]), "no measurement is not claimed healthy")
 }
 
 // A quota or key refusal (429, 401, 403) says nothing about the model: the
@@ -662,7 +703,6 @@ func TestHwStatusProbeRefusalIsNoEvidence(t *testing.T) {
 	require.Len(t, snapshot.Models, 1)
 	state := snapshot.Models[0]
 	assert.Zero(t, state.TotalMinutes, "a refused minute is not measured")
-	assert.Zero(t, state.GoodMinutes, "a refusal is no good minute")
 	assert.False(t, state.BadRecent, "a refusal is not recent badness")
 	assert.False(t, state.InOpenIncident)
 	assert.Equal(t, "operational", HwStatusCodeOf(state))
