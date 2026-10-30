@@ -41,7 +41,11 @@ services:
       SESSION_COOKIE_TRUSTED_URL: ${SESSION_COOKIE_TRUSTED_URL:?SESSION_COOKIE_TRUSTED_URL is required}
       DEFAULT_LANGUAGE: ${DEFAULT_LANGUAGE:-tr}
       ERROR_LOG_ENABLED: "true"
-      BATCH_UPDATE_ENABLED: "true"
+      # Fixed off, never interpolated: with batch updates on, consumption waits
+      # in memory while the credit package expiry run reads users.quota, so the
+      # same consumption is deducted twice. Traffic is low enough for direct
+      # quota writes.
+      BATCH_UPDATE_ENABLED: "false"
       NODE_NAME: ${NODE_NAME:-hisarweb-ai-1}
       # Card payments (Revolut Merchant). Empty means the payment route refuses
       # to start a payment instead of failing at the provider.
@@ -89,6 +93,14 @@ services:
       timeout: 5s
       retries: 3
       start_period: 40s
+      # Measured 30 Oct 2026 (deploy of PR #199): the gateway needs about 3.9 s
+      # after container start (3.4 s of that is the database migration) before
+      # it answers, but without start_interval Docker runs the first probes
+      # during start_period only every 5 s. The proxy sends no traffic to a
+      # container that is not healthy yet, so every second between "answers"
+      # and "first successful probe" is time visitors get "no available
+      # server". With 250ms the healthy status follows within 0.25 s.
+      start_interval: 250ms
 
   postgres:
     image: postgres:17.11-alpine3.24

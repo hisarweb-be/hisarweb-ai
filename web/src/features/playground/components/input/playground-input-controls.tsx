@@ -64,6 +64,7 @@ export function PlaygroundInputControls({
       isGenerating,
       isModelLoading,
       models,
+      modelValue,
       text,
     })
 

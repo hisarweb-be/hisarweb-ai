@@ -57,6 +57,7 @@ export function Playground() {
     handleDeleteMessage,
   } = usePlaygroundConversation({
     messages,
+    model: config.model,
     updateMessages,
     sendChat,
   })

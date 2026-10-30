@@ -30,9 +30,9 @@ import { pickHwLanguage, useHwCurrencyText, type HwTextVars } from './texts'
 const tr = {
   whatTitle: 'HisarWeb AI nedir?',
   whatBody:
-    'HisarWeb AI, Claude ve Gemini gibi yapay zekâ modellerini tek bir yerden, {currencyName} ile ve kredi kartı olmadan kullanmanızı sağlar. Bir hesap açarsınız, bir anahtar oluşturursunuz ve modeli kendi araçlarınızda, örneğin Claude Code’da, kullanırsınız. Kod bilmeniz gerekmez.',
+    'HisarWeb AI, Claude ve Gemini gibi yapay zekâ modellerini tek bir yerden, aylık abonelik olmadan ve yalnızca kullandığınız kadar ödeyerek kullanmanızı sağlar. Bakiyeyi kredi kartı ile {currencyLong} üzerinden yüklersiniz. Bir hesap açarsınız, bir anahtar oluşturursunuz ve modeli kendi araçlarınızda, örneğin Claude Code’da, kullanırsınız. Kod bilmeniz gerekmez.',
   whatFree:
-    'Yeni hesaplar {bonus} başlangıç bonusu alır; bonus 14 gün geçerlidir. Aşağıdaki adımlarla ilk yanıtınızı birkaç dakikada görürsünüz.',
+    'Telefonunu Telegram ile doğrulayan yeni hesaplar {bonus} başlangıç bonusu alır; bonus 14 gün geçerlidir ve denemek için kredi kartı gerekmez. Aşağıdaki adımlarla ilk yanıtınızı birkaç dakikada görürsünüz.',
 
   videoTitle: 'Video rehber',
   videoBody:
@@ -81,9 +81,9 @@ const tr = {
 const en: typeof tr = {
   whatTitle: 'What is HisarWeb AI?',
   whatBody:
-    'HisarWeb AI lets you use AI models such as Claude and Gemini from one place, paying in {currencyLong} and without a credit card. You open an account, create a key and use the model in your own tools, for example Claude Code. You do not need to know how to code.',
+    'HisarWeb AI lets you use AI models such as Claude and Gemini from one place, without a monthly subscription and paying only for what you use. You top up your balance by credit card in {currencyLong}. You open an account, create a key and use the model in your own tools, for example Claude Code. You do not need to know how to code.',
   whatFree:
-    'New accounts receive a {bonus} start bonus, valid for 14 days. The steps below take you to your first answer in a few minutes.',
+    'New accounts that verify their phone through Telegram receive a {bonus} start bonus, valid for 14 days, and you need no credit card to try it. The steps below take you to your first answer in a few minutes.',
 
   videoTitle: 'Video guide',
   videoBody:

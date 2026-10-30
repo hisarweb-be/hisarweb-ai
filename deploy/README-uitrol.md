@@ -11,6 +11,7 @@ ongemoeid; die blijven voor upstream-releases en lokale ontwikkeling.
 |---|---|---|---|
 | poort | `APP_HTTP_PORT` | nee (3000) | hostpoort die naar de containerpoort 3000 gaat |
 | app | `APP_ENV` | nee (vast `production` in de compose) | productiestand. De compose zet hem vast op `production`, nooit via `${...}`: alleen `development` of `test` zet de productiecontroles uit, een lege of onbekende waarde geldt als productie |
+| app | `BATCH_UPDATE_ENABLED` | nee (vast `false` in de compose) | moet uit blijven. Staat hij aan, dan wacht verbruik in het geheugen terwijl de vervalronde van tegoedpakketten `users.quota` leest, en dan wordt hetzelfde verbruik twee keer van het klanttegoed afgetrokken. Niet in Coolify zetten: de compose zet de waarde vast, nooit via `${...}` |
 | app | `PORT` | nee (3000) | poort binnen de container; laat staan |
 | app | `HW_SETUP_TOKEN` | ja | eenmalig geheim dat `POST /api/setup` in productie eist, als kop `X-HW-Setup-Token`; zonder deze variabele weigert productie elke setup (403) en kan er geen beheerder ontstaan. Maak hem met `openssl rand -hex 32`; na de eerste setup mag hij leeg |
 | app | `HW_CSP_EXTRA_FRAME_SRC`, `HW_CSP_EXTRA_CONNECT_SRC`, `HW_CSP_EXTRA_IMG_SRC`, `HW_CSP_EXTRA_STYLE_SRC`, `HW_CSP_EXTRA_FONT_SRC` | nee | per CSP-richtlijn een kommagescheiden lijst van kale https-origins (logo, font, een pagina in een frame). Onze console configureert geen externe home-, over- of chatpagina, dus `frame-src` blijft `'none'` zonder deze variabele. Wat geen https-origin is, wordt genegeerd; `script-src` is niet te verruimen en houdt de hashes zonder `'unsafe-inline'` of `'unsafe-eval'` |
@@ -55,6 +56,14 @@ opties uit omgevingsvariabelen); dat valt buiten H2 en is een open punt in het v
   HTTP 200 antwoorden en `"success": true` bevatten. Coolify toont de container dan als `healthy`.
 - Geheugen en CPU: app 512 MB en 1 CPU, PostgreSQL 512 MB. De databank heeft geen gepubliceerde
   poort; alleen de app in dit netwerk kan erbij.
+- Uitrolvenster (gemeten 30 okt 2026, uitrol van PR 199): een Docker-Compose-app wordt door Coolify
+  nooit rollend vervangen. Coolify haalt eerst de oude app en de oude PostgreSQL weg en voert dan
+  `docker compose up -d` uit. De proxy stuurt geen verkeer naar een container die nog niet `healthy`
+  is, dus bezoekers krijgen "no available server" van het weghalen van de oude app tot de nieuwe app
+  gezond is: PostgreSQL gezond binnen 1 s, de app antwoordt 3,9 s na zijn start (3,4 s daarvan is de
+  databasemigratie). Beide healthchecks hebben `start_interval: 250ms`; zonder die regel loopt Docker
+  de eerste probes tijdens `start_period` pas elke 5 s. Een venster van nul seconden kan alleen met
+  een los databasevolume en de app als Dockerfile-applicatie met rollende uitrol in Coolify.
 
 ## Zo leest Coolify het
 

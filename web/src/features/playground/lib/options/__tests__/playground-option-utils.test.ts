@@ -19,11 +19,40 @@ For commercial licensing, please contact support@quantumnous.com
 import { describe, expect, it } from 'vitest'
 
 import { DEFAULT_CONFIG } from '../../../constants'
-import type { ModelOption } from '../../../types'
-import { getModelFallback } from '../playground-option-utils'
+import type { GroupOption, ModelOption } from '../../../types'
+import { getGroupFallback, getModelFallback } from '../playground-option-utils'
 
 const options = (...values: string[]): ModelOption[] =>
   values.map((value) => ({ label: value, value }))
+
+const groups = (...values: string[]): GroupOption[] =>
+  values.map((value) => ({ label: value, value, ratio: 1 }))
+
+describe('getGroupFallback', () => {
+  it('keeps a group that is still offered', () => {
+    expect(getGroupFallback(groups('free', 'paid'), 'free', 'paid')).toBeNull()
+  })
+
+  it('moves a hidden group to the account group, not the first one', () => {
+    expect(getGroupFallback(groups('free', 'paid'), 'default', 'paid')).toBe(
+      'paid'
+    )
+  })
+
+  it('falls back to default when the account group is not offered', () => {
+    expect(getGroupFallback(groups('free', 'default'), 'vip', 'paid')).toBe(
+      'default'
+    )
+  })
+
+  it('falls back to the first group without account or default group', () => {
+    expect(getGroupFallback(groups('free', 'paid'), 'default', 'default')).toBe(
+      'free'
+    )
+    expect(getGroupFallback(groups('free', 'paid'), 'default')).toBe('free')
+    expect(getGroupFallback([], 'default', 'paid')).toBeNull()
+  })
+})
 
 describe('getModelFallback', () => {
   it('starts on the best-value cheap model', () => {

@@ -305,6 +305,9 @@ func TestHwAssistantInstructionEndsWithTheLanguageRule(t *testing.T) {
 		// look; the answer is a plain no with the route that works.
 		assert.Contains(t, instruction, "our API cannot be plugged into Kiro", channel)
 		assert.NotContains(t, instruction, "we have not tested it ourselves", channel)
+		// The Playground's "The request is invalid" got vague advice; the cause is
+		// a group without models (30 Oct 2026).
+		assert.Contains(t, instruction, "the chosen group has no models", channel)
 		assert.LessOrEqual(t, len([]rune(instruction)), hwAssistantInstructionMaxRunes+len([]rune(hwAssistantLanguageRule))+2, channel)
 	}
 }

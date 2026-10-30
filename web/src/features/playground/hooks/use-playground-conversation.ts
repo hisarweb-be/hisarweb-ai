@@ -17,6 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useCallback, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 import {
   appendUserMessagePair,
@@ -28,6 +30,7 @@ import type { Message } from '../types'
 
 type UsePlaygroundConversationOptions = {
   messages: Message[]
+  model: string
   updateMessages: (
     updater: Message[] | ((prev: Message[]) => Message[])
   ) => void
@@ -36,31 +39,46 @@ type UsePlaygroundConversationOptions = {
 
 export function usePlaygroundConversation({
   messages,
+  model,
   updateMessages,
   sendChat,
 }: UsePlaygroundConversationOptions) {
+  const { t } = useTranslation()
   const [editingMessageKey, setEditingMessageKey] = useState<string | null>(
     null
   )
 
+  // The gateway rejects a request without a model, so none is ever sent.
+  const isModelMissing = useCallback(() => {
+    if (model) return false
+    toast.error(t('Please select a model first'))
+    return true
+  }, [model, t])
+
+  /** Returns false when nothing was sent, so the caller keeps the typed text. */
   const handleSendMessage = useCallback(
     (text: string) => {
+      if (isModelMissing()) return false
+
       const nextMessages = appendUserMessagePair(messages, text)
       updateMessages(nextMessages)
       sendChat(nextMessages)
+      return true
     },
-    [messages, updateMessages, sendChat]
+    [isModelMissing, messages, updateMessages, sendChat]
   )
 
   const handleRegenerateMessage = useCallback(
     (message: Message) => {
+      if (isModelMissing()) return
+
       const nextMessages = createRegeneratedMessages(messages, message.key)
       if (!nextMessages) return
 
       updateMessages(nextMessages)
       sendChat(nextMessages)
     },
-    [messages, updateMessages, sendChat]
+    [isModelMissing, messages, updateMessages, sendChat]
   )
 
   const handleEditMessage = useCallback((message: Message) => {
@@ -76,6 +94,7 @@ export function usePlaygroundConversation({
   const applyEdit = useCallback(
     (newContent: string, shouldSubmit: boolean) => {
       if (!editingMessageKey) return
+      if (shouldSubmit && isModelMissing()) return
 
       const editResult = applyMessageEdit(
         messages,
@@ -92,7 +111,7 @@ export function usePlaygroundConversation({
         sendChat(editResult.messages)
       }
     },
-    [editingMessageKey, messages, updateMessages, sendChat]
+    [editingMessageKey, isModelMissing, messages, updateMessages, sendChat]
   )
 
   const handleDeleteMessage = useCallback(
