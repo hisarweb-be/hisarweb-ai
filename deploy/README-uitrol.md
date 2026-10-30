@@ -56,6 +56,14 @@ opties uit omgevingsvariabelen); dat valt buiten H2 en is een open punt in het v
   HTTP 200 antwoorden en `"success": true` bevatten. Coolify toont de container dan als `healthy`.
 - Geheugen en CPU: app 512 MB en 1 CPU, PostgreSQL 512 MB. De databank heeft geen gepubliceerde
   poort; alleen de app in dit netwerk kan erbij.
+- Uitrolvenster (gemeten 30 okt 2026, uitrol van PR 199): een Docker-Compose-app wordt door Coolify
+  nooit rollend vervangen. Coolify haalt eerst de oude app en de oude PostgreSQL weg en voert dan
+  `docker compose up -d` uit. De proxy stuurt geen verkeer naar een container die nog niet `healthy`
+  is, dus bezoekers krijgen "no available server" van het weghalen van de oude app tot de nieuwe app
+  gezond is: PostgreSQL gezond binnen 1 s, de app antwoordt 3,9 s na zijn start (3,4 s daarvan is de
+  databasemigratie). Beide healthchecks hebben `start_interval: 250ms`; zonder die regel loopt Docker
+  de eerste probes tijdens `start_period` pas elke 5 s. Een venster van nul seconden kan alleen met
+  een los databasevolume en de app als Dockerfile-applicatie met rollende uitrol in Coolify.
 
 ## Zo leest Coolify het
 
