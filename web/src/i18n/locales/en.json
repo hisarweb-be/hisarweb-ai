@@ -3381,7 +3381,6 @@
     "JSON-based access control rules. Leave empty to allow all users.": "JSON-based access control rules. Leave empty to allow all users.",
     "Just now": "Just now",
     "JustSong": "JustSong",
-    "K": "K",
     "Keep affinity when channel is disabled": "Keep affinity when channel is disabled",
     "Keep enabled if you need to proxy requests for different upstream accounts.": "Keep enabled if you need to proxy requests for different upstream accounts.",
     "Keep enough balance before production traffic": "Keep enough balance before production traffic",

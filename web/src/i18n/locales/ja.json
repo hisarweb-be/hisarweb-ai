@@ -3381,7 +3381,6 @@
     "JSON-based access control rules. Leave empty to allow all users.": "JSONベースのアクセス制御ルール。すべてのユーザーを許可する場合は空のままにしてください。",
     "Just now": "たった今",
     "JustSong": "JustSong",
-    "K": "K",
     "Keep affinity when channel is disabled": "チャネル無効時にアフィニティを保持",
     "Keep enabled if you need to proxy requests for different upstream accounts.": "異なる上流アカウントのリクエストをプロキシする必要がある場合は有効にしたままにしてください。",
     "Keep enough balance before production traffic": "本番トラフィック前に十分な残高を確保",

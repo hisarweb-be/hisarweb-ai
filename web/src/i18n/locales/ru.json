@@ -3381,7 +3381,6 @@
     "JSON-based access control rules. Leave empty to allow all users.": "Правила контроля доступа на основе JSON. Оставьте пустым, чтобы разрешить всем пользователям.",
     "Just now": "Только что",
     "JustSong": "JustSong",
-    "K": "K",
     "Keep affinity when channel is disabled": "Сохранять привязку при отключении канала",
     "Keep enabled if you need to proxy requests for different upstream accounts.": "Оставьте включённым, если нужно проксировать запросы для разных upstream-аккаунтов.",
     "Keep enough balance before production traffic": "Поддерживайте достаточный баланс перед рабочим трафиком",

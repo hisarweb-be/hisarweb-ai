@@ -3381,7 +3381,6 @@
     "JSON-based access control rules. Leave empty to allow all users.": "基于 JSON 的访问控制规则。留空以允许所有用户。",
     "Just now": "刚刚",
     "JustSong": "JustSong",
-    "K": "K",
     "Keep affinity when channel is disabled": "渠道禁用后保留亲和",
     "Keep enabled if you need to proxy requests for different upstream accounts.": "如果需要为不同上游账户代理请求，请保持启用。",
     "Keep enough balance before production traffic": "生产流量前保持充足余额",
