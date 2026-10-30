@@ -109,6 +109,7 @@
   },
   "overrides": {
     "brace-expansion": "2.1.6",
+    "decode-uri-component": "0.5.1",
     "dompurify": "3.4.17",
     "fast-uri": "3.1.7",
     "hono": "4.12.25",
