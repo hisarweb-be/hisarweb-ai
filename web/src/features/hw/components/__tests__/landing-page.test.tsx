@@ -203,8 +203,28 @@ test('highlights only the accent phrase inside the headline', async () => {
   const heading = await screen.findByRole('heading', { level: 1 })
   const accent = heading.querySelector('.hwl-accent')
   expect(accent).toHaveTextContent('resmî fiyatın yarısına')
-  expect(heading.textContent).toContain('Claude ve Gemini')
+  expect(heading.textContent).toContain('Claude API’si')
 })
+
+// The live catalog sells Claude and Grok models only. A promise of Gemini on
+// the public pages is a promise HisarWeb AI cannot keep.
+test.each(['tr', 'en'] as const)(
+  'does not promise Gemini models on the landing page (%s)',
+  async (language) => {
+    await useLanguage(language)
+    renderLanding()
+
+    await screen.findByRole('heading', { level: 1 })
+    expect(document.body.textContent).not.toMatch(/gemini/i)
+  }
+)
+
+test.each(['tr', 'en'] as const)(
+  'does not promise Gemini models in the HisarWeb texts (%s)',
+  (language) => {
+    expect(Object.values(hwTexts[language]).join('\n')).not.toMatch(/gemini/i)
+  }
+)
 
 test('teases the vibe coding guide with a button to its page', async () => {
   renderLanding()
