@@ -79,8 +79,11 @@ type HwRouteState struct {
 	alternates []*model.Channel
 	tried      map[int]bool
 
-	outage          bool
-	lumiaRetried    bool
+	outage       bool
+	lumiaRetried bool
+	// probe is the lease of the Lumia probe slot this request took, zero while
+	// it holds none. HwReleaseLumiaProbe frees exactly that lease.
+	probe           time.Time
 	lastChannel     *model.Channel
 	finished        bool
 	blockedByFamily int
@@ -422,7 +425,7 @@ func (s *HwRouteState) claim(channel *model.Channel) bool {
 		return false
 	}
 	// The last check takes the probe slot of a half-open Lumia breaker.
-	if provider == HwProviderLumia && !hwLumiaAllows(true) {
+	if provider == HwProviderLumia && !s.takeLumia() {
 		return false
 	}
 	s.tried[channel.Id] = true
@@ -485,7 +488,7 @@ func (s *HwRouteState) peekFree() *model.Channel {
 // breaker holds the account back. It does not take the probe slot of a
 // half-open breaker; the caller does that when it spends the attempt.
 func (s *HwRouteState) peekLumia() *model.Channel {
-	if !hwLumiaAllows(false) {
+	if allowed, _ := hwLumiaAllows(false); !allowed {
 		return nil
 	}
 	for _, channel := range s.lumia {
@@ -525,7 +528,7 @@ func (s *HwRouteState) next() *model.Channel {
 		s.recordAttempt(channel, HwProviderFree)
 		return channel
 	}
-	if channel := s.peekLumia(); channel != nil && hwLumiaAllows(true) {
+	if channel := s.peekLumia(); channel != nil && s.takeLumia() {
 		s.tried[channel.Id] = true
 		s.recordAttempt(channel, HwProviderLumia)
 		return channel
@@ -577,25 +580,66 @@ func hwLumiaCooldownLength(failures int) time.Duration {
 }
 
 // hwLumiaAllows reports whether a request may use Lumia now. With take it also
-// leases the single probe slot of a half-open breaker, so the caller must go on
-// to use Lumia. A breaker that is off (HwLumiaCooldownMs <= 0) allows everything.
-func hwLumiaAllows(take bool) bool {
+// leases the single probe slot of a half-open breaker and returns that lease, so
+// the caller must go on to use Lumia and later hand the lease back. The lease is
+// zero when nothing was leased: a closed or disabled breaker needs no slot. A
+// breaker that is off (HwLumiaCooldownMs <= 0) allows everything.
+func hwLumiaAllows(take bool) (allowed bool, lease time.Time) {
 	if common.HwLumiaCooldownMs <= 0 {
-		return true
+		return true, time.Time{}
 	}
 	hwLumiaBreaker.Lock()
 	defer hwLumiaBreaker.Unlock()
 	if hwLumiaBreaker.failures == 0 {
-		return true
+		return true, time.Time{}
 	}
 	now := hwLumiaClock()
 	if now.Before(hwLumiaBreaker.until) || now.Before(hwLumiaBreaker.probeUntil) {
-		return false
+		return false, time.Time{}
 	}
 	if take {
 		hwLumiaBreaker.probeUntil = now.Add(hwLumiaCooldownLength(hwLumiaBreaker.failures))
+		lease = hwLumiaBreaker.probeUntil
 	}
-	return true
+	return true, lease
+}
+
+// takeLumia spends a Lumia attempt of this request: it checks the breaker and,
+// when the breaker is half-open, remembers the probe lease so the request can
+// give the slot back (releaseProbe) if it ends without a verdict on Lumia.
+func (s *HwRouteState) takeLumia() bool {
+	allowed, lease := hwLumiaAllows(true)
+	if allowed && !lease.IsZero() {
+		s.probe = lease
+	}
+	return allowed
+}
+
+// releaseProbe gives the probe slot back when this request still holds it and
+// nothing resolved it: a success or an outage failure already closed or reopened
+// the breaker and replaced the lease. It frees the slot only; failures and the
+// escalation stay, so the next request probes at the same cooldown length. A
+// lease that expired and was taken again by another request is not touched.
+func (s *HwRouteState) releaseProbe() {
+	if s == nil || s.probe.IsZero() {
+		return
+	}
+	lease := s.probe
+	s.probe = time.Time{}
+	hwLumiaBreaker.Lock()
+	defer hwLumiaBreaker.Unlock()
+	if hwLumiaBreaker.probeUntil.Equal(lease) {
+		hwLumiaBreaker.probeUntil = time.Time{}
+	}
+}
+
+// HwReleaseLumiaProbe runs once at the end of every relay request that selects
+// channels. A request that took the probe slot of the half-open Lumia breaker and
+// ends without success or an outage failure (client cancel, a reply that is no
+// outage, a setup, billing or body error, a task submission) would otherwise keep
+// the slot for the whole lease while Lumia may answer fine.
+func HwReleaseLumiaProbe(c *gin.Context) {
+	HwRoute(c).releaseProbe()
 }
 
 // hwLumiaFailed records an outage failure of any Lumia channel. It opens the
@@ -624,6 +668,7 @@ func HwNoteSupplierSuccess(c *gin.Context) {
 	if state == nil || state.lastChannel == nil || HwChannelProvider(state.lastChannel) != HwProviderLumia {
 		return
 	}
+	state.probe = time.Time{}
 	hwLumiaBreaker.Lock()
 	defer hwLumiaBreaker.Unlock()
 	hwLumiaBreaker.failures = 0
@@ -718,9 +763,20 @@ func HwDecideRetry(c *gin.Context, apiErr *types.NewAPIError) (PolicyDecision, b
 	}
 	// Only a Lumia outage earns the paused extra Lumia attempt; a free tier
 	// running out of quota simply moves on to the next supplier.
-	if hwIsOutageError(apiErr) && HwChannelProvider(state.lastChannel) == HwProviderLumia {
-		state.outage = true
-		hwLumiaFailed()
+	if HwChannelProvider(state.lastChannel) == HwProviderLumia {
+		if hwIsOutageError(apiErr) {
+			state.outage = true
+			// A client that hung up cancels the upstream call, which surfaces as
+			// an outage error. It says nothing about Lumia and must not cool the
+			// account for every other customer.
+			if !hwClientGone(c) {
+				hwLumiaFailed()
+			}
+		}
+		// This Lumia attempt is over. An outage failure above already replaced
+		// the lease; any other end (a cancel, a reply that is no outage) gives
+		// the probe slot back now, before a fallback attempt keeps it busy.
+		state.releaseProbe()
 	}
 	if state.streamWrites > 0 {
 		// The customer already received data; switching supplier now would
@@ -736,6 +792,13 @@ func HwDecideRetry(c *gin.Context, apiErr *types.NewAPIError) (PolicyDecision, b
 
 func hwPolicyDecision(action, reason string) PolicyDecision {
 	return PolicyDecision{Action: action, Reason: reason, Source: "supplier_policy"}
+}
+
+// hwClientGone reports whether the customer's request was cancelled or timed
+// out: the upstream call runs on that context, so its failure is then the
+// customer's doing and not the supplier's.
+func hwClientGone(c *gin.Context) bool {
+	return c != nil && c.Request != nil && c.Request.Context().Err() != nil
 }
 
 // hwIsOutageError classifies supplier failures that justify the extra Lumia
