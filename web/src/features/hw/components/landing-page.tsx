@@ -55,7 +55,7 @@ import '@/styles/hw-landing.css'
 
 import { useLandingMotion } from '../hooks/use-landing-motion'
 import { useHwLanguage, useHwText } from '../texts'
-import { useVibeText } from '../vibe-texts'
+import { useVibeText, VIBE_FILMS } from '../vibe-texts'
 import { BonusExplainer } from './bonus-explainer'
 
 type Translate = ReturnType<typeof useHwText>
@@ -205,6 +205,24 @@ const LANDING_FILMS: Record<'tr' | 'en', FilmFiles> = {
   },
 }
 
+/**
+ * Poster facade: `preload='none'` keeps the mp4 off the wire until the visitor
+ * presses play, there is no autoplay, and the language picks the file.
+ */
+function FilmPlayer(props: { film: FilmFiles; label: string }) {
+  return (
+    <video
+      key={props.film.src}
+      controls
+      playsInline
+      preload='none'
+      poster={props.film.poster}
+      src={props.film.src}
+      aria-label={props.label}
+    />
+  )
+}
+
 function Film(props: { text: Translate }) {
   const text = props.text
   const film = LANDING_FILMS[useHwLanguage()]
@@ -222,15 +240,7 @@ function Film(props: { text: Translate }) {
           {text('filmBody')}
         </p>
         <div className='hwl-film' data-reveal style={stagger(2)}>
-          <video
-            key={film.src}
-            controls
-            playsInline
-            preload='none'
-            poster={film.poster}
-            src={film.src}
-            aria-label={text('filmLabel')}
-          />
+          <FilmPlayer film={film} label={text('filmLabel')} />
         </div>
       </div>
     </section>
@@ -288,6 +298,7 @@ function Benefits(props: { text: Translate }) {
 
 function Vibe() {
   const text = useVibeText()
+  const film = VIBE_FILMS[useHwLanguage()]
   return (
     <section aria-labelledby='hw-vibe-title' className='hwl-section'>
       <div className='mx-auto max-w-3xl text-center'>
@@ -301,7 +312,10 @@ function Vibe() {
         >
           {text('landingBody')}
         </p>
-        <div className='mt-8' data-reveal style={stagger(2)}>
+        <div className='hwl-film' data-reveal style={stagger(2)}>
+          <FilmPlayer film={film} label={text('filmLabel')} />
+        </div>
+        <div className='mt-8' data-reveal style={stagger(3)}>
           <Button
             size='lg'
             variant='outline'
