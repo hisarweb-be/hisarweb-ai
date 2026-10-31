@@ -6,8 +6,9 @@ package common
 // hammered while staying short enough for the customer not to notice.
 var HwLumiaRetryPauseMs = 1000
 
-// HwLumiaCooldownMs is how long a Lumia channel that just failed with an outage
-// (429, 5xx, timeout) is passed over while the request still has another
-// candidate to try. A success on the channel ends the cooldown early; zero or
-// less turns it off.
+// HwLumiaCooldownMs is the base cooldown of the Lumia breaker. One outage
+// failure (429, 5xx, timeout) on any Lumia channel holds back the whole Lumia
+// account for this long; each further consecutive failure doubles it up to five
+// minutes. After the cooldown a single request probes Lumia. A success ends the
+// cooldown and resets the escalation; zero or less turns the breaker off.
 var HwLumiaCooldownMs = 60000
