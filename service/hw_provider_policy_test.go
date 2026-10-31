@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -91,6 +92,7 @@ func TestHwRouteHasNextAgreesWithNext(t *testing.T) {
 		name        string
 		lastChannel *model.Channel
 		openRouter  []*model.Channel
+		breakerOff  bool
 		wantNext    bool
 	}{
 		{
@@ -106,10 +108,16 @@ func TestHwRouteHasNextAgreesWithNext(t *testing.T) {
 			wantNext:    true,
 		},
 		{
-			// The outage retry still exists for the primary supplier.
-			name:        "failed primary attempt",
+			// The paused outage retry exists for the primary supplier only while
+			// the Lumia breaker is off; the breaker replaces it.
+			name:        "failed primary attempt with the breaker off",
 			lastChannel: lumia,
+			breakerOff:  true,
 			wantNext:    true,
+		},
+		{
+			name:        "failed primary attempt with the breaker on",
+			lastChannel: lumia,
 		},
 	}
 
@@ -118,6 +126,11 @@ func TestHwRouteHasNextAgreesWithNext(t *testing.T) {
 			previousPause := common.HwLumiaRetryPauseMs
 			common.HwLumiaRetryPauseMs = 0
 			t.Cleanup(func() { common.HwLumiaRetryPauseMs = previousPause })
+			cooldownMs := 60000
+			if testCase.breakerOff {
+				cooldownMs = 0
+			}
+			hwResetLumiaCooldown(t, cooldownMs)
 
 			state := &HwRouteState{
 				active:      true,
@@ -751,8 +764,8 @@ func TestHwRouteTriesFreeThenLumiaThenOpenRouterLast(t *testing.T) {
 	previousPause := common.HwLumiaRetryPauseMs
 	common.HwLumiaRetryPauseMs = 0
 	t.Cleanup(func() { common.HwLumiaRetryPauseMs = previousPause })
-	// The full order, retry included, holds with the cooldown off; the
-	// cooldown order is TestHwLumiaCooldownSkipsLumiaOnlyWhileAnotherCandidateRemains.
+	// The full order, retry included, holds with the breaker off; the breaker
+	// order is covered by the TestHwLumiaBreaker tests.
 	hwResetLumiaCooldown(t, 0)
 
 	approved := map[string]any{"approved": true, "data_class": "K", "region": "eu"}
@@ -806,22 +819,44 @@ func TestHwRouteRefusesOpenRouterBeforeOtherAlternates(t *testing.T) {
 	assert.True(t, state.claim(openRouter), "OpenRouter is fine once the others are tried")
 }
 
-// hwResetLumiaCooldown starts a test with no channel in its cooldown and the
-// given cooldown length, and leaves no cooling channel behind.
-func hwResetLumiaCooldown(t *testing.T, cooldownMs int) {
+// hwTestClock is the controllable clock of the Lumia breaker tests.
+type hwTestClock struct{ now time.Time }
+
+func (c *hwTestClock) Now() time.Time { return c.now }
+
+func (c *hwTestClock) Advance(d time.Duration) { c.now = c.now.Add(d) }
+
+// hwResetLumiaCooldown starts a test with a closed Lumia breaker, the given
+// cooldown length and a frozen clock, and leaves nothing behind.
+func hwResetLumiaCooldown(t *testing.T, cooldownMs int) *hwTestClock {
 	t.Helper()
 	previous := common.HwLumiaCooldownMs
+	previousClock := hwLumiaClock
+	clock := &hwTestClock{now: time.Date(2026, time.October, 31, 6, 0, 0, 0, time.UTC)}
 	common.HwLumiaCooldownMs = cooldownMs
-	empty := func() {
-		hwLumiaCooldown.Lock()
-		clear(hwLumiaCooldown.until)
-		hwLumiaCooldown.Unlock()
+	hwLumiaClock = clock.Now
+	closeBreaker := func() {
+		hwLumiaBreaker.Lock()
+		hwLumiaBreaker.failures = 0
+		hwLumiaBreaker.until = time.Time{}
+		hwLumiaBreaker.probeUntil = time.Time{}
+		hwLumiaBreaker.Unlock()
 	}
-	empty()
+	closeBreaker()
 	t.Cleanup(func() {
-		empty()
+		closeBreaker()
 		common.HwLumiaCooldownMs = previous
+		hwLumiaClock = previousClock
 	})
+	return clock
+}
+
+// hwNextID is the id of the channel the route picks next, 0 when it has none.
+func hwNextID(state *HwRouteState) int {
+	if channel := state.next(); channel != nil {
+		return channel.Id
+	}
+	return 0
 }
 
 // hwRouteOrder runs a route to its end with every attempt failing on apiErr
@@ -840,129 +875,378 @@ func hwRouteOrder(t *testing.T, c *gin.Context, state *HwRouteState, apiErr *typ
 	return order
 }
 
-// A Lumia-wide rate limit must not cost every paying request two slow Lumia
-// failures and a paused retry before Portix answers (30 Oct 2026: about 50 s
-// per request). A failed Lumia channel cools down process-wide: while it
-// cools a paid route goes straight to the alternative supplier, but a route
-// without another candidate still probes it once, so the free group keeps its
-// route and a recovered Lumia is noticed.
-func TestHwLumiaCooldownSkipsLumiaOnlyWhileAnotherCandidateRemains(t *testing.T) {
-	previousPause := common.HwLumiaRetryPauseMs
-	common.HwLumiaRetryPauseMs = 0
-	t.Cleanup(func() { common.HwLumiaRetryPauseMs = previousPause })
+var (
+	// The two Lumia channels of production (lumiarouter.com and
+	// dev.lumiarouter.com) share one account; Portix is the paid alternative.
+	hwBreakerLumia1 = hwPolicyChannel(61, HwProviderLumia, "")
+	hwBreakerLumia5 = hwPolicyChannel(62, HwProviderLumia, "")
+	hwBreakerPortix = hwPolicyChannel(63, HwProviderPortix, "")
+)
+
+// hwBreakerRoute is a fresh request of group over both Lumia channels, with
+// Portix behind them for the paying group.
+func hwBreakerRoute(group string) (*gin.Context, *HwRouteState) {
+	state := hwPolicyRoute([]*model.Channel{hwBreakerLumia1, hwBreakerLumia5}, []*model.Channel{hwBreakerPortix})
+	state.group, state.userGroup = group, group
+	c := hwClientErrorContext("")
+	c.Set(hwRouteContextKey, state)
+	return c, state
+}
+
+// hwHalfOpenBreaker fails Lumia once and moves the clock to the end of the 60 s
+// cooldown: the breaker is half-open and the next Lumia request is the probe.
+func hwHalfOpenBreaker(t *testing.T) *hwTestClock {
+	t.Helper()
+	clock := hwResetLumiaCooldown(t, 60000)
+	c, state := hwBreakerRoute(HwPaidGroup)
+	hwRouteOrder(t, c, state, hwPolicyError(http.StatusTooManyRequests, types.ErrorCodeBadResponseStatusCode))
+	clock.Advance(60 * time.Second)
+	return clock
+}
+
+// hwCancelledContext is a request whose client has already hung up.
+func hwCancelledContext(c *gin.Context) {
+	ctx, cancel := context.WithCancel(c.Request.Context())
+	c.Request = c.Request.WithContext(ctx)
+	cancel()
+}
+
+// hwBreakerSelectError runs the next selection of the route the way the relay
+// loop does and returns the error it ends with, nil when a channel was picked.
+func hwBreakerSelectError(t *testing.T, c *gin.Context, state *HwRouteState) *types.NewAPIError {
+	t.Helper()
+	_, _, err := HwSelectChannel(c, &RetryParam{ModelName: state.model}, nil)
+	if err == nil {
+		return nil
+	}
+	var apiErr *types.NewAPIError
+	require.ErrorAs(t, err, &apiErr)
+	return apiErr
+}
+
+// Both Lumia channels share one account and an outage hits them at once (30
+// and 31 Oct 2026: a 429 after 14 to 31 s on channel 1 and again on channel 5).
+// One outage failure cools the whole account, so a request pays at most one
+// slow Lumia failure and never retries a cooling Lumia as a last resort.
+func TestHwLumiaBreakerCoolsTheWholeAccount(t *testing.T) {
 	hwResetLumiaCooldown(t, 60000)
-
-	lumia := hwPolicyChannel(41, HwProviderLumia, "")
-	spare := hwPolicyChannel(42, HwProviderLumia, "")
-	portix := hwPolicyChannel(43, HwProviderPortix, "")
 	rateLimited := hwPolicyError(http.StatusTooManyRequests, types.ErrorCodeBadResponseStatusCode)
-	paidRoute := func() *HwRouteState {
-		return hwPolicyRoute([]*model.Channel{lumia, spare}, []*model.Channel{portix})
-	}
-	freeRoute := func() *HwRouteState {
-		state := paidRoute()
-		state.group, state.userGroup = "free", "free"
-		return state
-	}
 
-	t.Run("the first paid request skips the paused retry while Portix remains", func(t *testing.T) {
+	t.Run("a failure on channel 1 cools channel 5 as well", func(t *testing.T) {
+		state := hwPolicyRoute([]*model.Channel{hwBreakerLumia1}, nil)
 		c := hwClientErrorContext("")
-		state := paidRoute()
 		c.Set(hwRouteContextKey, state)
-		assert.Equal(t, []int{41, 42, 43}, hwRouteOrder(t, c, state, rateLimited))
-		assert.True(t, hwLumiaCooling(lumia.Id))
-		assert.True(t, hwLumiaCooling(spare.Id))
+		assert.Equal(t, []int{61}, hwRouteOrder(t, c, state, rateLimited))
+
+		_, other := hwBreakerRoute(HwPaidGroup)
+		assert.False(t, other.claim(hwBreakerLumia5), "the stock pick of channel 5 is refused")
+		assert.False(t, other.claim(hwBreakerLumia1))
+		assert.Equal(t, 63, hwNextID(other), "a paid request goes straight to Portix")
 	})
 
-	t.Run("a later paid request goes straight to Portix", func(t *testing.T) {
-		c := hwClientErrorContext("")
-		state := paidRoute()
-		c.Set(hwRouteContextKey, state)
-		assert.False(t, state.claim(lumia), "the stock pick of a cooling Lumia channel is refused")
-		assert.Equal(t, []int{43, 41, 42, 42}, hwRouteOrder(t, c, state, rateLimited), "Portix first; the cooling Lumia aliases only when nothing else is left")
+	t.Run("a paid request during the outage never retries cooling Lumia", func(t *testing.T) {
+		c, state := hwBreakerRoute(HwPaidGroup)
+		assert.Equal(t, []int{63}, hwRouteOrder(t, c, state, rateLimited))
 	})
 
-	// 30 Oct 2026: a free Playground request waited for two 429s on the same
-	// cooling channel and the paused retry (about 29 s) before its busy answer.
-	t.Run("a free request probes one cooling Lumia channel and then gets the busy answer", func(t *testing.T) {
-		assert.False(t, freeRoute().claim(spare), "the probe is the first cooling alias")
-		c := hwClientErrorContext("")
-		state := freeRoute()
-		c.Set(hwRouteContextKey, state)
-		require.True(t, state.claim(lumia), "without another candidate the cooling channel is the probe")
-		decision, handled := HwDecideRetry(c, rateLimited)
-		require.True(t, handled)
-		assert.Equal(t, "stop", decision.Action, "no second cooling alias, no paused retry, never Portix")
-		assert.False(t, HwRetryLoopExtends(c))
-		busy := HwTerminalError(c, rateLimited, decision)
+	t.Run("a free request gets the busy answer without touching Lumia", func(t *testing.T) {
+		c, state := hwBreakerRoute("free")
+		busy := hwBreakerSelectError(t, c, state)
 		require.NotNil(t, busy)
 		assert.Equal(t, http.StatusServiceUnavailable, busy.StatusCode)
 		assert.Equal(t, HwErrorCodeServiceBusy, busy.GetErrorCode())
+		assert.Zero(t, state.attempts)
+		assert.Nil(t, state.lastChannel)
+	})
 
-		c = hwClientErrorContext("")
-		state = freeRoute()
-		c.Set(hwRouteContextKey, state)
-		assert.Equal(t, []int{41}, hwRouteOrder(t, c, state, rateLimited), "the route's own pick is the probe as well")
+	t.Run("a paid request on a healthy Lumia pays one failure, not one per channel", func(t *testing.T) {
+		hwResetLumiaCooldown(t, 60000)
+		c, state := hwBreakerRoute(HwPaidGroup)
+		assert.Equal(t, []int{61, 63}, hwRouteOrder(t, c, state, rateLimited))
+	})
+
+	t.Run("a free request on a healthy Lumia gets the busy answer after one failure", func(t *testing.T) {
+		hwResetLumiaCooldown(t, 60000)
+		c, state := hwBreakerRoute("free")
+		assert.Equal(t, []int{61}, hwRouteOrder(t, c, state, rateLimited))
 		assert.True(t, state.finished)
 	})
 
-	t.Run("a success ends the cooldown of the channel that answered", func(t *testing.T) {
-		c := hwClientErrorContext("")
-		state := freeRoute()
-		c.Set(hwRouteContextKey, state)
-		require.Same(t, lumia, state.next())
-		HwNoteSupplierSuccess(c)
-		assert.False(t, hwLumiaCooling(lumia.Id))
-		assert.True(t, hwLumiaCooling(spare.Id), "the other alias keeps cooling")
-		assert.True(t, paidRoute().claim(lumia), "a paid request uses the recovered channel again")
-	})
+	t.Run("a success on either channel closes the breaker for both", func(t *testing.T) {
+		hwResetLumiaCooldown(t, 60000)
+		c, state := hwBreakerRoute(HwPaidGroup)
+		hwRouteOrder(t, c, state, rateLimited)
 
-	t.Run("an expired cooldown lets Lumia lead again", func(t *testing.T) {
-		hwLumiaCooldown.Lock()
-		hwLumiaCooldown.until[spare.Id] = time.Now().Add(-time.Second)
-		hwLumiaCooldown.Unlock()
-		assert.False(t, hwLumiaCooling(spare.Id))
-		assert.True(t, hwPolicyRoute([]*model.Channel{spare}, []*model.Channel{portix}).claim(spare))
+		c, state = hwBreakerRoute(HwPaidGroup)
+		state.recordAttempt(hwBreakerLumia5, HwProviderLumia)
+		HwNoteSupplierSuccess(c)
+
+		_, next := hwBreakerRoute(HwPaidGroup)
+		assert.Equal(t, 61, hwNextID(next), "Lumia leads again at once")
 	})
 }
 
-// The Lumia probe only shortens a route that meets a cooling alias; a free
-// route on a healthy Lumia keeps both aliases and the paused outage retry, and
-// a free route never reaches an alternative supplier.
-func TestHwLumiaProbeOnlyWhereLumiaIsCooling(t *testing.T) {
+// Consecutive outage failures double the cooldown up to five minutes; a success
+// starts again from the base. Every step is one probe after the cooldown.
+func TestHwLumiaBreakerEscalatesAndResets(t *testing.T) {
+	clock := hwResetLumiaCooldown(t, 60000)
+	rateLimited := hwPolicyError(http.StatusTooManyRequests, types.ErrorCodeBadResponseStatusCode)
+	failProbe := func(t *testing.T) {
+		t.Helper()
+		c, state := hwBreakerRoute(HwPaidGroup)
+		require.Equal(t, 61, hwNextID(state), "the probe goes to Lumia")
+		_, handled := HwDecideRetry(c, rateLimited)
+		require.True(t, handled)
+	}
+
+	failProbe(t)
+	for _, seconds := range []int{60, 120, 240, 300, 300} {
+		cooldown := time.Duration(seconds) * time.Second
+		clock.Advance(cooldown - time.Second)
+		_, early := hwBreakerRoute(HwPaidGroup)
+		require.Equal(t, 63, hwNextID(early), "still cooling one second before %d s", seconds)
+		clock.Advance(time.Second)
+		failProbe(t)
+	}
+
+	// A success closes the breaker; the next failure starts from 60 s again.
+	clock.Advance(300 * time.Second)
+	c, state := hwBreakerRoute(HwPaidGroup)
+	require.Equal(t, 61, hwNextID(state))
+	HwNoteSupplierSuccess(c)
+	_, closed := hwBreakerRoute(HwPaidGroup)
+	require.Equal(t, 61, hwNextID(closed), "closed: Lumia leads without waiting")
+
+	failProbe(t)
+	clock.Advance(59 * time.Second)
+	_, cooling := hwBreakerRoute(HwPaidGroup)
+	require.Equal(t, 63, hwNextID(cooling))
+	clock.Advance(time.Second)
+	_, probing := hwBreakerRoute(HwPaidGroup)
+	assert.Equal(t, 61, hwNextID(probing), "60 s after a reset, not 300")
+}
+
+// After the cooldown exactly one request probes Lumia. While it is in flight
+// every other request treats Lumia as cooling; the probe's lease frees the
+// slot again when it never reports back (client cancel, panic, an error that
+// is no outage).
+func TestHwLumiaBreakerAdmitsOneProbe(t *testing.T) {
+	rateLimited := hwPolicyError(http.StatusTooManyRequests, types.ErrorCodeBadResponseStatusCode)
+	openBreaker := hwHalfOpenBreaker
+
+	t.Run("a second request waits while the probe is in flight", func(t *testing.T) {
+		openBreaker(t)
+		_, probe := hwBreakerRoute(HwPaidGroup)
+		require.Equal(t, 61, hwNextID(probe))
+
+		_, paid := hwBreakerRoute(HwPaidGroup)
+		assert.False(t, paid.claim(hwBreakerLumia1), "the stock pick of Lumia is refused")
+		assert.Equal(t, 63, hwNextID(paid), "paid goes straight to the alternative")
+
+		c, free := hwBreakerRoute("free")
+		busy := hwBreakerSelectError(t, c, free)
+		require.NotNil(t, busy, "free is busy at once")
+		assert.Equal(t, HwErrorCodeServiceBusy, busy.GetErrorCode())
+		assert.Zero(t, free.attempts, "free never touches Lumia nor Portix")
+	})
+
+	t.Run("the probe's success closes the breaker", func(t *testing.T) {
+		openBreaker(t)
+		c, probe := hwBreakerRoute(HwPaidGroup)
+		require.Equal(t, 61, hwNextID(probe))
+		HwNoteSupplierSuccess(c)
+
+		_, next := hwBreakerRoute("free")
+		assert.Equal(t, 61, hwNextID(next))
+	})
+
+	t.Run("the probe's failure opens it again", func(t *testing.T) {
+		clock := openBreaker(t)
+		c, probe := hwBreakerRoute(HwPaidGroup)
+		require.Equal(t, 61, hwNextID(probe))
+		_, handled := HwDecideRetry(c, rateLimited)
+		require.True(t, handled)
+
+		clock.Advance(119 * time.Second)
+		_, paid := hwBreakerRoute(HwPaidGroup)
+		assert.Equal(t, 63, hwNextID(paid), "the escalated cooldown is 120 s")
+	})
+
+	t.Run("a probe that never reports frees the slot after its lease", func(t *testing.T) {
+		clock := openBreaker(t)
+		_, probe := hwBreakerRoute(HwPaidGroup)
+		require.Equal(t, 61, hwNextID(probe))
+
+		clock.Advance(59 * time.Second)
+		_, early := hwBreakerRoute(HwPaidGroup)
+		assert.Equal(t, 63, hwNextID(early), "the lease of 60 s still runs")
+
+		clock.Advance(time.Second)
+		_, later := hwBreakerRoute("free")
+		assert.Equal(t, 61, hwNextID(later), "the lease is over: the next request probes")
+	})
+}
+
+// A client that hangs up cancels the upstream call, and that surfaces as a
+// do_request_failed outage error. It says nothing about Lumia, so it must not
+// cool the account for every other customer, neither as a first failure nor as
+// the failure of the probe.
+func TestHwLumiaBreakerIgnoresAClientThatLeft(t *testing.T) {
+	connectionError := hwPolicyError(http.StatusInternalServerError, types.ErrorCodeDoRequestFailed)
+
+	t.Run("a cancelled request leaves the closed breaker closed", func(t *testing.T) {
+		hwResetLumiaCooldown(t, 60000)
+		c, state := hwBreakerRoute("free")
+		require.Equal(t, 61, hwNextID(state))
+		hwCancelledContext(c)
+
+		_, handled := HwDecideRetry(c, connectionError)
+		require.True(t, handled)
+
+		_, next := hwBreakerRoute("free")
+		assert.Equal(t, 61, hwNextID(next), "the next free request still routes to Lumia")
+	})
+
+	t.Run("the same error of a live client still opens it", func(t *testing.T) {
+		hwResetLumiaCooldown(t, 60000)
+		c, state := hwBreakerRoute("free")
+		require.Equal(t, 61, hwNextID(state))
+
+		_, handled := HwDecideRetry(c, connectionError)
+		require.True(t, handled)
+
+		_, next := hwBreakerRoute("free")
+		assert.Zero(t, hwNextID(next), "Lumia is cooling for the free request")
+	})
+
+	t.Run("a cancelled probe neither escalates nor keeps the slot", func(t *testing.T) {
+		clock := hwHalfOpenBreaker(t)
+		c, probe := hwBreakerRoute(HwPaidGroup)
+		require.Equal(t, 61, hwNextID(probe))
+		hwCancelledContext(c)
+		_, handled := HwDecideRetry(c, connectionError)
+		require.True(t, handled)
+
+		live, second := hwBreakerRoute("free")
+		require.Equal(t, 61, hwNextID(second), "the slot is free at once and the breaker did not cool again")
+		_, handled = HwDecideRetry(live, connectionError)
+		require.True(t, handled)
+
+		clock.Advance(119 * time.Second)
+		_, cooling := hwBreakerRoute(HwPaidGroup)
+		require.Equal(t, 63, hwNextID(cooling), "the live probe's failure is the second one: 120 s")
+		clock.Advance(time.Second)
+		_, again := hwBreakerRoute(HwPaidGroup)
+		assert.Equal(t, 61, hwNextID(again), "the cancel counted for nothing: not 240 s")
+	})
+}
+
+// A request that took the probe slot and ends without success or an outage
+// failure must give the slot back at once. Without it free users get the busy
+// answer for the whole lease (60 to 300 s) while Lumia may answer fine.
+func TestHwLumiaProbeIsReleasedWhenTheHolderEndsWithoutAVerdict(t *testing.T) {
+	t.Run("a holder that ends silently frees the slot at once", func(t *testing.T) {
+		hwHalfOpenBreaker(t)
+		c, holder := hwBreakerRoute("free")
+		require.Equal(t, 61, hwNextID(holder))
+
+		_, blocked := hwBreakerRoute("free")
+		require.Zero(t, hwNextID(blocked), "while the holder runs, nobody else probes")
+
+		HwReleaseLumiaProbe(c)
+
+		_, next := hwBreakerRoute("free")
+		assert.Equal(t, 61, hwNextID(next), "the next request probes instead of getting the busy answer")
+	})
+
+	t.Run("the release keeps the failures and the escalation", func(t *testing.T) {
+		clock := hwHalfOpenBreaker(t)
+		c, holder := hwBreakerRoute("free")
+		require.Equal(t, 61, hwNextID(holder))
+		HwReleaseLumiaProbe(c)
+
+		c, probe := hwBreakerRoute("free")
+		require.Equal(t, 61, hwNextID(probe))
+		_, handled := HwDecideRetry(c, hwPolicyError(http.StatusTooManyRequests, types.ErrorCodeBadResponseStatusCode))
+		require.True(t, handled)
+
+		clock.Advance(119 * time.Second)
+		_, cooling := hwBreakerRoute("free")
+		assert.Zero(t, hwNextID(cooling), "the second failure cools for 120 s: the release reset nothing")
+	})
+
+	t.Run("a reply that is no outage frees the slot before the fallback runs", func(t *testing.T) {
+		hwHalfOpenBreaker(t)
+		holder := hwPolicyRoute([]*model.Channel{hwBreakerLumia1}, []*model.Channel{hwBreakerPortix})
+		holder.group, holder.userGroup = HwPaidGroup, HwPaidGroup
+		c := hwClientErrorContext("")
+		c.Set(hwRouteContextKey, holder)
+		require.Equal(t, 61, hwNextID(holder))
+		decision, handled := HwDecideRetry(c, hwPolicyError(http.StatusUnauthorized, "invalid_api_key"))
+		require.True(t, handled)
+		require.Equal(t, "retry", decision.Action)
+		require.Equal(t, 63, hwNextID(holder), "the holder goes on to Portix")
+
+		_, next := hwBreakerRoute("free")
+		assert.Equal(t, 61, hwNextID(next), "Lumia answered, so the slot is free while Portix still runs")
+	})
+
+	t.Run("a holder that already got its verdict releases nothing", func(t *testing.T) {
+		hwHalfOpenBreaker(t)
+		c, holder := hwBreakerRoute(HwPaidGroup)
+		require.Equal(t, 61, hwNextID(holder))
+		HwNoteSupplierSuccess(c)
+		HwReleaseLumiaProbe(c)
+
+		_, next := hwBreakerRoute("free")
+		assert.Equal(t, 61, hwNextID(next), "the breaker is closed")
+		_, again := hwBreakerRoute("free")
+		assert.Equal(t, 61, hwNextID(again), "and stays closed")
+	})
+
+	t.Run("a holder never frees the slot of a newer probe", func(t *testing.T) {
+		clock := hwHalfOpenBreaker(t)
+		c, old := hwBreakerRoute("free")
+		require.Equal(t, 61, hwNextID(old))
+		clock.Advance(60 * time.Second)
+		_, newer := hwBreakerRoute("free")
+		require.Equal(t, 61, hwNextID(newer), "the old lease ran out; a new probe took over")
+
+		HwReleaseLumiaProbe(c)
+
+		_, third := hwBreakerRoute("free")
+		assert.Zero(t, hwNextID(third), "the newer probe still holds the slot")
+	})
+
+	t.Run("a request without a route or without the probe releases nothing", func(t *testing.T) {
+		hwHalfOpenBreaker(t)
+		_, probe := hwBreakerRoute("free")
+		require.Equal(t, 61, hwNextID(probe))
+
+		HwReleaseLumiaProbe(nil)
+		HwReleaseLumiaProbe(hwClientErrorContext(""))
+		bystander, _ := hwBreakerRoute(HwPaidGroup)
+		HwReleaseLumiaProbe(bystander)
+
+		_, blocked := hwBreakerRoute("free")
+		assert.Zero(t, hwNextID(blocked), "the probe holder still has its slot")
+	})
+}
+
+// HwLumiaCooldownMs of zero switches the breaker off: no request is held back
+// and the paused outage retry of the plain route stays.
+func TestHwLumiaBreakerOffChangesNothing(t *testing.T) {
 	previousPause := common.HwLumiaRetryPauseMs
 	common.HwLumiaRetryPauseMs = 0
 	t.Cleanup(func() { common.HwLumiaRetryPauseMs = previousPause })
-
-	lumia := hwPolicyChannel(51, HwProviderLumia, "")
-	spare := hwPolicyChannel(52, HwProviderLumia, "")
-	portix := hwPolicyChannel(53, HwProviderPortix, "")
+	hwResetLumiaCooldown(t, 0)
 	rateLimited := hwPolicyError(http.StatusTooManyRequests, types.ErrorCodeBadResponseStatusCode)
-	freeRoute := func() (*gin.Context, *HwRouteState) {
-		state := hwPolicyRoute([]*model.Channel{lumia, spare}, []*model.Channel{portix})
-		state.group, state.userGroup = "free", "free"
-		c := hwClientErrorContext("")
-		c.Set(hwRouteContextKey, state)
-		return c, state
-	}
 
-	t.Run("without a cooldown the free route keeps the outage retry", func(t *testing.T) {
-		hwResetLumiaCooldown(t, 60000)
-		c, state := freeRoute()
-		assert.Equal(t, []int{51, 52, 52}, hwRouteOrder(t, c, state, rateLimited))
-		assert.True(t, state.finished)
-	})
+	c, state := hwBreakerRoute("free")
+	assert.Equal(t, []int{61, 62, 62}, hwRouteOrder(t, c, state, rateLimited), "both channels and the paused retry")
 
-	t.Run("with the cooldown switched off the free route is unchanged", func(t *testing.T) {
-		hwResetLumiaCooldown(t, 0)
-		c, state := freeRoute()
-		assert.Equal(t, []int{51, 52, 52}, hwRouteOrder(t, c, state, rateLimited))
-	})
-
-	t.Run("one cooling alias leaves only the healthy one to try", func(t *testing.T) {
-		hwResetLumiaCooldown(t, 60000)
-		hwStartLumiaCooldown(lumia.Id)
-		c, state := freeRoute()
-		assert.Equal(t, []int{52}, hwRouteOrder(t, c, state, rateLimited), "no cooling probe after the healthy alias, no paused retry")
-	})
+	_, first := hwBreakerRoute(HwPaidGroup)
+	require.Equal(t, 61, hwNextID(first))
+	_, second := hwBreakerRoute(HwPaidGroup)
+	assert.Equal(t, 61, hwNextID(second), "no probe slot: Lumia is open to every request")
 }

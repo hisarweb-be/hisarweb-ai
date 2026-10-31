@@ -90,6 +90,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		defer ws.Close()
 	}
 
+	// Whatever way this request ends, a Lumia probe slot it still holds goes back.
+	defer service.HwReleaseLumiaProbe(c)
+
 	defer func() {
 		if newAPIError != nil {
 			service.RecordRequestPolicyTermination(c, newAPIError)
@@ -540,6 +543,9 @@ func executeTaskSubmissionWith(
 	var taskErr *taskdto.TaskError
 	durable := false
 	stage := "start"
+	// Task submissions never report to the Lumia breaker, so a probe slot they
+	// took must go back when the submission ends.
+	defer service.HwReleaseLumiaProbe(c)
 	defer func() {
 		if !durable && relayInfo.Billing != nil {
 			diagnostics.refund(stage)
