@@ -271,3 +271,42 @@ test('explains below the four steps why the phone is verified', async () => {
   ).toBeInTheDocument()
   expect(screen.getByText(/SMS göndermeyiz, sizi aramayız/)).toBeInTheDocument()
 })
+
+// The vibe teaser carries the beginner film: poster facade only (no autoplay,
+// preload none so the mp4 stays off the wire until play), Turkish file on the
+// Turkish page and the English file on the English page.
+test('offers the vibe film as a poster facade with the Turkish files', async () => {
+  renderLanding()
+
+  const film = await screen.findByLabelText(
+    'HisarWeb AI vibe kodlama tanıtım filmi'
+  )
+  expect(film).toHaveAttribute('controls')
+  expect(film).toHaveAttribute('preload', 'none')
+  expect(film).toHaveAttribute('src', '/film/hisarweb-ai-vibe-kodlama-v3.mp4')
+  expect(film).toHaveAttribute(
+    'poster',
+    '/film/hisarweb-ai-vibe-kodlama-v3.jpg'
+  )
+  expect(film).not.toHaveAttribute('autoplay')
+  expect(film.querySelector('track')).toBeNull()
+})
+
+test('plays the English vibe film on the English page', async () => {
+  await useLanguage('en')
+  renderLanding()
+
+  const film = await screen.findByLabelText(
+    'HisarWeb AI film for new vibecoders'
+  )
+  expect(film).toHaveAttribute('preload', 'none')
+  expect(film).toHaveAttribute(
+    'src',
+    '/film/hisarweb-ai-vibe-kodlama-en-v3.mp4'
+  )
+  expect(film).toHaveAttribute(
+    'poster',
+    '/film/hisarweb-ai-vibe-kodlama-en-v3.jpg'
+  )
+  expect(film).not.toHaveAttribute('autoplay')
+})

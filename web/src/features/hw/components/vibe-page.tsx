@@ -27,7 +27,12 @@ import { Button } from '@/components/ui/button'
 
 import { KEY_PLACEHOLDER, OPENAI_BASE_URL } from '../docs-tool-guides'
 import { useHwLanguage } from '../texts'
-import { useVibeText, type VibeTextKey } from '../vibe-texts'
+import {
+  useVibeText,
+  VIBE_FILMS,
+  type VibeFilmFiles,
+  type VibeTextKey,
+} from '../vibe-texts'
 import { VibeDiagram } from './vibe-diagram'
 import {
   BulletList,
@@ -37,25 +42,6 @@ import {
   type VibeTranslate,
 } from './vibe-parts'
 import { AiHelp, Fit, Tools } from './vibe-tools'
-
-type Film = { src: string; poster: string }
-
-/**
- * One film per page language, each with its own voice and on-screen text, so
- * there is no subtitle track on top of the words already in the picture. The
- * poster is the frame shown before play. The file names carry a version
- * because browsers cache the mp4 for a week.
- */
-const VIBE_FILMS: Record<'tr' | 'en', Film> = {
-  tr: {
-    src: '/film/hisarweb-ai-vibe-kodlama-v2.mp4',
-    poster: '/film/hisarweb-ai-vibe-kodlama.jpg',
-  },
-  en: {
-    src: '/film/hisarweb-ai-vibe-kodlama-en-v1.mp4',
-    poster: '/film/hisarweb-ai-vibe-kodlama-en.jpg',
-  },
-}
 
 /** Same key, two models: only the `model` field changes between the requests. */
 const TWO_MODELS_EXAMPLE = ['claude-opus-5-5', 'claude-sonnet-5-5']
@@ -109,7 +95,7 @@ function Layers(props: { text: VibeTranslate }) {
 
 /** Renders nothing while there is no film, so the page has no empty box. */
 export function VibeFilm(props: {
-  film?: Film
+  film?: VibeFilmFiles
   title: string
   caption?: string
   label: string

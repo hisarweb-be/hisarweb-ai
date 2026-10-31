@@ -361,6 +361,26 @@ export type VibeTextKey = keyof typeof tr
 
 export const vibeTexts = { tr, en } as const
 
+export type VibeFilmFiles = { src: string; poster: string }
+
+/**
+ * One film per page language, each with its own voice and on-screen text, so
+ * there is no subtitle track on top of the words already in the picture. The
+ * poster is the frame shown before play. The file names carry a version
+ * because browsers cache the mp4 for a week. The landing page and
+ * `/vibe-kodlama` share these files.
+ */
+export const VIBE_FILMS: Record<'tr' | 'en', VibeFilmFiles> = {
+  tr: {
+    src: '/film/hisarweb-ai-vibe-kodlama-v3.mp4',
+    poster: '/film/hisarweb-ai-vibe-kodlama-v3.jpg',
+  },
+  en: {
+    src: '/film/hisarweb-ai-vibe-kodlama-en-v3.mp4',
+    poster: '/film/hisarweb-ai-vibe-kodlama-en-v3.jpg',
+  },
+}
+
 /** Returns the vibe coding text of the active interface language. */
 export function useVibeText(): (key: VibeTextKey, vars?: HwTextVars) => string {
   const language = useHwLanguage()

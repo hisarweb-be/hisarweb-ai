@@ -362,8 +362,11 @@ describe('vibe coding page', () => {
     const film = screen.getByLabelText('HisarWeb AI vibe kodlama tanıtım filmi')
     expect(film).toHaveAttribute('controls')
     expect(film).toHaveAttribute('preload', 'metadata')
-    expect(film).toHaveAttribute('poster', '/film/hisarweb-ai-vibe-kodlama.jpg')
-    expect(film).toHaveAttribute('src', '/film/hisarweb-ai-vibe-kodlama-v2.mp4')
+    expect(film).toHaveAttribute(
+      'poster',
+      '/film/hisarweb-ai-vibe-kodlama-v3.jpg'
+    )
+    expect(film).toHaveAttribute('src', '/film/hisarweb-ai-vibe-kodlama-v3.mp4')
     expect(film).not.toHaveAttribute('autoplay')
   })
 
@@ -379,11 +382,11 @@ describe('vibe coding page', () => {
     const film = screen.getByLabelText('HisarWeb AI film for new vibecoders')
     expect(film).toHaveAttribute(
       'src',
-      '/film/hisarweb-ai-vibe-kodlama-en-v1.mp4'
+      '/film/hisarweb-ai-vibe-kodlama-en-v3.mp4'
     )
     expect(film).toHaveAttribute(
       'poster',
-      '/film/hisarweb-ai-vibe-kodlama-en.jpg'
+      '/film/hisarweb-ai-vibe-kodlama-en-v3.jpg'
     )
     expect(container.querySelector('track')).toBeNull()
   })
