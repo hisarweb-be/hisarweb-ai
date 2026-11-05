@@ -74,7 +74,12 @@ func HwSyncStatus(c *gin.Context) {
 	defer cache.Unlock()
 	if time.Now().After(cache.expiresAt) {
 		cache.tag = hwFetchLatestUpstreamTag()
-		cache.prNumber = hwFetchOpenSyncPull(hwSyncStatusBranch + cache.tag)
+		cache.prNumber = nil
+		// Without a tag there is no sync branch to look for: asking GitHub for
+		// "sync/upstream-" would answer for some other branch.
+		if cache.tag != "" {
+			cache.prNumber = hwFetchOpenSyncPull(hwSyncStatusBranch + cache.tag)
+		}
 		cache.expiresAt = time.Now().Add(hwSyncStatusTTL)
 	}
 	if cache.tag == "" {
