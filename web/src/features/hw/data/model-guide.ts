@@ -76,8 +76,8 @@ export const MODEL_GUIDE: Readonly<Record<string, ModelGuide>> = {
       en: 'OpenAI: fastest and cheapest',
     },
     description: {
-      tr: 'OpenAI’nin en hızlı ve en ucuz modeli. Sohbet, kısa özetleme, sınıflandırma ve yüzlerce küçük işi arka arkaya çalıştırmak için uygundur; Haiku ile aynı fiyata OpenAI kalitesi.',
-      en: 'OpenAI’s fastest and cheapest model. A good fit for chat, short summaries, sorting and running hundreds of small jobs in a row, with OpenAI quality at the same price as Haiku.',
+      tr: 'OpenAI’nin en hızlı ve en ucuz modeli. Sohbet, kısa özetleme, sınıflandırma ve yüzlerce küçük işi arka arkaya çalıştırmak için uygundur; bu katalogdaki en düşük fiyat sınıfında.',
+      en: 'OpenAI’s fastest and cheapest model. A good fit for chat, short summaries, sorting and running hundreds of small jobs in a row, priced in the lowest tier of this catalogue.',
     },
   },
   'grok-4': {
