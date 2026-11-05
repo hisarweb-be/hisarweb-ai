@@ -93,7 +93,6 @@ func authHelper(c *gin.Context, minRole int) {
 	if !hwAfterAuth(c, hwAuthKind(minRole)) {
 		return
 	}
-
 	c.Next()
 
 	finishAdminAudit(c, auditWriter)
