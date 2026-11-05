@@ -90,12 +90,7 @@ func authHelper(c *gin.Context, minRole int) {
 		auditWriter = beginAdminAudit(c)
 	}
 
-	// The free-group limit and the reserve gate run here, at the end of the
-	// success path, so a route carries neither in its own chain. Only the
-	// common-user login reaches a route that spends credit; the admin and root
-	// logins share this helper and always get the empty pair.
 	if !hwAfterAuth(c, hwAuthKind(minRole)) {
-		defer finishAdminAudit(c, auditWriter)
 		return
 	}
 
@@ -651,9 +646,6 @@ func TokenAuth() func(c *gin.Context) {
 		if err != nil {
 			return
 		}
-		// The free-group limit and the reserve gate run here, at the end of the
-		// success path, so a route carries neither in its own chain. Which of the
-		// two a route gets follows from its matched pattern (HwAuthGatesFor).
 		if !hwAfterAuth(c, hwAuthToken) {
 			return
 		}

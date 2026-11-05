@@ -125,6 +125,8 @@ func hwAuthKind(minRole int) string {
 // hwAfterAuth applies the gates HwAuthGatesFor selects, free-group first, and
 // reports whether the request may continue. A gate that refuses has already
 // written the refusal, so the caller must return without running the chain.
+// TokenAuth and authHelper call it at the end of their success path, so a route
+// carries neither gate in its own chain.
 func hwAfterAuth(c *gin.Context, auth string) bool {
 	freeGroup, reserve := HwAuthGatesFor(auth, c.Request.Method, c.FullPath())
 	if freeGroup && !hwFreeGroupGate(c) {
@@ -143,16 +145,6 @@ func hwAfterAuth(c *gin.Context, auth string) bool {
 func HwFreeGroupRateLimit() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if hwFreeGroupGate(c) {
-			c.Next()
-		}
-	}
-}
-
-// HwBureauReserveGate exposes hwBureauReserveGate as a middleware, for the same
-// route-level tests as HwFreeGroupRateLimit.
-func HwBureauReserveGate() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if hwBureauReserveGate(c) {
 			c.Next()
 		}
 	}
