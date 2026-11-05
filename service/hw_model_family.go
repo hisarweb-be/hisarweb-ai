@@ -48,3 +48,19 @@ func HwModelFamily(customerModel string) string {
 	}
 	return name
 }
+
+// hwModelVendor is the supplier segment of a model name: "claude" for
+// claude-sonnet-5-5, "gpt" for gpt-6-luna. One key serves every name of a
+// supplier, so the vendor is the widest fallback that can still answer a
+// request; it is only used when no channel of the model's own family is left.
+func hwModelVendor(customerModel string) string {
+	name := strings.ToLower(strings.TrimSpace(customerModel))
+	if idx := strings.IndexByte(name, '@'); idx >= 0 {
+		name = strings.TrimSpace(name[:idx])
+	}
+	if idx := strings.LastIndexByte(name, '/'); idx >= 0 {
+		name = strings.TrimSpace(name[idx+1:])
+	}
+	vendor, _, _ := strings.Cut(name, "-")
+	return strings.TrimSpace(vendor)
+}

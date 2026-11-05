@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -276,6 +277,24 @@ func hwSeedSoldModelChannels(map[string]string) error {
 				})
 			})
 			if idx < 0 {
+				// The family anchor can be gone from every channel while the
+				// vendor still serves the name: claude-sonnet-5 was retired and
+				// taken out of the model lists, so claude-sonnet-5-5 had no
+				// family left to land on and was skipped without a word
+				// (measured on 5 Nov 2026, 1 of 9 names on /api/pricing). Fall
+				// back to an enabled channel of the same vendor, because one key
+				// serves every name of that vendor.
+				vendor := hwModelVendor(sold.Name)
+				idx = slices.IndexFunc(channels, func(channel model.Channel) bool {
+					return enabled(&channel) && slices.ContainsFunc(channel.GetModels(), func(name string) bool {
+						return vendor != "" && hwModelVendor(name) == vendor
+					})
+				})
+			}
+			if idx < 0 {
+				// Nothing serves it. Silence is how this outage went unnoticed,
+				// so say it once per name per start instead of skipping quietly.
+				logger.LogWarn(nil, "hw seed: sold model %s has no enabled channel for family %s or vendor %s", sold.Name, family, hwModelVendor(sold.Name))
 				continue
 			}
 		}
