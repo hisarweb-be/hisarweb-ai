@@ -76,12 +76,8 @@ describe('getModelFallback', () => {
       'claude-sonnet-5',
       'gpt-6.1-sol'
     )
-    expect(getModelFallback(models, 'claude-haiku-4-5')).toBe(
-      'gpt-6-luna'
-    )
-    expect(getModelFallback(models, 'claude-sonnet-5')).toBe(
-      'gpt-6.1-sol'
-    )
+    expect(getModelFallback(models, 'claude-haiku-4-5')).toBe('gpt-6-luna')
+    expect(getModelFallback(models, 'claude-sonnet-5')).toBe('gpt-6.1-sol')
   })
 
   it('keeps an older model when its successor is not offered', () => {
@@ -91,11 +87,7 @@ describe('getModelFallback', () => {
   })
 
   it('falls back to the best-value model, not the first in the list', () => {
-    const models = options(
-      'gpt-6-astra',
-      'gpt-6.1-sol',
-      'gpt-6-luna'
-    )
+    const models = options('gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-luna')
     expect(getModelFallback(models, 'gpt-4o')).toBe('gpt-6-luna')
     expect(
       getModelFallback(options('gpt-6-astra', 'gpt-6.1-sol'), 'gpt-4o')
@@ -113,17 +105,17 @@ describe('getModelFallback', () => {
 describe('labelUnavailableModels', () => {
   it('appends the suffix to a temporarily unavailable model only', () => {
     const labelled = labelUnavailableModels(
-      options('gpt-6-astra', 'gpt-6-astra'),
-      { 'gpt-6-astra': 'gpt-6-astra' },
+      options('gpt-6-astra', 'gpt-6-luna'),
+      { 'gpt-6-astra': 'gpt-6-luna' },
       'temporarily unavailable'
     )
     expect(labelled.map((model) => model.label)).toEqual([
       'gpt-6-astra (temporarily unavailable)',
-      'gpt-6-astra',
+      'gpt-6-luna',
     ])
     expect(labelled.map((model) => model.value)).toEqual([
       'gpt-6-astra',
-      'gpt-6-astra',
+      'gpt-6-luna',
     ])
   })
 
@@ -135,7 +127,7 @@ describe('labelUnavailableModels', () => {
 
 describe('getUnavailableAlternative', () => {
   const models = options(
-    'grok-4',
+    'gemini-3.8-pro',
     'gpt-6-astra',
     'gpt-6',
     'gpt-6-astra'
@@ -145,17 +137,17 @@ describe('getUnavailableAlternative', () => {
     expect(
       getUnavailableAlternative(
         'model_unavailable',
-        'grok-4 is temporarily unavailable. Try gpt-6-astra or try again shortly.',
+        'gemini-3.8-pro is temporarily unavailable. Try gpt-6-astra or try again shortly.',
         models
       )
     ).toBe('gpt-6-astra')
     expect(
       getUnavailableAlternative(
         'model_unavailable',
-        'gpt-6-astra şu anda geçici olarak kullanılamıyor. gpt-6-astra modelini deneyin veya biraz sonra tekrar deneyin.',
+        'gpt-6-astra şu anda geçici olarak kullanılamıyor. gpt-6 modelini deneyin veya biraz sonra tekrar deneyin.',
         models
       )
-    ).toBe('gpt-6-astra')
+    ).toBe('gpt-6')
   })
 
   it('returns null without a suggestion, another error code or an unreachable model', () => {
@@ -169,14 +161,14 @@ describe('getUnavailableAlternative', () => {
     expect(
       getUnavailableAlternative(
         'service_busy',
-        'grok-4 is temporarily unavailable. Try gpt-6-astra or try again shortly.',
+        'gemini-3.8-pro is temporarily unavailable. Try gpt-6-astra or try again shortly.',
         models
       )
     ).toBeNull()
     expect(
       getUnavailableAlternative(
         'model_unavailable',
-        'grok-4 is temporarily unavailable. Try gpt-6.1-sol or try again shortly.',
+        'gemini-3.8-pro is temporarily unavailable. Try gpt-6.1-sol or try again shortly.',
         models
       )
     ).toBeNull()
@@ -186,14 +178,14 @@ describe('getUnavailableAlternative', () => {
     expect(
       getUnavailableAlternative(
         'model_unavailable',
-        'API request error: grok-4 is temporarily unavailable. Try gpt-6.1-sol or try again shortly.',
+        'API request error: gemini-3.8-pro is temporarily unavailable. Try gpt-6.1-sol or try again shortly.',
         models
       )
     ).toBeNull()
     expect(
       getUnavailableAlternative(
         'model_unavailable',
-        'API request error: grok-4 is temporarily unavailable. Try gpt-6-astra or try again shortly.',
+        'API request error: gemini-3.8-pro is temporarily unavailable. Try gpt-6-astra or try again shortly.',
         models
       )
     ).toBe('gpt-6-astra')
