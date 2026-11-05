@@ -30,7 +30,12 @@ func AllOption() ([]*Option, error) {
 	return options, err
 }
 
-func InitOptionMap() {
+// InitOptionMap builds the option map a server starts with. openDatabase tells
+// whether the options table may be read: the startup hook that seeds our
+// production defaults runs only after that read, so on the normal start it runs
+// once at the end; a caller without a database (an early store creation) passes
+// false and the hook waits for the first real start.
+func InitOptionMap(openDatabase bool) {
 	common.OptionMapRWMutex.Lock()
 	common.OptionMap = make(map[string]string)
 
@@ -55,26 +60,6 @@ func InitOptionMap() {
 	common.OptionMap["DisplayTokenStatEnabled"] = strconv.FormatBool(common.DisplayTokenStatEnabled)
 	common.OptionMap["DrawingEnabled"] = strconv.FormatBool(common.DrawingEnabled)
 	common.OptionMap["TaskEnabled"] = strconv.FormatBool(common.TaskEnabled)
-	common.OptionMap[HwTryPerUsdOption] = ""
-	common.OptionMap[HwEurPerUsdOption] = ""
-	common.OptionMap[HwEurPerUsdDateOption] = ""
-	common.OptionMap[HwEurPresetBaseOption] = ""
-	common.OptionMap[HwMinTopUpTryOption] = "100"
-	common.OptionMap[HwMaxTopUpTryOption] = "20000"
-	common.OptionMap[HwMaxOpenOrdersOption] = "3"
-	common.OptionMap[HwLowBalancePercentOption] = "10"
-	common.OptionMap[HwLowBalanceMinTryOption] = "0"
-	common.OptionMap[HwWindowCapacityUSDOption] = ""
-	common.OptionMap[HwPhase0MeasurementDoneOption] = "false"
-	common.OptionMap[HwCustomerWindowCeilingUSDOption] = ""
-	common.OptionMap[HwCheckoutReturnURLOption] = ""
-	common.OptionMap[HwBonusUsdMinOption] = "10"
-	common.OptionMap[HwBonusUsdAmountOption] = "1"
-	common.OptionMap[HwBonusEurMinOption] = "10"
-	common.OptionMap[HwBonusEurAmountOption] = "1"
-	common.OptionMap[HwBonusTryMinOption] = "500"
-	common.OptionMap[HwBonusTryAmountOption] = "50"
-	common.OptionMap[HwUpstreamPromptOverheadOption] = ""
 	common.OptionMap["TaskPluginEnabled"] = strconv.FormatBool(constant.TaskPluginEnabled)
 	jsplugin.DefaultRegistry.SetEnabled(constant.TaskPluginEnabled)
 	common.OptionMap[setting.TaskPluginMarketplaceSourcesKey] = setting.TaskPluginMarketplaceSources2JsonString()
@@ -210,14 +195,7 @@ func InitOptionMap() {
 	common.OptionMap["AutomaticDisableStatusCodes"] = operation_setting.AutomaticDisableStatusCodesToString()
 	common.OptionMap["AutomaticRetryStatusCodes"] = operation_setting.AutomaticRetryStatusCodesToString()
 	common.OptionMap["ExposeRatioEnabled"] = strconv.FormatBool(ratio_setting.IsExposeRatioEnabled())
-
-	// HisarWeb AI TL pricing: source URLs of the daily price snapshot (empty
-	// means the built-in URL) and the published USD/TRY rate with its validity
-	// date, written by the daily snapshot job.
-	common.OptionMap["HwPriceListURL"] = ""
-	common.OptionMap["HwFxURL"] = ""
-	common.OptionMap["HwTryPerUsd"] = ""
-	common.OptionMap["HwTryPerUsdDate"] = ""
+	maps.Copy(common.OptionMap, HwDefaultOptions)
 
 	// 自动添加所有注册的模型配置
 	modelConfigs := config.GlobalConfig.ExportAllConfigs()
@@ -225,6 +203,9 @@ func InitOptionMap() {
 
 	common.OptionMapRWMutex.Unlock()
 	loadOptionsFromDatabase()
+	if openDatabase && optionHook != nil {
+		optionHook()
+	}
 }
 
 func loadOptionsFromDatabase() {
