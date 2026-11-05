@@ -203,8 +203,8 @@ func InitOptionMap(openDatabase bool) {
 
 	common.OptionMapRWMutex.Unlock()
 	loadOptionsFromDatabase()
-	if openDatabase && optionHook != nil {
-		optionHook()
+	if openDatabase && hwOptionHook != nil {
+		hwOptionHook()
 	}
 }
 

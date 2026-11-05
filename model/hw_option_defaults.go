@@ -39,8 +39,10 @@ var HwDefaultOptions = map[string]string{
 	HwBonusTryMinOption:              "500",
 	HwBonusTryAmountOption:           "50",
 	HwUpstreamPromptOverheadOption:   "",
-	HwOptionPriceListURL:             "",
-	HwOptionFxURL:                    "",
-	HwOptionTryPerUsd:                "",
-	HwOptionTryPerUsdDate:            "",
+	// The source URLs of the daily price snapshot and the published USD/TRY
+	// rate; the keys are literals because their constants live in service/,
+	// which imports this package.
+	"HwPriceListURL":  "",
+	"HwFxURL":         "",
+	"HwTryPerUsdDate": "",
 }
