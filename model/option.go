@@ -31,13 +31,13 @@ func AllOption() ([]*Option, error) {
 }
 
 // InitOptionMap builds the option map a server starts with. openDatabase tells
-// whether the options table may be read: the startup hook that seeds our
-// production defaults runs only after that read, so on the normal start it runs
-// once at the end; a caller without a database (an early store creation) passes
+// whether the options table may be read: the hook runs after that read, so on
+// the normal start it runs once at the end; a caller without a database passes
 // false and the hook waits for the first real start.
 func InitOptionMap(openDatabase bool) {
 	common.OptionMapRWMutex.Lock()
 	common.OptionMap = make(map[string]string)
+	hwAddOptionDefaults()
 
 	// 添加原有的系统配置
 	common.OptionMap["FileUploadPermission"] = strconv.Itoa(common.FileUploadPermission)
@@ -195,7 +195,6 @@ func InitOptionMap(openDatabase bool) {
 	common.OptionMap["AutomaticDisableStatusCodes"] = operation_setting.AutomaticDisableStatusCodesToString()
 	common.OptionMap["AutomaticRetryStatusCodes"] = operation_setting.AutomaticRetryStatusCodesToString()
 	common.OptionMap["ExposeRatioEnabled"] = strconv.FormatBool(ratio_setting.IsExposeRatioEnabled())
-	maps.Copy(common.OptionMap, HwDefaultOptions)
 
 	// 自动添加所有注册的模型配置
 	modelConfigs := config.GlobalConfig.ExportAllConfigs()
@@ -203,9 +202,7 @@ func InitOptionMap(openDatabase bool) {
 
 	common.OptionMapRWMutex.Unlock()
 	loadOptionsFromDatabase()
-	if openDatabase && hwOptionHook != nil {
-		hwOptionHook()
-	}
+	hwRunOptionHook(openDatabase)
 }
 
 func loadOptionsFromDatabase() {
