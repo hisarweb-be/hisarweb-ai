@@ -88,6 +88,32 @@ export function compareSystemVersions(
   return 0
 }
 
+const publishedReleaseSchema = systemReleaseSchema.extend({
+  draft: z.boolean(),
+})
+
+export function selectLatestRelease(payload: unknown): SystemRelease | null {
+  if (!Array.isArray(payload)) throw new Error('Unexpected release payload')
+
+  let latest: SystemRelease | null = null
+  let validPayload = payload.length === 0
+  for (const item of payload) {
+    const parsed = publishedReleaseSchema.safeParse(item)
+    if (!parsed.success) continue
+    validPayload = true
+    const release = parsed.data
+    if (release.draft || !parseSystemVersion(release.tag_name)) continue
+    if (
+      !latest ||
+      compareSystemVersions(release.tag_name, latest.tag_name) === 1
+    ) {
+      latest = systemReleaseSchema.parse(release)
+    }
+  }
+  if (!validPayload) throw new Error('Unexpected release payload')
+  return latest
+}
+
 export function getSystemReleaseUrl(release: SystemRelease): string {
   return release.prNumber
     ? `https://github.com/hisarweb-be/hisarweb-ai/pull/${release.prNumber}`
