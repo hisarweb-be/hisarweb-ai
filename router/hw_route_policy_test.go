@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -42,12 +43,42 @@ func (recorder *hwRoutePolicyRecorder) middleware(shortName func(string) string)
 		// HandlerNames() returns the handlers in the order they will run, so the
 		// recorded order is the real middleware order relative to the auth.
 		for _, handler := range c.HandlerNames() {
-			if name := shortName(handler); name != "" && !slices.Contains(policy, name) {
+			name := shortName(handler)
+			if name == "" {
+				continue
+			}
+			if !slices.Contains(policy, name) {
 				policy = append(policy, name)
+			}
+			// The free-group limit and the reserve gate are no longer mounted by
+			// the route: the auth hook applies them at the end of its success
+			// path. Record where that hook puts them, so the table keeps
+			// describing the policy the customer actually meets.
+			if auth := hwPolicyAuthKind(name); auth != "" {
+				freeGroup, reserve := middleware.HwAuthGatesFor(auth, c.Request.Method, c.FullPath())
+				if freeGroup {
+					policy = append(policy, "HwFreeGroupRateLimit")
+				}
+				if reserve {
+					policy = append(policy, "HwBureauReserveGate")
+				}
 			}
 		}
 		recorder.seen[key] = policy
 		c.AbortWithStatus(http.StatusNoContent)
+	}
+}
+
+// hwPolicyAuthKind maps a recorded auth middleware to the hook's auth name; the
+// artifact-token auth runs its own hook and gets no gates from this one.
+func hwPolicyAuthKind(name string) string {
+	switch name {
+	case "TokenAuth":
+		return "token"
+	case "UserAuth":
+		return "user"
+	default:
+		return ""
 	}
 }
 
