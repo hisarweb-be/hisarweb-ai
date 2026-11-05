@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { modelNameIndexes } from '@/features/hw/lib/model-name-indexes'
+
 import type { GroupOption, ModelOption } from '../../types'
 
 /** Best value first: the cheap default, then the everyday coding model. */
@@ -111,43 +113,13 @@ export function labelUnavailableModels(
   )
 }
 
-/** A character that can be part of a model name. */
-const MODEL_NAME_CHAR = /[a-z0-9.-]/i
-
-/**
- * Every index where `name` appears as a whole model name, in order. A plain
- * substring search would find gpt-6 inside gpt-6-astra and offer the shorter
- * name the user cannot reach, so a hit that continues or is preceded by
- * another name character is skipped.
- */
-function modelNameIndexes(content: string, name: string): number[] {
-  const hits: number[] = []
-  let from = 0
-  for (;;) {
-    const index = content.indexOf(name, from)
-    if (index < 0) {
-      return hits
-    }
-    const before = content[index - 1]
-    const after = content[index + name.length]
-    if (
-      (before === undefined || !MODEL_NAME_CHAR.test(before)) &&
-      (after === undefined || !MODEL_NAME_CHAR.test(after))
-    ) {
-      hits.push(index)
-    }
-    from = index + 1
-  }
-}
-
 /**
  * The model a model_unavailable error suggests, when the user can pick it.
  * The server names the failed model first and the suggestion after it, in
  * Turkish and English alike; the stored message may carry a title in front.
  * The model mentioned first is the failed one and is never offered; of the
  * reachable models after it the one mentioned last wins, and on a tie the
- * longer name wins (gpt-6-astra over gpt-6). Only a whole model name counts,
- * so gpt-6 inside gpt-6-astra is never a mention of its own.
+ * longer name wins (gpt-6-astra over gpt-6).
  */
 export function getUnavailableAlternative(
   errorCode: string | null | undefined,
@@ -160,8 +132,8 @@ export function getUnavailableAlternative(
   let failed: string | null = null
   let failedIndex = -1
   for (const model of models) {
-    const index = modelNameIndexes(content, model.value)[0]
-    if (index === undefined) continue
+    const index = modelNameIndexes(content, model.value)[0] ?? -1
+    if (index < 0) continue
     if (
       failed === null ||
       index < failedIndex ||
@@ -178,15 +150,8 @@ export function getUnavailableAlternative(
   let best: string | null = null
   let bestIndex = -1
   for (const model of models) {
-    const indexes = modelNameIndexes(content, model.value)
-    const index = indexes.at(-1)
-    if (
-      index === undefined ||
-      index < suggestionFrom ||
-      model.value === failed
-    ) {
-      continue
-    }
+    const index = modelNameIndexes(content, model.value).at(-1) ?? -1
+    if (index < suggestionFrom || model.value === failed) continue
     if (
       index > bestIndex ||
       (index === bestIndex && best !== null && model.value.length > best.length)
