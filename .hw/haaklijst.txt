@@ -27,6 +27,8 @@ web/src/hooks/use-sidebar-data.ts                              1
 web/src/features/system-update/__tests__/update-checking.test.tsx 84
 web/src/features/system-update/api.ts                          3
 web/src/features/system-update/use-system-update.ts            3
+# releases.ts: merged/prNumber op het releaserecord en onze eigen downloadlink (PR of repo)
+web/src/features/system-update/releases.ts                          6
 # eigen CI-stappen: de haaklijst-toets zelf, fetch-depth 0 voor de basisbranch,
 # en workflow_dispatch zodat de upstream-sync CI op zijn eigen PR kan starten
 .github/workflows/ci.yml                                       20
