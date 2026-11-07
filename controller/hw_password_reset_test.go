@@ -36,7 +36,7 @@ func hwResetCall(body string) (*httptest.ResponseRecorder, map[string]any) {
 	c, _ := gin.CreateTestContext(response)
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/user/reset", strings.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
-	ResetPassword(c)
+	HwResetPassword(c)
 	var out map[string]any
 	_ = common.Unmarshal(response.Body.Bytes(), &out)
 	return response, out
