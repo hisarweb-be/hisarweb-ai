@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -286,44 +285,4 @@ func SendPasswordResetEmail(c *gin.Context) {
 		"success": true,
 		"message": "",
 	})
-}
-
-type PasswordResetRequest struct {
-	Email string `json:"email"`
-	Token string `json:"token"`
-}
-
-func ResetPassword(c *gin.Context) {
-	var req PasswordResetRequest
-	err := json.NewDecoder(c.Request.Body).Decode(&req)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	req.Email = model.NormalizeEmail(req.Email)
-	if req.Email == "" || req.Token == "" {
-		common.ApiErrorT(c, "Invalid parameters")
-		return
-	}
-	if !common.VerifyCodeWithKey(req.Email, req.Token, common.PasswordResetPurpose) {
-		common.ApiErrorT(c, "Password reset link is invalid or has expired")
-		return
-	}
-	password := common.GenerateVerificationCode(12)
-	err = model.ResetUserPasswordByEmail(req.Email, password)
-	if err != nil {
-		if errors.Is(err, model.ErrEmailNotFound) || errors.Is(err, model.ErrEmailAmbiguous) {
-			common.ApiErrorT(c, "Password reset link is invalid or has expired")
-			return
-		}
-		common.ApiError(c, err)
-		return
-	}
-	common.DeleteKey(req.Email, common.PasswordResetPurpose)
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    password,
-	})
-	return
 }
