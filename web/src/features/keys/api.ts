@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { hwRequestKeyWithStepUp } from '@/features/hw/lib/key-step-up'
 import { api } from '@/lib/api'
 
 import type {
@@ -112,8 +113,7 @@ export async function updateApiKeyStatus(
 export async function fetchTokenKey(
   id: number
 ): Promise<{ success: boolean; message?: string; data?: { key: string } }> {
-  const res = await api.post(`/api/token/${id}/key`)
-  return res.data
+  return hwRequestKeyWithStepUp(`/api/token/${id}/key`)
 }
 
 // Batch fetch real (unmasked) keys for multiple tokens
@@ -122,6 +122,5 @@ export async function fetchTokenKeysBatch(ids: number[]): Promise<{
   message?: string
   data?: { keys: Record<number, string> }
 }> {
-  const res = await api.post('/api/token/batch/keys', { ids })
-  return res.data
+  return hwRequestKeyWithStepUp('/api/token/batch/keys', { ids })
 }
