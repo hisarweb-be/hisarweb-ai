@@ -18,6 +18,11 @@ description = "Fake token keys that prove masking in controller/token_test.go"
 targetRules = ["generic-api-key"]
 paths = ['''^controller/token_test\.go$''']
 
+[[allowlists]]
+description = "Fake relay keys in the key-hash unit tests, model/hw_token_key_hash_test.go"
+targetRules = ["generic-api-key"]
+paths = ['''^model/hw_token_key_hash_test\.go$''']
+
 # The reasoning-suffix test sets an upstream model name through the context;
 # gitleaks reads "ContextKeyOriginalModel, \"...\"" as an assignment.
 [[allowlists]]
