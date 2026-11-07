@@ -133,12 +133,14 @@ Open: G7.
 ## 5. API keys and access tokens
 
 Two different credentials exist.
-- Relay API keys (`model/token.go`, the keys customers put in their tools): the column `key` (`model/token.go:17`) is stored and compared in clear; the full key is returned by `POST /api/token/:id/key` (`router/api-router.go:330`, `controller/token.go:190-208`) behind login and `CriticalRateLimit`, without a step-up proof. List and search responses mask the key (`controller/token.go:57-79`, `TestGetAllTokensMasksKeyInResponse` in `controller/token_test.go`). Keys carry status, expiry, quota, model limits and optional IP limits (`model/token.go:88,224-262`).
+- Relay API keys (`model/token.go`, the keys customers put in their tools): the column `key` (`model/token.go:17`) holds the key in clear (kept, not yet emptied) and a second column `key_hash` (HMAC-SHA256 with a pepper derived from `CRYPTO_SECRET` or `SESSION_SECRET`, indexed) holds its hash. Lookup per request goes by `key_hash` and falls back to the clear text (`model/hw_token_key_hash.go`, `hwFirstTokenByKey`); a backfill in `HwMigrateModels` fills the hash of existing rows, in batches, and is idempotent. With `HW_TOKEN_KEY_HASH_ONLY=true` a new key is returned once in the create response (`data.key`) and the `key` column holds `hw$<hash>`; with the flag off (default) the old behaviour stays, with the hash stored next to the key. A hash-only key is not shown again (`POST /api/token/:id/key` answers 409 `KEY_NOT_RECOVERABLE` after the step-up). A presented key starting with `hw$` is never looked up, so the stored placeholder is not a credential. The full key of a clear-stored row is returned by `POST /api/token/:id/key` (`router/api-router.go:330`, `controller/hw_token_key_stepup.go`) behind login, `CriticalRateLimit` and the step-up proof. List and search responses mask the key (`controller/token.go:57-79`, `TestGetAllTokensMasksKeyInResponse` in `controller/token_test.go`). Keys carry status, expiry, quota, model limits and optional IP limits (`model/token.go:88,224-262`).
 - Dashboard access tokens (`model/user_access_token.go`): only a hash is stored (`token_hash`, `:45`), with scopes and expiry; create, update and delete sit behind `UserCriticalRateLimit("access-token")` (`router/api-router.go:138-141`) and are audited (`controller/access_token_audit_test.go`).
 
-ASVS 4.0.3: V2.10.4 PARTIAL (access tokens hashed, relay keys still stored in clear, G2 part B; showing a key needs a password or 2FA step-up), V3.5.2 OK for the dashboard (session tokens, not static secrets), V11.1.4 OK, V7.1.1 PARTIAL (the redemption-code error path in `controller/user.go` logs the code, G11).
+ASVS 4.0.3: V2.10.4 PARTIAL (access tokens hashed; relay keys hashed in `key_hash` and, behind `HW_TOKEN_KEY_HASH_ONLY`, no longer stored in clear for new keys; the clear column of existing rows is emptied in a later separate step; showing a key needs a password or 2FA step-up), V3.5.2 OK for the dashboard (session tokens, not static secrets), V11.1.4 OK, V7.1.1 PARTIAL (the redemption-code error path in `controller/user.go` logs the code, G11).
 
-Open: G2 part B (storage).
+Validated by: `TestHwTokenLookupByHash`, `TestHwTokenLookupFallsBackToClearTextWhileHashIsEmpty`, `TestHwTokenBackfillIsIdempotentAndBatched`, `TestHwTokenInsertHashOnlyStoresNoClearKey`, `TestHwTokenStoredPlaceholderIsNotACredential` (`model/hw_token_key_hash_test.go`), `TestHwTokenCreateShowsKeyOnceAndStoresOnlyHash`, `TestHwTokenCreateWithFlagOffKeepsTheOldBodyAndStorage` (`controller/hw_token_key_once_test.go`).
+
+Open: G2 part C (empty the clear `key` column of existing rows, irreversible, after a back-up and a period on the flag; the web UI must show `data.key` from the create response before the flag goes on in production).
 
 ## 6. Password reset and recovery
 
@@ -197,7 +199,7 @@ Open: G14.
 | ID | Prio | Gap | ASVS 4.0.3 |
 | --- | --- | --- | --- |
 | G1 | P1 | Password reset returns a system-generated password (48 bits) in the response, the user cannot choose, and reset skips 2FA and passkey | V2.5.6, V2.5.7 |
-| G2 | P1 | Step-up on `POST /api/token/:id/key` and `/batch/keys` is closed (password, or 2FA code when on; `controller/hw_token_key_stepup.go`). Still open: keys stored in clear | V2.10.4, V3.5.2 |
+| G2 | P1 | Step-up on `POST /api/token/:id/key` and `/batch/keys` is closed (password, or 2FA code when on; `controller/hw_token_key_stepup.go`). Part B (hash column, hash lookup, backfill, hash-only flag for new keys) is in; still open: the clear column of existing rows, and the web UI showing the key once | V2.10.4, V3.5.2 |
 | G3 | P2 | Minimum password length 8 (ASVS 12) and no breached-password check | V2.1.1, V2.1.7 |
 | G4 | P2 | No per-account throttle on password login (IP limit only) | V2.2.1 |
 | G6 | P2 | TOTP code reusable inside its validity window | V2.8.4 |
@@ -214,7 +216,7 @@ Open: G14.
 Recipe per gap
 
 - G1: after a valid token show a "choose new password" form that calls `ValidateNewAccountPassword`, require the TOTP or passkey proof when enrolled, then revoke sessions and send the G9 mail; remove the password from the response.
-- G2: the step-up on the key routes is done (part A). Remaining: store a keyed digest plus a visible prefix, show the full key once at creation, and migrate existing rows in a reversible step.
+- G2: the step-up on the key routes is done (part A). Part B is done (keyed hash column, lookup, backfill, flag). Remaining: the web UI shows `data.key` once, then the flag goes on, then (part C, after a back-up) the clear column of existing rows is emptied.
 - G3: raise the minimum to 12 for new passwords only; add a k-anonymity range lookup against the free Pwned Passwords API (no key), failing open with a log line.
 - G4: count failures per account in the existing rate-limit store with a growing delay (not a hard lockout) and a reset on success.
 - G6: store the last accepted TOTP step per user and refuse a step less than or equal to it.

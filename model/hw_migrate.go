@@ -58,5 +58,12 @@ func HwMigrateModels(db *gorm.DB) error {
 	if _, err := HwMigrateCreditValidity(db, common.GetTimestamp()); err != nil {
 		return fmt.Errorf("migrate credit validity: %w", err)
 	}
+	// Relay-key hashes (G2 part B). The lookup falls back to the clear text, so a
+	// failure here is logged and the start goes on.
+	if n, err := HwBackfillTokenKeyHashes(db); err != nil {
+		common.SysError(common.LogText("hw: token key hash backfill stopped after %d rows: %v", n, err))
+	} else if n > 0 {
+		common.SysLog(common.LogText("hw: token key hash backfill filled %d rows", n))
+	}
 	return nil
 }
