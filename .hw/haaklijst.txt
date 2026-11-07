@@ -23,6 +23,8 @@ web/src/i18n/__tests__/tr-locale.test.ts                        10
 web/src/components/layout/components/authenticated-layout.tsx   1
 web/src/features/pricing/components/pricing-sidebar.tsx         2
 web/src/hooks/use-sidebar-data.ts                              1
+# chat: een mislukte of afgebroken step-up (G2) mag de wachtwoordvraag niet opnieuw stellen
+web/src/features/chat/hooks/use-active-chat-key.ts             1
 # system-update: de knop toont onze eigen synchronisatiestand (/api/hw/sync-status)
 web/src/features/system-update/__tests__/update-checking.test.tsx 84
 web/src/features/system-update/api.ts                          3

@@ -57,6 +57,7 @@ export function useActiveChatKey(enabled: boolean) {
     queryKey: ['chat-active-key', userId],
     queryFn: async () => requireServerSuccess(await fetchActiveChatKey()),
     enabled: enabled && Boolean(userId),
+    retry: false, // a retry would ask for the step-up again
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
   })
