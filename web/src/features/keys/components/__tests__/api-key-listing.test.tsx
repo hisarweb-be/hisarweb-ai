@@ -434,7 +434,16 @@ it.each([true, false])(
     await user.click(screen.getByRole('button', { name: 'Open menu' }))
     expect(post).not.toHaveBeenCalled()
     await user.click(screen.getByRole('menuitem', { name: 'Copy Key' }))
-    await waitFor(() => expect(post).toHaveBeenCalledWith('/api/token/7/key'))
+    // the key only comes after the step-up dialog (password)
+    await user.type(await screen.findByLabelText('Password'), 'step-up-pw')
+    await user.click(screen.getByRole('button', { name: 'Show key' }))
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(
+        '/api/token/7/key',
+        { password: 'step-up-pw' },
+        { skipBusinessError: true, skipErrorHandler: true }
+      )
+    )
     if (success) {
       await waitFor(() =>
         expect(copy).toHaveBeenCalledWith('sk-fake-key-for-test-only')
