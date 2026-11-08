@@ -17,6 +17,7 @@ func TestHwIsOfficialOpenAI(t *testing.T) {
 		{constant.ChannelTypeOpenAI, "", true},
 		{constant.ChannelTypeOpenAI, "https://api.openai.com", true},
 		{constant.ChannelTypeOpenAI, "https://lumiarouter.com", false},
+		{constant.ChannelTypeOpenAI, "https://api.openai.com.evil.example", false},
 		{constant.ChannelTypeAzure, "https://x.openai.azure.com", true},
 		{constant.ChannelTypeAnthropic, "", false},
 	}
