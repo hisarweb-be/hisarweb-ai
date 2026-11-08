@@ -49,7 +49,10 @@ const originalGet = apiClient.get
 const originalPost = apiClient.post
 let renderedDrawer: RenderedDrawer | null = null
 
-function installApiFixtures(createdPayloads: Array<Record<string, unknown>>) {
+function installApiFixtures(
+  createdPayloads: Array<Record<string, unknown>>,
+  createdData: (index: number) => Record<string, unknown> = () => ({})
+) {
   apiClient.get = async (url) => {
     switch (url) {
       case '/api/status':
@@ -82,7 +85,12 @@ function installApiFixtures(createdPayloads: Array<Record<string, unknown>>) {
     expect(url).toBe('/api/token/')
     expect(data && typeof data === 'object').toBeTruthy()
     createdPayloads.push(data as Record<string, unknown>)
-    return { data: { success: true, data: {} } }
+    return {
+      data: {
+        success: true,
+        data: createdData(createdPayloads.length - 1),
+      },
+    }
   }
 }
 
@@ -237,6 +245,44 @@ describe('API keys mutate drawer Auto group integration', () => {
       expect(payload.auto_groups).toEqual([])
       expect(payload.cross_group_retry).toBe(true)
     }
+  })
+
+  test('shows hash-only keys once after create and nothing for readable storage', async () => {
+    const createdPayloads: Array<Record<string, unknown>> = []
+    installApiFixtures(createdPayloads, (i) => ({
+      key: `abc${i}`,
+      shown_once: true,
+    }))
+    await renderCreateDrawer()
+
+    changeInput(getControlByLabel('Name'), 'once')
+    changeInput(getControlByLabel('Quantity'), '2')
+    fireEvent.click(findButton('Save changes', true))
+
+    await waitFor(() =>
+      expect(screen.queryAllByTestId('hw-key-once-value')).toHaveLength(2)
+    )
+    expect(
+      screen.getAllByTestId('hw-key-once-value').map((el) => el.textContent)
+    ).toEqual(['sk-abc0', 'sk-abc1'])
+
+    fireEvent.click(findButton('I have copied it', true))
+    await waitFor(() =>
+      expect(screen.queryAllByTestId('hw-key-once-value')).toHaveLength(0)
+    )
+  })
+
+  test('does not open the one-time dialog when the key is not in the create response', async () => {
+    const createdPayloads: Array<Record<string, unknown>> = []
+    installApiFixtures(createdPayloads)
+    await renderCreateDrawer()
+
+    changeInput(getControlByLabel('Name'), 'plain')
+    fireEvent.click(findButton('Save changes', true))
+    await waitFor(() => expect(createdPayloads).toHaveLength(1))
+    await new Promise((r) => setTimeout(r, 50))
+
+    expect(screen.queryAllByTestId('hw-key-once-value')).toHaveLength(0)
   })
 
   test('preserves an unsaved custom order and mode after Auto to ordinary to Auto changes', async () => {
