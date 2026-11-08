@@ -34,6 +34,7 @@ type Token struct {
 	AllowUserQuotaQuery bool   `json:"allow_user_quota_query"`
 	CacheExpiresAt      int64  `json:"-" gorm:"-"`
 	CacheMAC            string `json:"-" gorm:"-"`
+	KeyHash             string `json:"-" gorm:"type:varchar(64);index"`
 }
 
 func (token *Token) GetAutoGroups() ([]string, error) {
@@ -78,10 +79,16 @@ func MaskTokenKey(key string) string {
 }
 
 func (token *Token) GetFullKey() string {
+	if HwTokenKeyIsHashed(token.Key) {
+		return ""
+	}
 	return token.Key
 }
 
 func (token *Token) GetMaskedKey() string {
+	if HwTokenKeyIsHashed(token.Key) {
+		return HwMaskedHashedKey
+	}
 	return MaskTokenKey(token.Key)
 }
 
@@ -284,14 +291,14 @@ func GetTokenById(id int) (*Token, error) {
 func GetTokenByKey(key string, fromDB bool) (token *Token, err error) {
 	if !fromDB && common.RedisEnabled {
 		// Try Redis first
-		token, err := cacheGetTokenByKey(key)
+		token, err := hwCacheGetTokenByKey(key)
 		if err == nil {
 			return token, nil
 		}
 		// Don't return error - fall through to DB
 	}
 	token = &Token{}
-	if err = DB.Where(commonKeyCol+" = ?", key).First(token).Error; err != nil {
+	if err = hwFirstTokenByKey(token, key); err != nil {
 		return nil, err
 	}
 	if common.RedisEnabled {
@@ -305,6 +312,7 @@ func GetTokenByKey(key string, fromDB bool) (token *Token, err error) {
 }
 
 func (token *Token) Insert() error {
+	hwBeforeTokenInsert(token)
 	var err error
 	err = DB.Create(token).Error
 	return err
