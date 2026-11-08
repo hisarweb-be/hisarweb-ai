@@ -129,7 +129,7 @@ jobs:
         run: |
           set -euo pipefail
           archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          curl -sSfL --retry 3 -o "/tmp/${archive}" \
+          curl -sSfL --retry 5 --retry-all-errors --retry-delay 10 --connect-timeout 20 --max-time 120 -o "/tmp/${archive}" \
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}"
           # Checksum from the same release's checksums file, verified at pin time.
           echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/${archive}" | sha256sum -c -
