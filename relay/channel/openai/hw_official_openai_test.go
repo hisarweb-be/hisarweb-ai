@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/constant"
@@ -34,5 +35,17 @@ func TestHwDeveloperToSystem(t *testing.T) {
 	hwDeveloperToSystem(msgs)
 	if msgs[0].Role != "system" || msgs[1].Role != "user" || msgs[2].Role != "system" {
 		t.Fatalf("roles: %s %s %s", msgs[0].Role, msgs[1].Role, msgs[2].Role)
+	}
+}
+
+func TestHwResponsesDeveloperToSystem(t *testing.T) {
+	got := string(hwResponsesDeveloperToSystem([]byte(`[{"role":"developer","content":"a"},{"role":"user","content":"b"}]`)))
+	if strings.Contains(got, "developer") || strings.Count(got, `"system"`) != 1 || !strings.Contains(got, `"user"`) {
+		t.Fatalf("got %s", got)
+	}
+	for _, in := range []string{`"hallo"`, `[{"role":"user"}]`, `not json developer`, ``} {
+		if out := string(hwResponsesDeveloperToSystem([]byte(in))); out != in {
+			t.Errorf("input %q changed to %q", in, out)
+		}
 	}
 }
