@@ -25,3 +25,8 @@ export function hwThrowIfNotRecoverable(result: { success: boolean; code?: strin
     throw new Error(hwKeyNotRecoverableMessage());
   }
 }
+
+/** True when a key answer is the 409 of a hash-only key. */
+export function hwIsNotRecoverable(result: { success: boolean; code?: string }): boolean {
+  return result.code === KEY_NOT_RECOVERABLE;
+}

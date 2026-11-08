@@ -35,6 +35,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import {
+  hwKeyNotRecoverableMessage,
+  hwKeyRecoverable,
+} from '@/features/hw/lib/key-recoverable'
 import { copyToClipboard } from '@/lib/copy-to-clipboard'
 
 import type { ApiKey } from '../types'
@@ -55,15 +59,16 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
   const resolvedFullKey = resolvedKeys[apiKey.id]
   const isCopied = copiedKeyId === apiKey.id
   const maskedKey = `sk-${apiKey.key}`
+  const keyGone = !hwKeyRecoverable(apiKey.key) // hash-only: shown once (G2)
 
   const handlePopoverOpen = useCallback(
     (open: boolean) => {
       setPopoverOpen(open)
-      if (open && !resolvedFullKey) {
+      if (open && !resolvedFullKey && !keyGone) {
         resolveRealKey(apiKey.id)
       }
     },
-    [resolvedFullKey, resolveRealKey, apiKey.id]
+    [resolvedFullKey, resolveRealKey, apiKey.id, keyGone]
   )
 
   const handleCopy = useCallback(async () => {
@@ -76,7 +81,9 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
 
   let copyIcon = <Copy className='size-3.5' />
   let copyTooltip = t('Copy API key')
-  if (isLoading) {
+  if (keyGone) {
+    copyTooltip = hwKeyNotRecoverableMessage()
+  } else if (isLoading) {
     copyIcon = <Loader2 className='size-3.5 animate-spin' />
     copyTooltip = t('Loading...')
   } else if (isCopied) {
@@ -123,7 +130,7 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
               size='icon'
               className='size-7 shrink-0'
               onClick={handleCopy}
-              disabled={isLoading}
+              disabled={isLoading || keyGone}
             />
           }
         >
