@@ -80,3 +80,12 @@ func hwResponsesDeveloperToSystem(input json.RawMessage) json.RawMessage {
 	}
 	return out
 }
+
+// hwApplyUpstreamResponsesInput is the one hook line in the adaptor: on a
+// non-official upstream a developer role in the Responses input becomes system.
+func hwApplyUpstreamResponsesInput(info *relaycommon.RelayInfo, input json.RawMessage) json.RawMessage {
+	if info == nil || hwIsOfficialOpenAI(info) {
+		return input
+	}
+	return hwResponsesDeveloperToSystem(input)
+}

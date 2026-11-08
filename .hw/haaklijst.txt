@@ -72,3 +72,5 @@ web/src/features/keys/components/api-keys-cells.tsx             11
 web/src/features/keys/components/api-keys-provider.tsx          10
 web/src/features/keys/components/data-table-bulk-actions.tsx    13
 web/src/features/keys/components/data-table-row-actions.tsx     13
+# Responses-pad: developer-rol naar system op een niet-officiele upstream (hw_official_openai.go), een haakregel
+relay/channel/openai/adaptor.go 1
