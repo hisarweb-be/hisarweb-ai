@@ -436,7 +436,10 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 		request.LogProbs = nil
 		request.TopLogProbs = nil
 	}
-	if capabilities.UseDeveloperRole && len(request.Messages) > 0 && request.Messages[0].Role == "system" {
+	// Only official OpenAI and Azure know the developer role. Lumia (an
+	// OpenAI-type channel on another base URL) answers 422 "unknown variant
+	// developer" for every GPT request with a system prompt (8 nov 2026).
+	if capabilities.UseDeveloperRole && hwIsOfficialOpenAI(info) && len(request.Messages) > 0 && request.Messages[0].Role == "system" {
 		request.Messages[0].Role = "developer"
 	}
 
@@ -841,4 +844,17 @@ func recordReasoningDiagnostics(c *gin.Context, info *relaycommon.RelayInfo, dia
 		diagnostics[i].From = info.RelayFormat
 	}
 	info.RecordConversionDiagnostics(c, diagnostics)
+}
+
+// hwIsOfficialOpenAI reports whether the channel talks to OpenAI itself
+// (default or api.openai.com base URL) or to Azure OpenAI.
+func hwIsOfficialOpenAI(info *relaycommon.RelayInfo) bool {
+	if info.ChannelType == constant.ChannelTypeAzure {
+		return true
+	}
+	if info.ChannelType != constant.ChannelTypeOpenAI {
+		return false
+	}
+	base := strings.TrimSpace(info.ChannelBaseUrl)
+	return base == "" || strings.Contains(base, "api.openai.com")
 }
