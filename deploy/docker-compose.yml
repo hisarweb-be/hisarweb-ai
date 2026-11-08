@@ -62,6 +62,9 @@ services:
       HW_BUREAU_USAGE_TOKEN: ${HW_BUREAU_USAGE_TOKEN:-}
       HW_WINDOW_CAPACITY_USD: ${HW_WINDOW_CAPACITY_USD:-}
       HW_RESERVE_MODE: ${HW_RESERVE_MODE:-}
+      # Token keys stored as hash only (G2). Empty means off, so merging this
+      # line changes nothing until the variable is set in Coolify.
+      HW_TOKEN_KEY_HASH_ONLY: ${HW_TOKEN_KEY_HASH_ONLY:-}
       # Optional widening of one Content-Security-Policy directive each: a
       # comma-separated list of bare https origins. Empty keeps the tight
       # default (no external frame, image, style or font host).
