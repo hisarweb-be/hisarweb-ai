@@ -62,6 +62,7 @@ import {
 } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { hwShowKeysOnce } from '@/features/hw/lib/key-once'
 import { RelatedPolicyLink } from '@/features/system-settings/request-policies/related-policy-link'
 import { useStatus } from '@/hooks/use-status'
 import { getUserModels, getUserGroups } from '@/lib/api'
@@ -315,6 +316,8 @@ export function ApiKeysMutateDrawer({
         // Create mode - handle batch creation
         const count = data.tokenCount || 1
         let successCount = 0
+        // Hash-only storage returns the key once, in the create response.
+        const shownOnce: string[] = []
 
         for (let i = 0; i < count; i++) {
           const result = await createApiKey({
@@ -326,6 +329,8 @@ export function ApiKeysMutateDrawer({
           })
           if (result.success) {
             successCount++
+            const key = (result.data as { key?: string } | undefined)?.key
+            if (key) shownOnce.push(`sk-${key}`)
           } else {
             handleServerError(result, t(ERROR_MESSAGES.CREATE_FAILED))
             break
@@ -340,6 +345,7 @@ export function ApiKeysMutateDrawer({
           )
           onOpenChange(false)
           triggerRefresh()
+          hwShowKeysOnce(shownOnce)
         }
       }
     } catch (error) {

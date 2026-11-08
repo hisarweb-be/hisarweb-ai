@@ -29,6 +29,9 @@ web/src/hooks/use-sidebar-data.ts                              1
 # copy-key test now types the step-up password (G2)
 web/src/features/chat/hooks/use-active-chat-key.ts             1
 web/src/features/keys/components/__tests__/api-key-listing.test.tsx   9
+# create-drawer (G2 part C): hash-only keys are shown once via hwShowKeysOnce (features/hw/lib/key-once.tsx)
+web/src/features/keys/components/api-keys-mutate-drawer.tsx    6
+web/src/features/keys/components/__tests__/api-keys-mutate-drawer.test.tsx   46
 # system-update: de knop toont onze eigen synchronisatiestand (/api/hw/sync-status)
 web/src/features/system-update/__tests__/update-checking.test.tsx 84
 web/src/features/system-update/api.ts                          3
