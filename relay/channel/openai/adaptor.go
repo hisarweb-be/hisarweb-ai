@@ -442,6 +442,9 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 	if capabilities.UseDeveloperRole && hwIsOfficialOpenAI(info) && len(request.Messages) > 0 && request.Messages[0].Role == "system" {
 		request.Messages[0].Role = "developer"
 	}
+	if !hwIsOfficialOpenAI(info) {
+		hwDeveloperToSystem(request.Messages)
+	}
 
 	return request, nil
 }
@@ -857,4 +860,14 @@ func hwIsOfficialOpenAI(info *relaycommon.RelayInfo) bool {
 	}
 	base := strings.TrimSpace(info.ChannelBaseUrl)
 	return base == "" || strings.Contains(base, "api.openai.com")
+}
+
+// hwDeveloperToSystem rewrites a client-sent developer role to system, so
+// upstreams that only know system (Lumia) do not answer 422.
+func hwDeveloperToSystem(messages []dto.Message) {
+	for i := range messages {
+		if messages[i].Role == "developer" {
+			messages[i].Role = "system"
+		}
+	}
 }

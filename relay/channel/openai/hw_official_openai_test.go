@@ -5,6 +5,7 @@ import (
 
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 )
 
 func TestHwIsOfficialOpenAI(t *testing.T) {
@@ -24,5 +25,13 @@ func TestHwIsOfficialOpenAI(t *testing.T) {
 		if got := hwIsOfficialOpenAI(info); got != c.want {
 			t.Errorf("type %d base %q: got %v want %v", c.typ, c.base, got, c.want)
 		}
+	}
+}
+
+func TestHwDeveloperToSystem(t *testing.T) {
+	msgs := []dto.Message{{Role: "developer"}, {Role: "user"}, {Role: "developer"}}
+	hwDeveloperToSystem(msgs)
+	if msgs[0].Role != "system" || msgs[1].Role != "user" || msgs[2].Role != "system" {
+		t.Fatalf("roles: %s %s %s", msgs[0].Role, msgs[1].Role, msgs[2].Role)
 	}
 }
