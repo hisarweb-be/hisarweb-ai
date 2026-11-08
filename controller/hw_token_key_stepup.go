@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -136,6 +137,12 @@ func hwRequireKeyStepUp(c *gin.Context) bool {
 func HwGetTokenKey(c *gin.Context) {
 	if !hwRequireKeyStepUp(c) {
 		return
+	}
+	if id, err := strconv.Atoi(c.Param("id")); err == nil {
+		if token, err := model.GetTokenByIds(id, c.GetInt("id")); err == nil && model.HwTokenKeyIsHashed(token.Key) {
+			hwKeyNotRecoverable(c)
+			return
+		}
 	}
 	GetTokenKey(c)
 }
