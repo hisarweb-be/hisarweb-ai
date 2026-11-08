@@ -188,6 +188,7 @@ func TestHwDailyPriceListSkipsRetiredModels(t *testing.T) {
 		"gpt-6-luna":             {"1e-07", "5e-07"},
 		"gemini-3.8-flash":       {"7.5e-07", "3.75e-06"},
 		"gemini-3.8-flash-cyber": {"1.5e-06", "7.5e-06"},
+		"gemini-3.1-pro-preview": {"2e-06", "1.2e-05"},
 		"grok-4":                 {"2e-06", "6e-06"},
 		"grok-4-fast":            {"2e-06", "6e-06"},
 	} {
@@ -284,15 +285,16 @@ func TestHwPriceListRequiresEverySoldModel(t *testing.T) {
 
 func TestHwValueFamily(t *testing.T) {
 	cases := map[string]string{
-		"claude-haiku-4-5":  "claude-haiku",
-		"claude-haiku-5-5":  "claude-haiku",
-		"claude-sonnet-5":   "claude-sonnet",
-		"claude-fable-5-1":  "claude-fable",
-		"gpt-6-astra":       "gpt-astra",
-		"gpt-6.1-sol":       "gpt-sol",
-		"gemini-3.8-flash":  "gemini-flash",
-		"claude-opus-5-5":   "claude-opus",
-		"claude-sonnet-5-5": "claude-sonnet",
+		"claude-haiku-4-5":       "claude-haiku",
+		"claude-haiku-5-5":       "claude-haiku",
+		"claude-sonnet-5":        "claude-sonnet",
+		"claude-fable-5-1":       "claude-fable",
+		"gpt-6-astra":            "gpt-astra",
+		"gpt-6.1-sol":            "gpt-sol",
+		"gemini-3.8-flash":       "gemini-flash",
+		"gemini-3.1-pro-preview": "gemini-pro-preview",
+		"claude-opus-5-5":        "claude-opus",
+		"claude-sonnet-5-5":      "claude-sonnet",
 	}
 	for name, want := range cases {
 		family, _, err := hwValueFamily(name)

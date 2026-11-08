@@ -18,7 +18,8 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 /**
- * Price table of the HisarWeb AI channel-1 models, measured on 2026-10-27.
+ * Price table of the HisarWeb AI channel-1 models, measured on 2026-10-27;
+ * the two Gemini rows were measured on 2026-11-08 (same sources).
  * HisarWeb bills every model at half the official list price
  * (`HwListPriceDiscountPercent` in `service/hw_pricing.go`).
  *
@@ -149,6 +150,20 @@ export const MODEL_PRICES: readonly ModelPrice[] = [
     official: { input: 2, output: 10 },
     openrouter: { input: 2, output: 10 },
     hisarweb: { input: 1, output: 5 },
+  },
+  {
+    model: 'gemini-3.1-pro-preview',
+    provider: 'Google',
+    official: { input: 2, output: 12 },
+    openrouter: { input: 2, output: 12 },
+    hisarweb: { input: 1, output: 6 },
+  },
+  {
+    model: 'gemini-3.8-flash',
+    provider: 'Google',
+    official: { input: 0.75, output: 3.75 },
+    openrouter: { input: 0.825, output: 4.125 },
+    hisarweb: { input: 0.375, output: 1.875 },
   },
   {
     model: 'claude-haiku-5-5',
