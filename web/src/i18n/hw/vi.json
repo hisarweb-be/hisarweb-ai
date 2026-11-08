@@ -174,5 +174,7 @@
   "Your friend signs up through your link and tops up credit.": "Bạn bè đăng ký qua liên kết của bạn và nạp tín dụng.",
   "temporarily unavailable": "tạm thời không khả dụng",
   "typing": "đang nhập",
-  "~{{words}} words per second": "~{{words}} words per second"
+  "~{{words}} words per second": "~{{words}} words per second",
+  "This key was shown once when it was created and cannot be shown again. Create a new key on the API keys page.": "Khóa này chỉ hiển thị một lần khi tạo và không thể hiển thị lại. Hãy tạo khóa mới ở trang khóa API.",
+  "Create a new API key to copy a real request": "Hãy tạo khóa API mới để sao chép yêu cầu thật"
 }

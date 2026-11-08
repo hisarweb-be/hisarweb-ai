@@ -174,5 +174,7 @@
   "Your friend signs up through your link and tops up credit.": "友達があなたのリンクから登録し、クレジットをチャージします。",
   "temporarily unavailable": "一時的に利用できません",
   "typing": "入力中",
-  "~{{words}} words per second": "~{{words}} words per second"
+  "~{{words}} words per second": "~{{words}} words per second",
+  "This key was shown once when it was created and cannot be shown again. Create a new key on the API keys page.": "このキーは作成時に一度だけ表示され、再表示できません。APIキーのページで新しいキーを作成してください。",
+  "Create a new API key to copy a real request": "実際のリクエストをコピーするには、新しいAPIキーを作成してください"
 }

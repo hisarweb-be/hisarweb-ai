@@ -48,6 +48,10 @@ import {
 } from '@/components/page-transition'
 import { Button } from '@/components/ui/button'
 import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
+import {
+  hwKeyRecoverable,
+  hwThrowIfNotRecoverable,
+} from '@/features/hw/lib/key-recoverable'
 import { fetchTokenKey, getApiKeys } from '@/features/keys/api'
 import type { ApiKey } from '@/features/keys/types'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
@@ -114,6 +118,7 @@ interface RequestExample {
   model: string
   keyName: string
   keyId?: number
+  recoverable: boolean
   displayKey: string
   ready: boolean
 }
@@ -162,7 +167,9 @@ function normalizeEndpoint(sourceUrl?: string): string {
 }
 
 function getPreferredKey(keys: ApiKey[]): ApiKey | null {
-  return keys.find((item) => item.status === 1) ?? keys[0] ?? null
+  // hash-only keys cannot be copied again (G2), so a copyable one goes first
+  const enabled = keys.filter((item) => item.status === 1)
+  return enabled.find((i) => hwKeyRecoverable(i.key)) ?? enabled[0] ?? keys[0] ?? null
 }
 
 function formatDisplayKey(key?: string): string {
@@ -301,6 +308,7 @@ function RequestPreview(props: {
       const result = await fetchTokenKey(props.example.keyId)
       const key = result.success && result.data?.key ? result.data.key : ''
       if (!key) {
+        hwThrowIfNotRecoverable(result)
         handleServerError(result, t('Failed to copy to clipboard'))
         return
       }
@@ -351,7 +359,9 @@ function RequestPreview(props: {
             <div className='text-muted-foreground truncate text-xs'>
               {props.example.ready
                 ? props.example.keyName
-                : t('Create an API key to unlock the real request')}
+                : props.example.keyId && !props.example.recoverable
+                  ? t('Create a new API key to copy a real request')
+                  : t('Create an API key to unlock the real request')}
             </div>
           </div>
         </div>
@@ -600,14 +610,16 @@ export function OverviewDashboard() {
     const endpoint = normalizeEndpoint(apiInfoItems[0]?.url)
     const model = modelsQuery.data?.[0] ?? 'gpt-4o-mini'
     const keyName = preferredKey?.name ?? t('No API key yet')
-    const ready = Boolean(preferredKey?.id && model)
+    const recoverable = hwKeyRecoverable(preferredKey?.key)
+    const ready = Boolean(preferredKey?.id && model && recoverable)
 
     return {
       endpoint,
       model,
       keyName,
       keyId: preferredKey?.id,
-      displayKey: preferredKey
+      recoverable,
+      displayKey: preferredKey && recoverable
         ? formatDisplayKey(`sk-${preferredKey.key}`)
         : 'sk-...',
       ready,

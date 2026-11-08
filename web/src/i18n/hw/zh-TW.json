@@ -174,5 +174,7 @@
   "Your friend signs up through your link and tops up credit.": "朋友透過您的連結註冊並儲值額度。",
   "temporarily unavailable": "暫時無法使用",
   "typing": "正在輸入",
-  "~{{words}} words per second": "~{{words}} words per second"
+  "~{{words}} words per second": "~{{words}} words per second",
+  "This key was shown once when it was created and cannot be shown again. Create a new key on the API keys page.": "此金鑰僅在建立時顯示一次，無法再次顯示。請在 API 金鑰頁面建立新金鑰。",
+  "Create a new API key to copy a real request": "請建立新的 API 金鑰以複製真實請求"
 }
