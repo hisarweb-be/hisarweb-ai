@@ -18,7 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
+import {
+  hwIsNotRecoverable,
+  hwKeyNotRecoverableMessage,
+} from '@/features/hw/lib/key-recoverable'
 import useDialogState from '@/hooks/use-dialog'
 import { handleServerError } from '@/lib/handle-server-error'
 
@@ -87,6 +92,10 @@ export function ApiKeysProvider({ children }: { children: React.ReactNode }) {
             setResolvedKeys((prev) => ({ ...prev, [id]: fullKey }))
             return fullKey
           }
+          if (hwIsNotRecoverable(res)) {
+            toast.error(hwKeyNotRecoverableMessage())
+            return null
+          }
           handleServerError(res, t(ERROR_MESSAGES.UNEXPECTED))
           return null
         } catch (error) {
@@ -126,7 +135,7 @@ export function ApiKeysProvider({ children }: { children: React.ReactNode }) {
         if (res.success && res.data?.keys) {
           const newKeys: Record<number, string> = {}
           for (const [idStr, key] of Object.entries(res.data.keys)) {
-            newKeys[Number(idStr)] = `sk-${key}`
+            if (key) newKeys[Number(idStr)] = `sk-${key}` // hash-only: empty
           }
           setResolvedKeys((prev) => ({ ...prev, ...newKeys }))
 

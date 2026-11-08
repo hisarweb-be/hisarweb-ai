@@ -67,3 +67,8 @@ web/src/features/playground/lib/options/playground-option-utils.ts 2
 # deploy/README-uitrol.md: het image komt van onze eigen ghcr-package of deploy/Dockerfile,
 # nooit van het upstream-image dat de fork overschrijft.
 deploy/README-uitrol.md                                         3
+# sleutelpagina (G2 deel B): een hash-only sleutel heeft geen kopieer-/toonknop en een 409 KEY_NOT_RECOVERABLE geeft onze eigen melding (hw/lib/key-recoverable.ts)
+web/src/features/keys/components/api-keys-cells.tsx             11
+web/src/features/keys/components/api-keys-provider.tsx          10
+web/src/features/keys/components/data-table-bulk-actions.tsx    13
+web/src/features/keys/components/data-table-row-actions.tsx     13

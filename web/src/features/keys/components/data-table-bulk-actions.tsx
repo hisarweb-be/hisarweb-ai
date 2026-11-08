@@ -29,6 +29,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import {
+  hwKeyNotRecoverableMessage,
+  hwKeyRecoverable,
+} from '@/features/hw/lib/key-recoverable'
 import { copyToClipboard } from '@/lib/copy-to-clipboard'
 
 import { type ApiKey } from '../types'
@@ -53,7 +57,15 @@ export function DataTableBulkActions<TData>({
 
     setIsCopying(true)
     try {
-      const ids = selectedRows.map((row) => (row.original as ApiKey).id)
+      // hash-only keys (G2) cannot be read again: leave them out of the batch
+      const ids = selectedRows
+        .map((row) => row.original as ApiKey)
+        .filter((key) => hwKeyRecoverable(key.key))
+        .map((key) => key.id)
+      if (ids.length < selectedRows.length) {
+        toast.error(hwKeyNotRecoverableMessage())
+      }
+      if (ids.length === 0) return
       const keysMap = await resolveRealKeysBatch(ids)
 
       const lines: string[] = []

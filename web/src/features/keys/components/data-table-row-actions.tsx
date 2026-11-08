@@ -50,6 +50,10 @@ import {
 import { useChatPresets } from '@/features/chat/hooks/use-chat-presets'
 import { resolveChatUrl, type ChatPreset } from '@/features/chat/lib/chat-links'
 import { sendToFluent } from '@/features/chat/lib/send-to-fluent'
+import {
+  hwKeyNotRecoverableMessage,
+  hwKeyRecoverable,
+} from '@/features/hw/lib/key-recoverable'
 import { encodeChannelConnectionInfo } from '@/lib/channel-connection-info'
 import { copyToClipboard } from '@/lib/copy-to-clipboard'
 import { handleServerError } from '@/lib/handle-server-error'
@@ -92,13 +96,18 @@ export function DataTableRowActions<TData>({
   const isEnabled = apiKey.status === API_KEY_STATUS.ENABLED
   const { chatPresets, serverAddress } = useChatPresets()
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
-  const isRealKeyLoading = Boolean(loadingKeys[apiKey.id])
+  const keyGone = !hwKeyRecoverable(apiKey.key) // hash-only: shown once (G2)
+  const isRealKeyLoading = Boolean(loadingKeys[apiKey.id]) || keyGone
 
   const hasChatPresets = chatPresets.length > 0
   const toggleLabel = isEnabled ? t('Disable') : t('Enable')
 
   const handleOpenChatPreset = useCallback(
     async (preset: ChatPreset) => {
+      if (keyGone) {
+        toast.error(hwKeyNotRecoverableMessage())
+        return
+      }
       const realKey = await resolveRealKey(apiKey.id)
       if (!realKey) return
 
@@ -135,7 +144,7 @@ export function DataTableRowActions<TData>({
         window.location.href = resolvedUrl
       }
     },
-    [resolveRealKey, apiKey.id, serverAddress, t]
+    [resolveRealKey, apiKey.id, serverAddress, t, keyGone]
   )
 
   const handleToggleStatus = async (
@@ -254,6 +263,7 @@ export function DataTableRowActions<TData>({
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
+          disabled={keyGone}
           onClick={async () => {
             const realKey = await resolveRealKey(apiKey.id)
             if (!realKey) return
@@ -274,6 +284,7 @@ export function DataTableRowActions<TData>({
               {chatPresets.map((preset) => (
                 <DropdownMenuItem
                   key={preset.id}
+                  disabled={keyGone}
                   onClick={() => handleOpenChatPreset(preset)}
                 >
                   {preset.name}
