@@ -100,6 +100,14 @@ var hwSoldModels = []HwSoldModel{
 	{Name: "gpt-6-luna", PriceKey: "gpt-6-luna", InputMicroUsd: 100_000, OutputMicroUsd: 500_000},
 	{Name: "gpt-6.1-sol", PriceKey: "gpt-6.1-sol", InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000},
 	{Name: "gpt-6-astra", PriceKey: "gpt-6-astra", InputMicroUsd: 10_000_000, OutputMicroUsd: 50_000_000},
+	// gemini-3.1-pro-preview and gemini-3.8-flash joined on 8 Nov 2026 (model
+	// scan of the Lumia upstream, request Altuner): both answered 22 of 22
+	// customer calls through the relay (HTTP 200). gemini-3.8-flash is the
+	// newest Flash and not dearer than 3.7 or 3.5; gemini-3.1-pro-preview is a
+	// strong model of the Sonnet tier. The prices are the official LiteLLM list
+	// prices of that day.
+	{Name: "gemini-3.1-pro-preview", PriceKey: "gemini-3.1-pro-preview", InputMicroUsd: 2_000_000, OutputMicroUsd: 12_000_000},
+	{Name: "gemini-3.8-flash", PriceKey: "gemini-3.8-flash", InputMicroUsd: 750_000, OutputMicroUsd: 3_750_000},
 	// grok-4 and grok-4-fast sell at the xAI standard tier the upstream bills;
 	// xAI delisted both from its own price pages, so no official list price
 	// exists and the daily refresh keeps the operator ratio.
@@ -122,17 +130,13 @@ var hwRetiredModels = map[string]string{
 	"gpt-5.6-sol":   "gpt-6.1-sol",
 	"gpt-5.6-terra": "gpt-6.1-sol",
 	"gpt-6":         "gpt-6.1-sol",
-	// gemini-3.8-flash left the catalog on 27 Oct 2026 after the model check
-	// (kennis/lumia-modelkeuring.md): the name has no route under the sold name
-	// (HTTP 403 key_model_access_denied) and no vendor route, so it points at
-	// the sold model of its own price tier.
-	"gemini-3.8-flash": "claude-haiku-5-5",
 	// gemini-3.8-flash-cyber left the catalog on 29 Oct 2026 (CEO decision on
 	// HIS-5805, option 1): measured through the relay it was twice as slow as
 	// grok-4 (median 12.35 s against 6.12 s, 6 of 10 calls above 10 s, all
-	// HTTP 200), so the name is no longer sold. It has no newer namesake in its
-	// family, so it points at the sold model of its own price tier.
-	"gemini-3.8-flash-cyber": "claude-haiku-5-5",
+	// HTTP 200), so the name is no longer sold. Since 8 Nov 2026 the plain
+	// gemini-3.8-flash is sold again (cheaper, same generation), so the cyber
+	// variant points at it.
+	"gemini-3.8-flash-cyber": "gemini-3.8-flash",
 }
 
 // HwPremiumInputMicroUsd is the input list price (micro-dollars per million

@@ -74,6 +74,7 @@ const hwTestPriceListBody = `{
   "claude-haiku-5-5": {"input_cost_per_token": 1e-07, "output_cost_per_token": 5e-07, "mode": "chat"},
   "claude-fable-5-1": {"input_cost_per_token": 1e-05, "output_cost_per_token": 5e-05, "mode": "chat"},
   "gemini-3.8-flash": {"input_cost_per_token": 7.5e-07, "output_cost_per_token": 3.75e-06, "mode": "chat"},
+  "gemini-3.1-pro-preview": {"input_cost_per_token": 2e-06, "output_cost_per_token": 1.2e-05, "mode": "chat"},
   "gpt-6-luna": {"input_cost_per_token": 1e-07, "output_cost_per_token": 5e-07, "mode": "chat"},
   "gpt-6.1-sol": {"input_cost_per_token": 2e-06, "output_cost_per_token": 1e-05, "mode": "chat"},
   "gpt-6-astra": {"input_cost_per_token": 1e-05, "output_cost_per_token": 5e-05, "mode": "chat"},
@@ -131,7 +132,7 @@ func TestHwPriceSnapshotFetchStoresSourceTimeAndRateDate(t *testing.T) {
 	assert.Equal(t, fetchedAt.Unix(), snapshot.FetchedAt)
 	assert.Equal(t, "2026-10-19", snapshot.FxDate)
 	assert.Equal(t, "49.5523", snapshot.TryPerUsd)
-	assert.Equal(t, 13, snapshot.ListedCount)
+	assert.Equal(t, 14, snapshot.ListedCount)
 	prices, err := snapshot.HwSnapshotModelPrices()
 	require.NoError(t, err)
 	assert.Equal(t, model.HwModelPrice{InputMicroUsd: 2_000_000, OutputMicroUsd: 10_000_000}, prices["claude-sonnet-5-5"])
@@ -848,10 +849,9 @@ func TestHwNewCatalogModelsKeepsOnlyNewerChatModelsOfSoldFamilies(t *testing.T) 
 		names = append(names, candidate.Name)
 	}
 	// gpt-6.2-sol is a candidate again since the gpt generation 6 family returned
-	// on 3 Nov 2026. gemini-3.8-pro is not one: gemini-3.8-flash-cyber was the
-	// last sold gemini name and left the catalog on 29 Oct 2026 (HIS-5810), so
-	// the family has no floor in hwSoldModels to compare against.
-	assert.Equal(t, []string{"claude-opus-6", "gpt-6.2-sol", "grok-4.1-fast"}, names)
+	// on 3 Nov 2026, and gemini-3.8-pro is one since gemini-3.1-pro-preview
+	// joined the catalog on 8 Nov 2026 (newer than the sold pro).
+	assert.Equal(t, []string{"claude-opus-6", "gemini-3.8-pro", "gpt-6.2-sol", "grok-4.1-fast"}, names)
 	assert.Equal(t, model.HwModelPrice{InputMicroUsd: 5_000_000, OutputMicroUsd: 25_000_000}, found[0].Price)
 }
 
@@ -892,8 +892,7 @@ func TestHwReportNewModelsFilesOneCardPerNewModelOnce(t *testing.T) {
 
 	// A second model of a sold family is a fresh card, and the first is not
 	// repeated. grok-4.1-fast is newer than the sold grok-4-fast, so the grok
-	// family still has a floor in hwSoldModels; gemini-3.8-pro is deliberately
-	// not used here, because no gemini name is sold since HIS-5810.
+	// family still has a floor in hwSoldModels.
 	day2, err := hwParsePriceList([]byte(`{
   "claude-opus-6": {"input_cost_per_token": 5e-06, "output_cost_per_token": 2.5e-05, "mode": "chat"},
   "grok-4.1-fast": {"input_cost_per_token": 2e-07, "output_cost_per_token": 5e-07, "mode": "chat"}

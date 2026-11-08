@@ -47,6 +47,8 @@ export const RECOMMENDED_ORDER = [
   'claude-opus-5-5',
   'claude-sonnet-5-5',
   'gpt-6.1-sol',
+  'gemini-3.1-pro-preview',
+  'gemini-3.8-flash',
   'claude-haiku-5-5',
   'gpt-6-luna',
   'grok-4',
@@ -106,6 +108,26 @@ export const MODEL_GUIDE: Readonly<Record<string, ModelGuide>> = {
     description: {
       tr: 'OpenAI dünyasında günlük kodlamanın dengeli seçimi. Cursor veya Codex ile uygulama geliştirmek ve birçok dosyayı kapsayan değişikliği baştan sona tamamlamak için idealdir; Sonnet ile aynı fiyata.',
       en: 'The balanced pick for everyday coding in the OpenAI family. Ideal for building apps with Cursor or Codex and carrying a change across many files from start to finish, at the same price as Sonnet.',
+    },
+  },
+  'gemini-3.1-pro-preview': {
+    tag: {
+      tr: 'Google: güçlü ve uygun',
+      en: 'Google: strong and affordable',
+    },
+    description: {
+      tr: 'Google’ın güçlü Pro modeli. Uzun belgeleri okumak, kod incelemek ve çok adımlı analizler için iyidir; Sonnet seviyesinde iş, girişte aynı fiyata.',
+      en: 'Google’s strong Pro model. Good for reading long documents, reviewing code and multi-step analysis; Sonnet-level work at the same input price.',
+    },
+  },
+  'gemini-3.8-flash': {
+    tag: {
+      tr: 'Google: hızlı ve ekonomik',
+      en: 'Google: fast and economical',
+    },
+    description: {
+      tr: 'Google’ın en yeni Flash modeli. Sohbet, özetleme, çeviri ve günlük kod yardımı için hızlı ve ekonomik bir seçim; Haiku’dan biraz daha güçlü, Sonnet’ten çok daha ucuz.',
+      en: 'Google’s newest Flash model. A fast, economical pick for chat, summaries, translation and everyday coding help; a little stronger than Haiku and far cheaper than Sonnet.',
     },
   },
   'gpt-6-luna': {

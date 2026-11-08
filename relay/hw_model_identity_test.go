@@ -14,15 +14,17 @@ import (
 
 func TestHwEverySoldModelHasAnIdentity(t *testing.T) {
 	want := map[string][2]string{
-		"claude-fable-5-1":  {"Claude Fable 5.1", "Anthropic"},
-		"claude-opus-5-5":   {"Claude Opus 5.5", "Anthropic"},
-		"claude-sonnet-5-5": {"Claude Sonnet 5.5", "Anthropic"},
-		"claude-haiku-5-5":  {"Claude Haiku 5.5", "Anthropic"},
-		"gpt-6-luna":        {"GPT-6 Luna", "OpenAI"},
-		"gpt-6.1-sol":       {"GPT-6.1 Sol", "OpenAI"},
-		"gpt-6-astra":       {"GPT-6 Astra", "OpenAI"},
-		"grok-4":            {"Grok 4", "xAI"},
-		"grok-4-fast":       {"Grok 4 Fast", "xAI"},
+		"claude-fable-5-1":       {"Claude Fable 5.1", "Anthropic"},
+		"claude-opus-5-5":        {"Claude Opus 5.5", "Anthropic"},
+		"claude-sonnet-5-5":      {"Claude Sonnet 5.5", "Anthropic"},
+		"claude-haiku-5-5":       {"Claude Haiku 5.5", "Anthropic"},
+		"gpt-6-luna":             {"GPT-6 Luna", "OpenAI"},
+		"gpt-6.1-sol":            {"GPT-6.1 Sol", "OpenAI"},
+		"gpt-6-astra":            {"GPT-6 Astra", "OpenAI"},
+		"grok-4":                 {"Grok 4", "xAI"},
+		"grok-4-fast":            {"Grok 4 Fast", "xAI"},
+		"gemini-3.1-pro-preview": {"Gemini 3.1 Pro Preview", "Google"},
+		"gemini-3.8-flash":       {"Gemini 3.8 Flash", "Google"},
 	}
 	for name, expected := range want {
 		display, maker, ok := service.HwModelIdentity(name)

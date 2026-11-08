@@ -37,7 +37,7 @@ import {
 
 describe('model guide', () => {
   it('describes every recommended model in Turkish and English', () => {
-    expect(RECOMMENDED_ORDER).toHaveLength(9)
+    expect(RECOMMENDED_ORDER).toHaveLength(11)
     for (const name of RECOMMENDED_ORDER) {
       const guide = modelGuide(name)
       expect(guide, name).toBeDefined()
@@ -100,6 +100,8 @@ describe('premium models', () => {
       'claude-opus-5-5',
       'claude-haiku-5-5',
       'grok-4',
+      'gemini-3.1-pro-preview',
+      'gemini-3.8-flash',
       'unknown',
       undefined,
     ]) {
@@ -119,8 +121,10 @@ describe('premium models', () => {
         hisarweb: { input: 7.5, output: 37.5 },
       },
       {
-        model: 'gemini-lonely',
-        provider: 'Google',
+        // xAI: the sold grok names carry no official price, so a premium
+        // xAI model has no cheaper sibling to point to.
+        model: 'xai-lonely',
+        provider: 'xAI',
         official: { input: 12, output: 60 },
         openrouter: null,
         hisarweb: { input: 6, output: 30 },
@@ -132,10 +136,10 @@ describe('premium models', () => {
       'claude-fable-5-1'
     )
     // Premium, but no cheaper model of the same provider: no notice.
-    expect(isPremiumModel('gemini-lonely', fixtures)).toBe(true)
-    expect(premiumStepDown('gemini-lonely', fixtures)).toBeUndefined()
-    expect(premiumNotice('gemini-lonely', 'en', fixtures)).toBeUndefined()
-    expect(MODEL_PRICES).toHaveLength(9)
+    expect(isPremiumModel('xai-lonely', fixtures)).toBe(true)
+    expect(premiumStepDown('xai-lonely', fixtures)).toBeUndefined()
+    expect(premiumNotice('xai-lonely', 'en', fixtures)).toBeUndefined()
+    expect(MODEL_PRICES).toHaveLength(11)
   })
 
   it('writes the notice in Turkish and English without an em-dash', () => {
