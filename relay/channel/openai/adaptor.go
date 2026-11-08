@@ -436,9 +436,7 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 		request.LogProbs = nil
 		request.TopLogProbs = nil
 	}
-	if capabilities.UseDeveloperRole && len(request.Messages) > 0 && request.Messages[0].Role == "system" {
-		request.Messages[0].Role = "developer"
-	}
+	hwApplyUpstreamRole(info, request, capabilities.UseDeveloperRole)
 
 	return request, nil
 }

@@ -39,7 +39,9 @@ func hwApplyChatModelIdentity(info *relaycommon.RelayInfo, request *dto.GeneralO
 			return
 		}
 	}
-	system := dto.Message{Role: request.GetSystemRoleName(), Content: line}
+	// Always "system": the OpenAI adaptor turns it into "developer" only for
+	// official OpenAI, other upstreams (Lumia) reject the developer role.
+	system := dto.Message{Role: "system", Content: line}
 	request.Messages = append([]dto.Message{system}, request.Messages...)
 }
 

@@ -112,3 +112,15 @@ func TestHwModelIdentityKeepsCustomerSystemPromptOnce(t *testing.T) {
 		assert.Len(t, request.Messages, 1)
 	})
 }
+
+func TestHwChatModelIdentityUsesSystemRoleForGPT6(t *testing.T) {
+	request := &dto.GeneralOpenAIRequest{Model: "gpt-6-luna", Messages: []dto.Message{{Role: "user", Content: "hi"}}}
+	if request.GetSystemRoleName() != "developer" {
+		t.Skip("gpt-6-luna no longer a developer-role model")
+	}
+	info := &relaycommon.RelayInfo{OriginModelName: "gpt-6-luna"}
+	hwApplyChatModelIdentity(info, request)
+	if len(request.Messages) > 1 && request.Messages[0].Role != "system" {
+		t.Fatalf("identity line role = %q, want system", request.Messages[0].Role)
+	}
+}
