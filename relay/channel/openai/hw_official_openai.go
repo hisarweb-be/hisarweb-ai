@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"encoding/json"
 	"net/url"
 	"strings"
 
@@ -48,4 +49,43 @@ func hwDeveloperToSystem(messages []dto.Message) {
 			messages[i].Role = "system"
 		}
 	}
+}
+
+// hwResponsesDeveloperToSystem rewrites role "developer" to "system" in the
+// input array of a Responses request. Same reason as hwApplyUpstreamRole: a
+// non-official upstream (Lumia) answers 422 "unknown variant developer".
+// A string input, invalid JSON or an input without developer items is
+// returned unchanged.
+func hwResponsesDeveloperToSystem(input json.RawMessage) json.RawMessage {
+	if len(input) == 0 || input[0] != '[' || !strings.Contains(string(input), "developer") {
+		return input
+	}
+	var items []map[string]json.RawMessage
+	if err := json.Unmarshal(input, &items); err != nil {
+		return input
+	}
+	changed := false
+	for _, it := range items {
+		if string(it["role"]) == `"developer"` {
+			it["role"] = json.RawMessage(`"system"`)
+			changed = true
+		}
+	}
+	if !changed {
+		return input
+	}
+	out, err := json.Marshal(items)
+	if err != nil {
+		return input
+	}
+	return out
+}
+
+// hwApplyUpstreamResponsesInput is the one hook line in the adaptor: on a
+// non-official upstream a developer role in the Responses input becomes system.
+func hwApplyUpstreamResponsesInput(info *relaycommon.RelayInfo, input json.RawMessage) json.RawMessage {
+	if info == nil || hwIsOfficialOpenAI(info) {
+		return input
+	}
+	return hwResponsesDeveloperToSystem(input)
 }
