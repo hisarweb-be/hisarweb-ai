@@ -237,5 +237,7 @@
   "compatible API routes": "compatible connections",
   "temporarily unavailable": "temporarily unavailable",
   "typing": "typing",
-  "~{{words}} words per second": "~{{words}} words per second"
+  "~{{words}} words per second": "~{{words}} words per second",
+  "This key was shown once when it was created and cannot be shown again. Create a new key on the API keys page.": "This key was shown once when it was created and cannot be shown again. Create a new key on the API keys page.",
+  "Create a new API key to copy a real request": "Create a new API key to copy a real request"
 }

@@ -25,9 +25,11 @@ web/src/i18n/__tests__/tr-locale.test.ts                        10
 web/src/components/layout/components/authenticated-layout.tsx   1
 web/src/features/pricing/components/pricing-sidebar.tsx         2
 web/src/hooks/use-sidebar-data.ts                              1
-# chat: een mislukte of afgebroken step-up (G2) mag de wachtwoordvraag niet opnieuw stellen
+# chat: een hash-only sleutel (G2 deel B) wordt niet opgehaald maar verwijst naar een nieuwe sleutel; een mislukte of afgebroken step-up (G2) mag de wachtwoordvraag niet opnieuw stellen
 # copy-key test now types the step-up password (G2)
-web/src/features/chat/hooks/use-active-chat-key.ts             1
+web/src/features/chat/hooks/use-active-chat-key.ts             9
+# dashboard: de kopieerknop van het voorbeeldverzoek vraagt geen hash-only sleutel op (G2 deel B, hw/lib/key-recoverable.ts)
+web/src/features/dashboard/components/overview/overview-dashboard.tsx   12
 web/src/features/keys/components/__tests__/api-key-listing.test.tsx   9
 # create-drawer (G2 part C): hash-only keys are shown once via hwShowKeysOnce (features/hw/lib/key-once.tsx)
 web/src/features/keys/components/api-keys-mutate-drawer.tsx    6

@@ -174,5 +174,7 @@
   "Your friend signs up through your link and tops up credit.": "Votre ami s'inscrit via votre lien et recharge des crédits.",
   "temporarily unavailable": "temporairement indisponible",
   "typing": "écrit",
-  "~{{words}} words per second": "~{{words}} words per second"
+  "~{{words}} words per second": "~{{words}} words per second",
+  "This key was shown once when it was created and cannot be shown again. Create a new key on the API keys page.": "Cette clé n'a été affichée qu'une seule fois, à sa création, et ne peut plus l'être. Créez une nouvelle clé sur la page des clés API.",
+  "Create a new API key to copy a real request": "Créez une nouvelle clé API pour copier une vraie requête"
 }

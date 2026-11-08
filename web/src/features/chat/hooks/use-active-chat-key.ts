@@ -20,6 +20,11 @@ import { useQuery } from '@tanstack/react-query'
 import { t } from 'i18next'
 
 import { fetchTokenKey, getApiKeys } from '@/features/keys/api'
+import {
+  hwKeyNotRecoverableMessage,
+  hwKeyRecoverable,
+  hwThrowIfNotRecoverable,
+} from '@/features/hw/lib/key-recoverable'
 import { API_KEY_STATUS } from '@/features/keys/constants'
 import {
   requireServerSuccess,
@@ -34,13 +39,16 @@ export async function fetchActiveChatKey() {
   }
 
   const items = result.data?.items ?? []
-  const active = items.find((item) => item.status === API_KEY_STATUS.ENABLED)
-  if (!active) {
+  const enabled = items.filter((item) => item.status === API_KEY_STATUS.ENABLED)
+  if (!enabled.length) {
     throw new Error('No enabled API keys found. Create or enable one first.')
   }
+  const active = enabled.find((item) => hwKeyRecoverable(item.key))
+  if (!active) throw new Error(hwKeyNotRecoverableMessage()) // hash-only: shown once
 
   const keyResult = await fetchTokenKey(active.id)
   if (!keyResult.success || !keyResult.data?.key) {
+    hwThrowIfNotRecoverable(keyResult)
     throw createServerError(keyResult, t('Failed to load API keys'))
   }
 

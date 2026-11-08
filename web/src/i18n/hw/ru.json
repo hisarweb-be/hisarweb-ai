@@ -174,5 +174,7 @@
   "Your friend signs up through your link and tops up credit.": "Друг регистрируется по вашей ссылке и пополняет кредиты.",
   "temporarily unavailable": "временно недоступна",
   "typing": "печатает",
-  "~{{words}} words per second": "~{{words}} words per second"
+  "~{{words}} words per second": "~{{words}} words per second",
+  "This key was shown once when it was created and cannot be shown again. Create a new key on the API keys page.": "Этот ключ был показан один раз при создании и больше не отображается. Создайте новый ключ на странице API-ключей.",
+  "Create a new API key to copy a real request": "Создайте новый API-ключ, чтобы скопировать настоящий запрос"
 }
