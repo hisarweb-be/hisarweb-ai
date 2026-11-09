@@ -129,7 +129,7 @@ const CLAUDE_INSTALL_STEPS: readonly GuideStep[] = [
     },
   },
   {
-    only: ['macos', 'linux'],
+    only: ['linux'],
     text: {
       tr: 'Terminal penceresini kapatıp yeni bir tane açın, sonra kurulumu kontrol edin.',
       en: 'Close the terminal window, open a new one and check the installation.',
@@ -144,6 +144,18 @@ const CLAUDE_INSTALL_STEPS: readonly GuideStep[] = [
         516
       ),
     ],
+    see: {
+      tr: 'Bir sürüm numarası görünür, örneğin 2.1.x. “command not found” gibi bir hata görürseniz pencereyi kapatıp yeniden açın.',
+      en: 'A version number appears, for example 2.1.x. If you see a “command not found” style error, close the window and open it again.',
+    },
+  },
+  {
+    only: ['macos'],
+    text: {
+      tr: 'Terminal penceresini kapatıp yeni bir tane açın, sonra kurulumu kontrol edin.',
+      en: 'Close the terminal window, open a new one and check the installation.',
+    },
+    blocks: [block('command', 'bash', 'claude --version')],
     see: {
       tr: 'Bir sürüm numarası görünür, örneğin 2.1.x. “command not found” gibi bir hata görürseniz pencereyi kapatıp yeniden açın.',
       en: 'A version number appears, for example 2.1.x. If you see a “command not found” style error, close the window and open it again.',
