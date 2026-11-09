@@ -1069,11 +1069,13 @@ func (user *User) ValidateAndFill() (err error) {
 	err = DB.Where("username = ? OR email = ?", username, username).First(user).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			common.HwBurnPasswordHash(password)
 			return ErrInvalidCredentials
 		}
 		return fmt.Errorf("%w: %v", ErrDatabase, err)
 	}
 	if user.Password == "" {
+		common.HwBurnPasswordHash(password)
 		return ErrInvalidCredentials
 	}
 	okay := common.ValidatePasswordAndHash(password, user.Password)

@@ -2,7 +2,6 @@ package controller
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -237,7 +236,7 @@ func SendEmailVerification(c *gin.Context) {
 	}
 
 	if model.IsEmailAlreadyTaken(email) {
-		common.ApiErrorT(c, "Email address is already in use")
+		hwTakenEmailAnswer(c)
 		return
 	}
 	code := common.GenerateVerificationCode(6)
@@ -267,17 +266,16 @@ func SendPasswordResetEmail(c *gin.Context) {
 	if user, err := model.GetUniqueUserByEmail(email); err == nil {
 		code := common.GenerateVerificationCode(0)
 		common.RegisterVerificationCodeWithKey(email, code, common.PasswordResetPurpose)
-		link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", system_setting.ServerAddress, email, code)
+		link := service.HwPasswordResetLink(system_setting.ServerAddress, email, code)
 		lang := user.GetSetting().Language
 		if lang == "" {
 			lang = i18n.StatedLang(c)
 		}
 		subject, content := service.HwPasswordResetMail(
 			service.HwAccountMailLanguage(lang), link, common.VerificationValidMinutes)
-		err := common.SendEmail(subject, email, content)
-		if err != nil {
-			logger.LogError(c.Request.Context(), common.LogText("failed to send password reset email to %s: %s", email, err.Error()))
-		}
+		// Sent in the background: the mail round trip would otherwise make
+		// the answer slower for a known address than for an unknown one.
+		go service.HwSendResetMailAsync(subject, email, content)
 	} else if err != nil && !errors.Is(err, model.ErrEmailNotFound) {
 		logger.LogWarn(c.Request.Context(), common.LogText("skip password reset email for %s: %s", email, err.Error()))
 	}

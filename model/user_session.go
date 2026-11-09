@@ -487,7 +487,7 @@ func RotateUserSessionRefresh(userID int, sid, presentedHash, nextHash string, n
 		if err := DB.Where("sid = ? AND user_id = ?", sid, userID).First(&session).Error; err != nil {
 			return nil, err
 		}
-		if session.Status != UserSessionStatusActive || session.RevokedAt != 0 || session.ExpiresAt <= now {
+		if session.Status != UserSessionStatusActive || session.RevokedAt != 0 || session.ExpiresAt <= now || common.HwSessionIdleExpired(session.LastActiveAt, now) {
 			return nil, ErrUserSessionInactive
 		}
 
