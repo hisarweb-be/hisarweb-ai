@@ -4544,7 +4544,7 @@
     "Password must be at least 8 characters": "密码必须至少 8 个字符",
     "Password must be at most 20 characters long": "密码最多 20 个字符",
     "Password must be between 8 and 20 characters": "密码长度必须在 8 到 20 个字符之间",
-    "Password must contain between 8 and 128 characters.": "密码长度必须为 8–128 个字符。",
+    "Password must contain between 12 and 128 characters.": "密码长度必须为 12–128 个字符。",
     "Password Registration": "密码注册",
     "Password registration has been disabled by administrator, please use third-party account verification": "管理员关闭了通过密码进行注册，请使用第三方账户验证的形式进行注册",
     "Password reset and copied to clipboard: {{password}}": "密码已重置并复制到剪贴板：{{password}}",

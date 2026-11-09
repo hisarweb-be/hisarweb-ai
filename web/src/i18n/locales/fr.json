@@ -4544,7 +4544,7 @@
     "Password must be at least 8 characters": "Le mot de passe doit comporter au moins 8 caractères",
     "Password must be at most 20 characters long": "Le mot de passe doit comporter au maximum 20 caractères",
     "Password must be between 8 and 20 characters": "Le mot de passe doit comporter entre 8 et 20 caractères",
-    "Password must contain between 8 and 128 characters.": "Le mot de passe doit contenir entre 8 et 128 caractères.",
+    "Password must contain between 12 and 128 characters.": "Le mot de passe doit contenir entre 12 et 128 caractères.",
     "Password Registration": "Inscription par mot de passe",
     "Password registration has been disabled by administrator, please use third-party account verification": "L’inscription par mot de passe a été désactivée par l’administrateur, veuillez utiliser la vérification par un compte tiers",
     "Password reset and copied to clipboard: {{password}}": "Mot de passe réinitialisé et copié dans le presse-papiers : {{password}}",

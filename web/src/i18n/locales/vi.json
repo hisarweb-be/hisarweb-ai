@@ -4544,7 +4544,7 @@
     "Password must be at least 8 characters": "Mật khẩu phải có ít nhất 8 ký tự",
     "Password must be at most 20 characters long": "Mật khẩu tối đa 20 ký tự",
     "Password must be between 8 and 20 characters": "Mật khẩu phải từ 8 đến 20 ký tự",
-    "Password must contain between 8 and 128 characters.": "Mật khẩu phải có từ 8 đến 128 ký tự.",
+    "Password must contain between 12 and 128 characters.": "Mật khẩu phải có từ 12 đến 128 ký tự.",
     "Password Registration": "Đăng ký mật khẩu",
     "Password registration has been disabled by administrator, please use third-party account verification": "Quản trị viên đã tắt đăng ký bằng mật khẩu, vui lòng dùng xác minh tài khoản bên thứ ba",
     "Password reset and copied to clipboard: {{password}}": "Mật khẩu đã đặt lại và sao chép vào clipboard: {{password}}",

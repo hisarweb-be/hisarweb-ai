@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
@@ -78,12 +79,24 @@ func Login(c *gin.Context) {
 		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
+	if wait := common.LoginThrottleCheck(username, time.Now()); wait > 0 {
+		c.Header("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+		c.JSON(http.StatusTooManyRequests, gin.H{
+			"success": false,
+			"message": "Too many failed attempts for this account, try again later",
+			"code":    "LOGIN_THROTTLED",
+		})
+		return
+	}
 	user := model.User{
 		Username: username,
 		Password: password,
 	}
 	err = user.ValidateAndFill()
 	if err != nil {
+		if !errors.Is(err, model.ErrDatabase) && !errors.Is(err, model.ErrUserEmptyCredentials) {
+			common.LoginThrottleFailure(username, time.Now())
+		}
 		switch {
 		case errors.Is(err, model.ErrDatabase):
 			common.SysLog(common.LogText("Login database error for user %s: %v", username, err))
@@ -111,6 +124,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	common.LoginThrottleSuccess(username)
 	setupLogin(&user, nil, c)
 }
 

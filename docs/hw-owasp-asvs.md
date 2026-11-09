@@ -45,14 +45,14 @@ ASVS 4.0.3
 
 | ID | Status | Note |
 | --- | --- | --- |
-| V2.1.1 (12+ chars) | GAP | minimum is 8 (`common/account_password.go:17`), G3 |
+| V2.1.1 (12+ chars) | OK | minimum is 12 for new passwords (`common/account_password.go` `MinAccountPasswordLength`); stored older passwords still log in, G3 closed |
 | V2.1.2 (64 allowed, >128 denied) | OK | max 128 (`common/account_password.go:18,35`) |
-| V2.1.7 (breached passwords) | GAP | no breached-password check anywhere, G3 |
+| V2.1.7 (breached passwords) | OK | k-anonymity lookup against Pwned Passwords in `ValidateNewAccountPassword` (production only, fails open with a log line), G3 closed |
 | V2.1.9 (no composition rules) | OK | length only (`:34-41`) |
-| V2.2.1 (anti-automation) | PARTIAL | per-IP limit and Turnstile only; no per-account throttle on password login, G4 |
+| V2.2.1 (anti-automation) | OK | per-IP limit and Turnstile, plus a per-account growing delay after 5 failures (`common/login_throttle.go`, wired in `controller/user.go` `Login`); per process, see G4 note |
 | V2.2.2 (weak authenticators secondary only) | OK for login | e-mail alone is not a login factor; reset is covered in G1 |
 | V2.8.1 (TOTP lifetime) | OK | 30 s step |
-| V2.8.4 (TOTP single use) | GAP | `totp.Validate` accepts the same code again inside the window, G6 |
+| V2.8.4 (TOTP single use) | OK | `model/twofa.go` `ValidateTOTPAndUpdateUsage` claims the matched time step atomically in `last_used_step`; a replay is refused and counted as a failure, G6 closed |
 | V2.6.1-V2.6.3 (backup codes) | OK | single use, hashed |
 | V2.9.1, V2.9.3 (WebAuthn verifier) | OK | library verification, user verification required, no custom crypto |
 | V4.3.1 (admin MFA) | PARTIAL | admins can enable 2FA or a passkey; it is not forced, G10 |
@@ -157,7 +157,7 @@ ASVS 4.0.3
 | V2.7.3 (single use) | OK | deleted after redeem |
 | V2.5.6 (secure recovery mechanism) | OK | mailed one-time link; the user chooses the password, nothing is returned (G1 closed) |
 | V2.5.7 (MFA not bypassed by recovery) | PARTIAL | reset asks for a TOTP or backup code when 2FA is on (`controller/misc.go` `ResetPassword`); a passkey-only account has no code to give, so it is not yet covered |
-| V2.2.3 (notification after reset) | GAP | no mail after a reset, G9 |
+| V2.2.3 (notification after reset) | OK | `controller/hw_password_reset.go` sends `NotifyAccountSecurityChange` after a committed reset; a mail failure is logged and does not fail the reset, G9 closed |
 | V8.3.1 (no sensitive data in query string) | GAP | reset token and e-mail in the URL query, G8 |
 | V3.3.3 | OK | all sessions revoked |
 
@@ -172,7 +172,15 @@ Code
 - Account linking is gated: a legacy GitHub binding needs account evidence (tests below); e-mail bind has its own flow and rate limits (`router/api-router.go:65-67`).
 - ASVS 4.0.3 has no OAuth chapter; the nearest requirements are V4.2.2 and V13.2.3 (anti-CSRF through the `state` binding) and V3.2.1; the OAuth 2.0 Cheat Sheet is the reference for PKCE and redirect URI handling.
 
-Status: state binding and one-time consumption OK; PKCE use and redirect-URI allow-listing per provider were not verified in this pass (G12).
+Status: state binding and one-time consumption OK. PKCE and redirect URI per provider (read 9 nov 2026):
+
+| Provider | Redirect URI | PKCE |
+| --- | --- | --- |
+| GitHub (`oauth/github.go`) | not sent, the one registered at GitHub is used | no (confidential client with secret) |
+| Discord, LinuxDO, OIDC, generic (`oauth/discord.go`, `linuxdo.go`, `oidc.go`, `generic.go`) | built server-side from `ServerAddress` and the provider slug, never from the request | no (confidential client with secret) |
+| Telegram (`oauth/telegram.go`) | stored in the flow and compared with `ServerAddress/oauth/telegram` at callback | yes (`code_challenge`) |
+
+The redirect URI cannot be influenced by the caller for any provider. PKCE is missing for the confidential-client providers; ASVS 5.0 and OAuth 2.1 recommend it for all clients, so adding `code_challenge` per provider that supports it is the remaining step (G12b, P3).
 
 Validated by: `TestAuthFlowIsBoundAndConsumedOnce`, `TestAuthFlowExpiryIsEnforced`, `TestExternalAuthAssertionCanOnlyBeClaimedOnce` (`model/auth_flow_test.go`), `TestGenerateOAuthCodeBindsFlowToAuthenticatedSession`, `TestOAuthLoginConsumesFlowOnlyAfterProviderIdentity`, `TestOAuthLoginLegacyGitHubBindingRequiresAccountEvidence` (`controller/auth_flow_test.go`).
 
@@ -190,6 +198,28 @@ Validated by: `TestHwRevolutWebhookSignature` and `TestHwTopUpDuplicateWebhooksC
 
 Open: G14.
 
+## ASVS 5.0.0 mapping (G12, 9 nov 2026)
+
+ASVS 5.0.0 renumbered the standard (V6 Authentication, V7 Session Management, V8 Authorization, V9 Self-contained Tokens, V10 OAuth and OIDC, V11 Cryptography, V14 Data Protection). Mapping of the controls above, by topic and chapter; requirement numbers inside a chapter were not re-verified against the 5.0.0 CSV and must be checked before this table is cited as evidence.
+
+| Control in this document | 4.0.3 | 5.0.0 chapter |
+| --- | --- | --- |
+| Password length 12, breached-password check, Argon2id storage | V2.1, V2.4 | V6 Authentication (password security) |
+| Per-account login throttle, per-IP limit, Turnstile | V2.2 | V6 Authentication (general, anti-automation) |
+| TOTP single use, backup codes, MFA at reset | V2.8, V2.5 | V6 Authentication (multi-factor, lookup secrets, recovery) |
+| Mail after password change or reset | V2.2.3 | V6 Authentication (credential recovery and notification) |
+| Sessions, refresh cookie, revocation | V3 | V7 Session Management |
+| API keys and relay keys | V2.10, V3.5 | V13 Configuration (secrets) and V9 Self-contained Tokens |
+| OAuth login, state, redirect URI, PKCE | V4.2.2, V13.2.3 | V10 OAuth and OIDC |
+| Webhook signatures and replay window | V6.2, V2.7.3 | V11 Cryptography and V16 Security Logging and Error Handling |
+| Roles and admin routes | V4 | V8 Authorization |
+
+Gaps that move with the renumbering: V10 (OAuth) is now a requirement chapter, so the PKCE gap above becomes a real finding (G12b); the 5.0.0 chapter V6 also expects phishing-resistant factors for high-value accounts, which G10 (mandatory MFA for administrators) covers.
+
+## CORS on usage and log routes
+
+`middleware.CORS()` allows all origins with `AllowCredentials`. It is attached to `/api/usage/*` and `/api/log/token` (registered after the `Use` call, so only those routes; the `/api/log/*` user and admin routes were registered before it and have no CORS headers) and to the relay and dashboard routers. All of these authenticate with a bearer key in the `Authorization` header (`TokenAuthReadOnly`, `TokenAuth`), never with the session cookie, so a foreign origin gains nothing it does not already hold as the key owner. Verdict: acceptable. Hardening candidate (P3): drop `AllowCredentials`, since no cookie is used on these routes.
+
 ## CI gate
 
 `.github/workflows/ci.yml`: Go vet and build for the root module and the relaykit and tokenkit modules, `make test`; frontend typecheck (`bun check -b`) and `bun run test`. `.github/workflows/security.yml`: `govulncheck` per module, `bun audit --audit-level=high` (two advisories ignored by id), production image build, gitleaks. There is no static analysis for auth logic (no CodeQL or gosec step); the controls above are held by the focused Go tests named per section.
@@ -200,11 +230,11 @@ Open: G14.
 | --- | --- | --- | --- |
 | G1 | P1 | Password reset returns a system-generated password (48 bits) in the response, the user cannot choose, and reset skips 2FA and passkey | V2.5.6, V2.5.7 |
 | G2 | P1 | Step-up on `POST /api/token/:id/key` and `/batch/keys` is closed (password, or 2FA code when on; `controller/hw_token_key_stepup.go`). Part B (hash column, hash lookup, backfill, hash-only flag for new keys) is in; still open: the clear column of existing rows, and the web UI showing the key once | V2.10.4, V3.5.2 |
-| G3 | P2 | Minimum password length 8 (ASVS 12) and no breached-password check | V2.1.1, V2.1.7 |
-| G4 | P2 | No per-account throttle on password login (IP limit only) | V2.2.1 |
-| G6 | P2 | TOTP code reusable inside its validity window | V2.8.4 |
-| G9 | P2 | No notification mail after a password reset | V2.2.3 |
-| G12 | P2 | ASVS 5.0.0 (latest stable per AGENTS.md) not mapped; PKCE and redirect URI checks per OAuth provider not verified | n/a |
+| G3 | closed 9 nov | Minimum 12 and breached-password check done | V2.1.1, V2.1.7 |
+| G4 | closed 9 nov | Per-account throttle done (per process, in memory; a shared store is the follow-up) | V2.2.1 |
+| G6 | closed 9 nov | TOTP step single use done | V2.8.4 |
+| G9 | closed 9 nov | Mail after reset done | V2.2.3 |
+| G12 | closed 9 nov (G12b P3: PKCE for confidential-client providers) | ASVS 5.0.0 mapped by chapter; redirect URI and PKCE per provider read | n/a |
 | G5 | P3 | Unknown-user login returns before any hash is computed (timing difference); registration reveals a taken e-mail | Authentication Cheat Sheet |
 | G7 | P3 | No idle timeout (absolute 30 days only); refresh cookie cannot use the `__Host-` prefix | V3.3.2, V3.4.4 |
 | G8 | P3 | Reset token and e-mail in the link query string | V8.3.1 |
