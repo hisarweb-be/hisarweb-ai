@@ -37,6 +37,7 @@ func RegisterVerificationCodeWithKey(key string, code string, purpose string) {
 	defer verificationMutex.Unlock()
 	digest := hwVerificationDigest(purpose, key, code)
 	hwVerificationRemoteStore(purpose, key, digest)
+	hwVerificationResetAttempts(purpose, key)
 	verificationMap[purpose+key] = verificationValue{
 		code: digest,
 		time: time.Now(),
@@ -49,15 +50,17 @@ func RegisterVerificationCodeWithKey(key string, code string, purpose string) {
 func VerifyCodeWithKey(key string, code string, purpose string) bool {
 	verificationMutex.Lock()
 	defer verificationMutex.Unlock()
+	stored := ""
 	if digest, found := hwVerificationRemoteLoad(purpose, key); found {
-		return hwVerificationDigestsEqual(digest, hwVerificationDigest(purpose, key, code))
+		stored = digest
+	} else {
+		value, okay := verificationMap[purpose+key]
+		if !okay || int(time.Since(value.time).Seconds()) >= VerificationValidMinutes*60 {
+			return false
+		}
+		stored = value.code
 	}
-	value, okay := verificationMap[purpose+key]
-	now := time.Now()
-	if !okay || int(now.Sub(value.time).Seconds()) >= VerificationValidMinutes*60 {
-		return false
-	}
-	return hwVerificationDigestsEqual(value.code, hwVerificationDigest(purpose, key, code))
+	return hwVerificationCheck(purpose, key, code, stored)
 }
 
 func DeleteKey(key string, purpose string) {
@@ -65,6 +68,7 @@ func DeleteKey(key string, purpose string) {
 	defer verificationMutex.Unlock()
 	hwVerificationRemoteDelete(purpose, key)
 	delete(verificationMap, purpose+key)
+	hwVerificationResetAttempts(purpose, key)
 }
 
 // no lock inside, so the caller must lock the verificationMap before calling!
@@ -73,6 +77,7 @@ func removeExpiredPairs() {
 	for key := range verificationMap {
 		if int(now.Sub(verificationMap[key].time).Seconds()) >= VerificationValidMinutes*60 {
 			delete(verificationMap, key)
+			delete(verificationAttempts, key)
 		}
 	}
 }

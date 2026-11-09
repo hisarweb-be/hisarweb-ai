@@ -3,6 +3,7 @@
   "1,000 tokens ≈ 750 words": "1,000 tokens ≈ 750 words",
   "A list of actions your app offers, such as looking up the weather, that the model may ask to use.": "A list of actions your app offers, such as looking up the weather, that the model may ask to use.",
   "A number that makes repeated requests give very similar answers.": "A number that makes repeated requests give very similar answers.",
+  "Administrators must enable two-factor authentication or a passkey first": "管理员必须先启用双重验证或通行密钥",
   "Also return how sure the model was about each word. Mostly useful for developers.": "Also return how sure the model was about each word. Mostly useful for developers.",
   "Amount spent in this period": "Amount spent in this period",
   "An optional ID for your own end user, so misuse can be traced to the right person.": "An optional ID for your own end user, so misuse can be traced to the right person.",

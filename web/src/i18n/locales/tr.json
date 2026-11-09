@@ -2859,7 +2859,8 @@
     "Helpful answer": "Yararlı yanıt",
     "Not helpful": "Yararlı değil",
     "Thanks for your feedback": "Geri bildiriminiz için teşekkürler",
-    "What should the answer have been?": "Yanıt ne olmalıydı?"
+    "What should the answer have been?": "Yanıt ne olmalıydı?",
+    "Administrators must enable two-factor authentication or a passkey first": "Yöneticiler önce iki adımlı doğrulamayı veya bir geçiş anahtarını etkinleştirmelidir"
   },
   "Report a wrong price or missing model": "Yanlış fiyat veya eksik model bildir",
   "We check your report against the official source and fix the price list.": "Bildiriminizi resmi kaynakla karşılaştırır ve fiyat listesini düzeltiriz.",

@@ -5,6 +5,7 @@
   "A list of actions your app offers, such as looking up the weather, that the model may ask to use.": "A list of actions your app offers, such as looking up the weather, that the model may ask to use.",
   "A number that makes repeated requests give very similar answers.": "A number that makes repeated requests give very similar answers.",
   "Admin assistant": "Admin assistant",
+  "Administrators must enable two-factor authentication or a passkey first": "Administrators must enable two-factor authentication or a passkey first",
   "All tokens": "All keys",
   "Also return how sure the model was about each word. Mostly useful for developers.": "Also return how sure the model was about each word. Mostly useful for developers.",
   "Amount spent in this period": "Amount spent in this period",
