@@ -108,6 +108,7 @@ const CLAUDE_INSTALL_STEPS: readonly GuideStep[] = [
     },
   },
   {
+    only: ['windows'],
     text: {
       tr: 'Terminal penceresini kapatıp yeni bir tane açın, sonra kurulumu kontrol edin.',
       en: 'Close the terminal window, open a new one and check the installation.',
@@ -125,6 +126,27 @@ const CLAUDE_INSTALL_STEPS: readonly GuideStep[] = [
     see: {
       tr: 'Bir sürüm numarası görünür, örneğin 2.1.x. “Tanınmıyor” gibi bir hata görürseniz pencereyi kapatıp yeniden açın.',
       en: 'A version number appears, for example 2.1.x. If you see a “not recognized” style error, close the window and open it again.',
+    },
+  },
+  {
+    only: ['macos', 'linux'],
+    text: {
+      tr: 'Terminal penceresini kapatıp yeni bir tane açın, sonra kurulumu kontrol edin.',
+      en: 'Close the terminal window, open a new one and check the installation.',
+    },
+    blocks: [block('command', 'bash', 'claude --version')],
+    shots: [
+      shot(
+        'linux-versie',
+        306,
+        'Linux terminalinde claude --version komutu ve altında “2.1.311 (Claude Code)” sürüm satırı.',
+        'claude --version in a Linux terminal with “2.1.311 (Claude Code)” on the line below it.',
+        516
+      ),
+    ],
+    see: {
+      tr: 'Bir sürüm numarası görünür, örneğin 2.1.x. “command not found” gibi bir hata görürseniz pencereyi kapatıp yeniden açın.',
+      en: 'A version number appears, for example 2.1.x. If you see a “command not found” style error, close the window and open it again.',
     },
   },
 ]
