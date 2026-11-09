@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useNavigate } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -31,6 +31,7 @@ import { AuthOperationError } from '@/lib/secure-verification'
 import { createServerError } from '@/lib/server-error-message'
 
 import { AuthLayout } from '../auth-layout'
+import { hwClearResetParams, hwReadResetParams } from './hw-reset-fragment'
 
 export type ResetPasswordSearchParams = {
   email?: string
@@ -39,10 +40,11 @@ export type ResetPasswordSearchParams = {
 
 type ResetPasswordConfirmProps = ResetPasswordSearchParams
 
-export function ResetPasswordConfirm({
-  email,
-  token,
-}: ResetPasswordConfirmProps) {
+export function ResetPasswordConfirm(props: ResetPasswordConfirmProps) {
+  const [{ email, token }] = useState(() =>
+    hwReadResetParams(window.location.hash, props)
+  )
+  useEffect(hwClearResetParams, [])
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [password, setPassword] = useState('')

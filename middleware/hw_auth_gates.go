@@ -128,6 +128,9 @@ func hwAuthKind(minRole int) string {
 // TokenAuth and authHelper call it at the end of their success path, so a route
 // carries neither gate in its own chain.
 func hwAfterAuth(c *gin.Context, auth string) bool {
+	if !hwAdminMFAGate(c) {
+		return false
+	}
 	freeGroup, reserve := HwAuthGatesFor(auth, c.Request.Method, c.FullPath())
 	if freeGroup && !hwFreeGroupGate(c) {
 		return false

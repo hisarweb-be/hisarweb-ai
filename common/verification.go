@@ -35,8 +35,10 @@ func GenerateVerificationCode(length int) string {
 func RegisterVerificationCodeWithKey(key string, code string, purpose string) {
 	verificationMutex.Lock()
 	defer verificationMutex.Unlock()
+	digest := hwVerificationDigest(purpose, key, code)
+	hwVerificationRemoteStore(purpose, key, digest)
 	verificationMap[purpose+key] = verificationValue{
-		code: code,
+		code: digest,
 		time: time.Now(),
 	}
 	if len(verificationMap) > verificationMapMaxSize {
@@ -47,17 +49,21 @@ func RegisterVerificationCodeWithKey(key string, code string, purpose string) {
 func VerifyCodeWithKey(key string, code string, purpose string) bool {
 	verificationMutex.Lock()
 	defer verificationMutex.Unlock()
+	if digest, found := hwVerificationRemoteLoad(purpose, key); found {
+		return hwVerificationDigestsEqual(digest, hwVerificationDigest(purpose, key, code))
+	}
 	value, okay := verificationMap[purpose+key]
 	now := time.Now()
 	if !okay || int(now.Sub(value.time).Seconds()) >= VerificationValidMinutes*60 {
 		return false
 	}
-	return code == value.code
+	return hwVerificationDigestsEqual(value.code, hwVerificationDigest(purpose, key, code))
 }
 
 func DeleteKey(key string, purpose string) {
 	verificationMutex.Lock()
 	defer verificationMutex.Unlock()
+	hwVerificationRemoteDelete(purpose, key)
 	delete(verificationMap, purpose+key)
 }
 

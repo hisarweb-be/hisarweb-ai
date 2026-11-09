@@ -55,12 +55,12 @@ ASVS 4.0.3
 | V2.8.4 (TOTP single use) | OK | `model/twofa.go` `ValidateTOTPAndUpdateUsage` claims the matched time step atomically in `last_used_step`; a replay is refused and counted as a failure, G6 closed |
 | V2.6.1-V2.6.3 (backup codes) | OK | single use, hashed |
 | V2.9.1, V2.9.3 (WebAuthn verifier) | OK | library verification, user verification required, no custom crypto |
-| V4.3.1 (admin MFA) | PARTIAL | admins can enable 2FA or a passkey; it is not forced, G10 |
+| V4.3.1 (admin MFA) | PARTIAL | admins can enable 2FA or a passkey; with `HW_ADMIN_MFA_REQUIRED=true` an admin or root without either is refused with 403 `MFA_ENROLLMENT_REQUIRED` (`middleware/hw_admin_mfa.go`); default off so nobody is locked out before enrolling, G10 |
 | V3.2.1 (new token on login) | OK | each login creates a new session row and refresh token (`service/auth_session.go:80`) |
 
 Validated by (Go tests): `TestHwProductionRefusesDefaultAdminLogin`, `TestSecurityLoginCodeCompletesOnce`, `TestSecurityLoginRegisteredPasskeyRequiresUserVerification`, `TestSecurityLoginAllPrimaryTransportsRequireAdditionalVerification` (`controller/auth_flow_test.go`), `TestIncrementFailedAttemptsRestartsWindowAfterLockoutExpires`, `TestValidateBackupCodeCanOnlySucceedOnce` (`model/user_authentication_test.go`), `TestValidateAndFillRejectsPasswordlessUser` (`model/user_update_test.go`), `TestSessionLimitDoesNotRecordRejectedLoginAsSuccessful` (`controller/auth_session_test.go`).
 
-Open: G3, G4, G5, G6, G10.
+Open: G3, G4. G5 (login timing: `common/hw_timing.go`) and G10 (opt-in gate) done 9 nov.
 
 ## 2. Registration
 
@@ -72,9 +72,9 @@ Code
 
 ASVS 4.0.3: V2.1.2 OK, V2.1.1 GAP (G3), V2.1.7 GAP (G3), V2.2.1 PARTIAL (G4), V3.2.1 OK.
 
-Known behaviour: `Register` answers "Email address is already in use" for a taken e-mail, which allows e-mail enumeration at registration (recorded under G5).
+Closed (G5): `GET /api/verification` answers a taken e-mail like a free one (`controller/hw_owasp_enumeration.go`; `HW_REVEAL_TAKEN_EMAIL=true` restores the old message). Register itself only reports it after the code is proven, so that is not a leak. Old note: `Register` answers "Email address is already in use" for a taken e-mail, which allows e-mail enumeration at registration (recorded under G5).
 
-Validated by: `TestInsertKeepsBlankPasswordForPasswordlessUser` (`model/user_update_test.go`); no focused test for Turnstile or disposable e-mail refusal was found in this pass (G11).
+Validated by: `TestInsertKeepsBlankPasswordForPasswordlessUser` (`model/user_update_test.go`); Turnstile is on this route; the redemption-code log fix is G11.
 
 ## 3. Passwords (storage, change, policy)
 
@@ -118,17 +118,17 @@ ASVS 4.0.3
 | V3.2.1 | OK | new session and refresh token per login |
 | V3.2.3 | OK | access token in memory, refresh in HttpOnly cookie |
 | V3.3.1 (logout invalidates) | OK | server-side revoke |
-| V3.3.2 (periodic re-authentication, idle) | PARTIAL | absolute 30 days, no idle timeout (`last_active_at` is recorded, not enforced), G7 |
+| V3.3.2 (periodic re-authentication, idle) | PARTIAL | absolute 30 days; `HW_SESSION_IDLE_SECONDS` (default 0 = off) refuses a refresh after that many idle seconds (`common/hw_session_idle.go`). `last_active_at` only moves on refresh, so set it to at least twice the access-token lifetime, G7 |
 | V3.3.3, V3.3.4 | OK | session list and revoke exist |
 | V3.4.1, V3.4.2, V3.4.3 | OK | Secure, HttpOnly, SameSite=Strict |
-| V3.4.4 (`__Host-` prefix) | GAP | the refresh cookie needs `Path=/api/user/auth`, which excludes the prefix, G7 |
+| V3.4.4 (`__Host-` prefix) | GAP, not done on purpose | the refresh cookie needs `Path=/api/user/auth`, which excludes the prefix (it requires `Path=/`); renaming also logs every user out. Left open, G7 |
 | V3.5.3 (signed stateless tokens) | OK | HS256, pinned algorithm |
 | V4.2.2, V13.2.3 (CSRF with cookies) | OK | SameSite=Strict plus origin guard |
 | V11.1.4 (anti-automation) | OK | refresh bucket (#30) and critical bucket |
 
 Validated by: `TestRotateUserSessionRefreshRaceAndReuse`, `TestUserSessionCacheExcludesRefreshDigests`, `TestPasswordResetBumpsAuthVersionAndRevokesSessions` (`model/user_session_test.go`), `TestAccessTokenRejectsTampering`, `TestSecurityProofBindsIdentityAndOperation` (`service/auth_token_test.go`), `TestCreateLoginSessionEnforcesActiveLimitAcrossAuthVersions`, `TestHwRefreshCookieAttributes` (`service/auth_session_test.go`), `TestAuthLogoutRejectsRefreshCookieSessionMismatch` (`controller/auth_session_test.go`), `TestSessionCookieOriginGuard` (`middleware/auth_origin_test.go`).
 
-Open: G7.
+Open: G7 `__Host-` only.
 
 ## 5. API keys and access tokens
 
@@ -136,7 +136,7 @@ Two different credentials exist.
 - Relay API keys (`model/token.go`, the keys customers put in their tools): the column `key` (`model/token.go:17`) holds the key in clear (kept, not yet emptied) and a second column `key_hash` (HMAC-SHA256 with a pepper derived from `CRYPTO_SECRET` or `SESSION_SECRET`, indexed) holds its hash. Lookup per request goes by `key_hash` and falls back to the clear text (`model/hw_token_key_hash.go`, `hwFirstTokenByKey`); a backfill in `HwMigrateModels` fills the hash of existing rows, in batches, and is idempotent. With `HW_TOKEN_KEY_HASH_ONLY=true` a new key is returned once in the create response (`data.key`) and the `key` column holds `hw$<hash>`; with the flag off (default) the old behaviour stays, with the hash stored next to the key. A hash-only key is not shown again (`POST /api/token/:id/key` answers 409 `KEY_NOT_RECOVERABLE` after the step-up). A presented key starting with `hw$` is never looked up, so the stored placeholder is not a credential. The full key of a clear-stored row is returned by `POST /api/token/:id/key` (`router/api-router.go:330`, `controller/hw_token_key_stepup.go`) behind login, `CriticalRateLimit` and the step-up proof. List and search responses mask the key (`controller/token.go:57-79`, `TestGetAllTokensMasksKeyInResponse` in `controller/token_test.go`). Keys carry status, expiry, quota, model limits and optional IP limits (`model/token.go:88,224-262`).
 - Dashboard access tokens (`model/user_access_token.go`): only a hash is stored (`token_hash`, `:45`), with scopes and expiry; create, update and delete sit behind `UserCriticalRateLimit("access-token")` (`router/api-router.go:138-141`) and are audited (`controller/access_token_audit_test.go`).
 
-ASVS 4.0.3: V2.10.4 PARTIAL (access tokens hashed; relay keys hashed in `key_hash` and, behind `HW_TOKEN_KEY_HASH_ONLY`, no longer stored in clear for new keys; the clear column of existing rows is emptied in a later separate step; showing a key needs a password or 2FA step-up), V3.5.2 OK for the dashboard (session tokens, not static secrets), V11.1.4 OK, V7.1.1 PARTIAL (the redemption-code error path in `controller/user.go` logs the code, G11).
+ASVS 4.0.3: V2.10.4 PARTIAL (access tokens hashed; relay keys hashed in `key_hash` and, behind `HW_TOKEN_KEY_HASH_ONLY`, no longer stored in clear for new keys; the clear column of existing rows is emptied in a later separate step; showing a key needs a password or 2FA step-up), V3.5.2 OK for the dashboard (session tokens, not static secrets), V11.1.4 OK, V7.1.1 OK (the redemption-code log line carries `common.HwCodeFingerprint`, not the code, G11).
 
 Validated by: `TestHwTokenLookupByHash`, `TestHwTokenLookupFallsBackToClearTextWhileHashIsEmpty`, `TestHwTokenBackfillIsIdempotentAndBatched`, `TestHwTokenInsertHashOnlyStoresNoClearKey`, `TestHwTokenStoredPlaceholderIsNotACredential` (`model/hw_token_key_hash_test.go`), `TestHwTokenCreateShowsKeyOnceAndStoresOnlyHash`, `TestHwTokenCreateWithFlagOffKeepsTheOldBodyAndStorage` (`controller/hw_token_key_once_test.go`).
 
@@ -158,12 +158,12 @@ ASVS 4.0.3
 | V2.5.6 (secure recovery mechanism) | OK | mailed one-time link; the user chooses the password, nothing is returned (G1 closed) |
 | V2.5.7 (MFA not bypassed by recovery) | PARTIAL | reset asks for a TOTP or backup code when 2FA is on (`controller/misc.go` `ResetPassword`); a passkey-only account has no code to give, so it is not yet covered |
 | V2.2.3 (notification after reset) | OK | `controller/hw_password_reset.go` sends `NotifyAccountSecurityChange` after a committed reset; a mail failure is logged and does not fail the reset, G9 closed |
-| V8.3.1 (no sensitive data in query string) | GAP | reset token and e-mail in the URL query, G8 |
+| V8.3.1 (no sensitive data in query string) | OK | the mail link carries e-mail and token in the URL fragment (`service/hw_reset_link.go`); the reset page reads it and clears the address bar, old query links still work, G8 |
 | V3.3.3 | OK | all sessions revoked |
 
 Validated by: `TestResetUserPasswordByEmailRequiresSingleActiveMatch` (`model/user_update_test.go`), `TestPasswordResetBumpsAuthVersionAndRevokesSessions`, `TestPasswordResetDoesNotClearSessionIssuanceHistory` (`service/auth_session_test.go`).
 
-Open: G8, G9, G13 (G1 closed except passkey-only accounts).
+Open: none (G1 closed except passkey-only accounts). G13: codes are stored as SHA-256 digests and mirrored to Redis when enabled (`common/hw_verification_store.go`); without Redis they are still per process. No attempt limit on the 6-character e-mail code yet.
 
 ## 7. OAuth, WeChat and Telegram login
 
@@ -196,7 +196,7 @@ Code
 
 Validated by: `TestHwRevolutWebhookSignature` and `TestHwTopUpDuplicateWebhooksCreditOnce` (`service/hw_order_test.go`), `TestHwStripeWebhookSignature` including stale and future timestamp cases (`service/hw_stripe_test.go`), `TestHwStripeDuplicateWebhookCreditsOnce`, `TestHwRevolutWebhookAnswersUnavailableWhileIncomplete`, `TestHwTelegramWebhookLinksAnAccount`, `TestHwPaymentWebhooksRefuseBeforeAnyCreditIsWritten`.
 
-Open: G14.
+G14 verified 9 nov: every upstream payment route is behind `HwUpstreamPaymentsEnabled()` (default false); `router/hw_upstream_payments_off_test.go` fails if one is registered by default. `/topup` (redeem code) stays on purpose.
 
 ## ASVS 5.0.0 mapping (G12, 9 nov 2026)
 
@@ -235,13 +235,13 @@ Gaps that move with the renumbering: V10 (OAuth) is now a requirement chapter, s
 | G6 | closed 9 nov | TOTP step single use done | V2.8.4 |
 | G9 | closed 9 nov | Mail after reset done | V2.2.3 |
 | G12 | closed 9 nov (G12b P3: PKCE for confidential-client providers) | ASVS 5.0.0 mapped by chapter; redirect URI and PKCE per provider read | n/a |
-| G5 | P3 | Unknown-user login returns before any hash is computed (timing difference); registration reveals a taken e-mail | Authentication Cheat Sheet |
-| G7 | P3 | No idle timeout (absolute 30 days only); refresh cookie cannot use the `__Host-` prefix | V3.3.2, V3.4.4 |
-| G8 | P3 | Reset token and e-mail in the link query string | V8.3.1 |
-| G10 | P3 | Administrators are not required to enroll 2FA or a passkey | V4.3.1 |
-| G11 | P3 | Registration (Turnstile, disposable e-mail) has no focused test; the redemption-code error path logs the code | V7.1.1 |
-| G13 | P3 | Verification and reset codes live in a per-process memory map (lost on restart, not shared between nodes) | V2.7.2 in multi-node use |
-| G14 | P3 | Unused upstream payment webhook routes not re-verified (disabled by the production guards of PR #11) | V11.1.4 |
+| G5 | closed 9 nov | Dummy Argon2id on unknown user, neutral answer for a taken e-mail, mail sent in the background | Authentication Cheat Sheet |
+| G7 | partly closed 9 nov | Idle timeout behind `HW_SESSION_IDLE_SECONDS` (off by default); `__Host-` not done, see V3.4.4 | V3.3.2, V3.4.4 |
+| G8 | closed 9 nov | Link uses the URL fragment | V8.3.1 |
+| G10 | closed 9 nov, opt-in | `HW_ADMIN_MFA_REQUIRED` | V4.3.1 |
+| G11 | closed 9 nov | Log fingerprint (Turnstile already guards register, verification, reset and login) | V7.1.1 |
+| G13 | closed 9 nov | Digests, Redis mirror when enabled | V2.7.2 in multi-node use |
+| G14 | closed 9 nov | Route-absence test | V11.1.4 |
 
 Recipe per gap
 
