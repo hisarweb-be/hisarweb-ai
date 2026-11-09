@@ -19,6 +19,12 @@ model/main.go                                                  2
 model/token.go                                                 8
 model/option.go                                                2
 router/api-router.go                                           3
+# G13 (common/hw_verification_store.go): codes kept as digest, Redis mirror
+common/verification.go                                         6
+# G5 (common/hw_timing.go): hash burn on unknown user and passwordless account
+model/user.go                                                  2
+# G8 (hw-reset-fragment.ts): reset link secrets read from the URL fragment
+web/src/features/auth/reset-password-confirm/index.tsx         2
 web/package.json                                               13
 web/src/i18n/config.ts                                         95
 web/src/i18n/__tests__/tr-locale.test.ts                        10
