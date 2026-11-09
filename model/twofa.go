@@ -12,16 +12,19 @@ import (
 
 // TwoFA 用户2FA设置表
 type TwoFA struct {
-	Id             int            `json:"id" gorm:"primaryKey"`
-	UserId         int            `json:"user_id" gorm:"unique;not null;index"`
-	Secret         string         `json:"-" gorm:"type:varchar(255);not null"` // TOTP密钥，不返回给前端
-	IsEnabled      bool           `json:"is_enabled"`
-	FailedAttempts int            `json:"failed_attempts" gorm:"default:0"`
-	LockedUntil    *time.Time     `json:"locked_until,omitempty"`
-	LastUsedAt     *time.Time     `json:"last_used_at,omitempty"`
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
-	DeletedAt      gorm.DeletedAt `json:"-" gorm:"index"`
+	Id             int        `json:"id" gorm:"primaryKey"`
+	UserId         int        `json:"user_id" gorm:"unique;not null;index"`
+	Secret         string     `json:"-" gorm:"type:varchar(255);not null"` // TOTP密钥，不返回给前端
+	IsEnabled      bool       `json:"is_enabled"`
+	FailedAttempts int        `json:"failed_attempts" gorm:"default:0"`
+	LockedUntil    *time.Time `json:"locked_until,omitempty"`
+	LastUsedAt     *time.Time `json:"last_used_at,omitempty"`
+	// LastUsedStep is the newest accepted TOTP time step; a code from the same
+	// or an older step is refused (ASVS V2.8.4).
+	LastUsedStep int64          `json:"-" gorm:"default:0"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 // TwoFABackupCode 备用码使用记录表
@@ -281,16 +284,27 @@ func (t *TwoFA) ValidateTOTPAndUpdateUsage(code string) (bool, error) {
 	}
 
 	// 验证TOTP码
-	if !common.ValidateTOTPCode(t.Secret, code) {
+	now := time.Now()
+	valid, step := common.ValidateTOTPCodeStep(t.Secret, code, now)
+	if valid {
+		// Accept each time step once: the conditional update is the atomic
+		// claim, so two parallel requests with one code cannot both pass.
+		claim := DB.Model(&TwoFA{}).Where("id = ? AND last_used_step < ?", t.Id, step).Update("last_used_step", step)
+		if claim.Error != nil {
+			return false, claim.Error
+		}
+		valid = claim.RowsAffected == 1
+	}
+	if !valid {
 		// 增加失败次数
 		if err := t.IncrementFailedAttempts(); err != nil {
 			return false, err
 		}
 		return false, nil
 	}
+	t.LastUsedStep = step
 
 	// 验证成功，重置失败次数并更新最后使用时间
-	now := time.Now()
 	t.FailedAttempts = 0
 	t.LockedUntil = nil
 	t.LastUsedAt = &now

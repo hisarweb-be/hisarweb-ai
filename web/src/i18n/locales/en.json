@@ -4544,7 +4544,7 @@
     "Password must be at least 8 characters": "Password must be at least 8 characters",
     "Password must be at most 20 characters long": "Password must be at most 20 characters long",
     "Password must be between 8 and 20 characters": "Password must be between 8 and 20 characters",
-    "Password must contain between 8 and 128 characters.": "Password must contain between 8 and 128 characters.",
+    "Password must contain between 12 and 128 characters.": "Password must contain between 12 and 128 characters.",
     "Password Registration": "Password Registration",
     "Password registration has been disabled by administrator, please use third-party account verification": "Password registration has been disabled by administrator, please use third-party account verification",
     "Password reset and copied to clipboard: {{password}}": "Password reset and copied to clipboard: {{password}}",

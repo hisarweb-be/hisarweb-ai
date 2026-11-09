@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	MinAccountPasswordLength = 8
+	MinAccountPasswordLength = 12
 	MaxAccountPasswordLength = 128
 	accountPasswordMemory    = 19 * 1024
 	accountPasswordTime      = 2
@@ -23,9 +23,10 @@ const (
 )
 
 var (
-	ErrAccountPasswordLength = errors.New("Password must contain between 8 and 128 characters.")
-	ErrAccountPasswordSame   = errors.New("New password must be different from current password")
-	ErrPasswordLegacyLimit   = errors.New("Long passwords are unavailable until the password storage upgrade is complete.")
+	ErrAccountPasswordLength   = errors.New("Password must contain between 12 and 128 characters.")
+	ErrAccountPasswordBreached = errors.New("This password appeared in a known data breach. Choose a different password.")
+	ErrAccountPasswordSame     = errors.New("New password must be different from current password")
+	ErrPasswordLegacyLimit     = errors.New("Long passwords are unavailable until the password storage upgrade is complete.")
 )
 
 // ValidateNewAccountPassword applies only when a user chooses a new password.
@@ -34,6 +35,9 @@ var (
 func ValidateNewAccountPassword(password string) error {
 	if !utf8.ValidString(password) || utf8.RuneCountInString(password) < MinAccountPasswordLength || utf8.RuneCountInString(password) > MaxAccountPasswordLength {
 		return ErrAccountPasswordLength
+	}
+	if isBreachedPassword(password) {
+		return ErrAccountPasswordBreached
 	}
 	return nil
 }

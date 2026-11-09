@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 
@@ -96,6 +98,11 @@ func HwResetPassword(c *gin.Context) {
 		return
 	}
 	common.DeleteKey(req.Email, common.PasswordResetPurpose)
+	// ASVS V2.2.3: tell the owner. The reset is already committed, so a mail
+	// failure is logged and never fails the request.
+	if nerr := service.NotifyAccountSecurityChange(service.AccountMailLanguage(c, user.Id), user.Email, i18n.MsgSecurityEventPasswordUpdated); nerr != nil {
+		common.SysLog("password reset notice mail failed for user " + strconv.Itoa(user.Id))
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

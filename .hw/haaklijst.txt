@@ -74,3 +74,8 @@ web/src/features/keys/components/data-table-bulk-actions.tsx    13
 web/src/features/keys/components/data-table-row-actions.tsx     13
 # Responses-pad: developer-rol naar system op een niet-officiele upstream (hw_official_openai.go), een haakregel
 relay/channel/openai/adaptor.go 1
+# OWASP-fix PR 262 (G3, G4, G6, G9): wachtwoordminimum 12 en aanroep breach-check (common/hw_pwned.go), login-throttle in Login, TOTP-replaystap
+common/account_password.go                                     4
+controller/user.go                                             14
+model/twofa.go                                                 14
+controller/security_account_test.go                            1
