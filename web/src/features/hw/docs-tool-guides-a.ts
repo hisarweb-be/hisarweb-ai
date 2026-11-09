@@ -151,6 +151,7 @@ const CLAUDE_INSTALL_STEPS: readonly GuideStep[] = [
   },
   {
     only: ['macos'],
+    unverified: true,
     text: {
       tr: 'Terminal penceresini kapatıp yeni bir tane açın, sonra kurulumu kontrol edin.',
       en: 'Close the terminal window, open a new one and check the installation.',
@@ -284,6 +285,7 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
           ],
         },
         {
+          only: ['windows'],
           text: {
             tr: 'Karşılama ekranı açılır. Kutuya bir soru yazıp Enter’a basın.',
             en: 'The welcome screen opens. Type a question in the box and press Enter.',
@@ -315,6 +317,38 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
               744
             ),
           ],
+        },
+        {
+          only: ['linux'],
+          text: {
+            tr: 'Karşılama ekranı açılır. Kutuya bir soru yazıp Enter’a basın.',
+            en: 'The welcome screen opens. Type a question in the box and press Enter.',
+          },
+          see: {
+            tr: 'Soru kutusu, altında kullandığınız model adı görünür. “Model listesinde yok” türünde bir uyarı çıkabilir; bu zararsızdır, model çalışır.',
+            en: 'A question box with your model name under it. A notice that the model is not in its list may appear; that is harmless and the model works.',
+          },
+          shots: [
+            shot(
+              'linux-start',
+              980,
+              'Linux terminalinde Claude Code karşılama ekranı ve boş soru kutusu.',
+              'The Claude Code welcome screen with an empty question box in a Linux terminal.',
+              560
+            ),
+          ],
+        },
+        {
+          only: ['macos'],
+          unverified: true,
+          text: {
+            tr: 'Karşılama ekranı açılır. Kutuya bir soru yazıp Enter’a basın.',
+            en: 'The welcome screen opens. Type a question in the box and press Enter.',
+          },
+          see: {
+            tr: 'Soru kutusu, altında kullandığınız model adı görünür. “Model listesinde yok” türünde bir uyarı çıkabilir; bu zararsızdır, model çalışır.',
+            en: 'A question box with your model name under it. A notice that the model is not in its list may appear; that is harmless and the model works.',
+          },
         },
         {
           text: {
