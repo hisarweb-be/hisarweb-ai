@@ -166,8 +166,9 @@ func HwMeasureStatusOnce(at time.Time, models []string) error {
 // Unavailable), so it can open neither a false outage nor a false green.
 //
 // The call itself runs at most once per hwStatusProbeIntervalSeconds per model.
-// In between, the last outcome is reused, so every minute still gets a sample
-// and the three-minute chain keeps working while the cost stays bounded.
+// In between, a good or refused outcome is reused, so every minute still gets a
+// sample and the three-minute chain keeps working while the cost stays bounded.
+// A bad minute is asked again instead of reused (see hwStatusProbeReuse).
 func hwProbeStatusModel(probe func(ctx context.Context, modelName string) HwStatusProbeOutcome, name string, minute int64) (bool, string) {
 	if cached, ok := hwStatusProbeReuse(name, minute); ok {
 		return cached.ok, cached.reason
@@ -188,12 +189,22 @@ func hwProbeStatusModel(probe func(ctx context.Context, modelName string) HwStat
 }
 
 // hwStatusProbeReuse returns the remembered outcome of a model while it is
-// younger than the probe interval.
+// younger than the probe interval, so a quiet minute gets a verdict without a
+// call. A bad minute (probe_failed) is never reused: a deploy leaves the
+// upstream down for a few seconds, and handing that one bad minute on to the
+// next four silently turned a three-second restart into a three-hundred-second
+// outage (HIS-7967, INC-20261106). Asking again the next minute costs one call
+// and it answers again. A refusal keeps its reuse: it is no evidence at all, it
+// opens no outage, and re-asking an exhausted quota every minute for every sold
+// model is exactly the call storm this interval was added for.
 func hwStatusProbeReuse(name string, minute int64) (hwStatusProbeResult, bool) {
 	hwStatusProbeMu.RLock()
 	defer hwStatusProbeMu.RUnlock()
 	result, seen := hwStatusProbeLast[name]
 	if !seen || result.minute > minute || minute-result.minute >= hwStatusProbeIntervalSeconds {
+		return hwStatusProbeResult{}, false
+	}
+	if !result.ok && result.reason != HwStatusReasonProbeUnavailable {
 		return hwStatusProbeResult{}, false
 	}
 	return result, true
