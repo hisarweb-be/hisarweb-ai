@@ -13,6 +13,9 @@ pkg/perf_metrics/metrics.go                                    1
 middleware/access_token_routes.go                              2
 # middleware/auth.go: one gate hook per auth function (TokenAuth, authHelper), see middleware/hw_auth_gates.go
 middleware/auth.go                                             6
+# router/main.go: one line in SetRouter that registers the host's own crawler files
+# (router/seo-router.go, hw_ prefix excluded from the hook list) before the web catch-all
+router/main.go                                                  1
 router/relay-router.go                                         0
 model/main.go                                                  2
 # token.go (G2 part B): key_hash column, hash lookup hooks, hash-only rows never shown (model/hw_token_key_hash.go)
