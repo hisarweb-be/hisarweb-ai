@@ -108,6 +108,7 @@ const CLAUDE_INSTALL_STEPS: readonly GuideStep[] = [
     },
   },
   {
+    only: ['windows'],
     text: {
       tr: 'Terminal penceresini kapatıp yeni bir tane açın, sonra kurulumu kontrol edin.',
       en: 'Close the terminal window, open a new one and check the installation.',
@@ -125,6 +126,40 @@ const CLAUDE_INSTALL_STEPS: readonly GuideStep[] = [
     see: {
       tr: 'Bir sürüm numarası görünür, örneğin 2.1.x. “Tanınmıyor” gibi bir hata görürseniz pencereyi kapatıp yeniden açın.',
       en: 'A version number appears, for example 2.1.x. If you see a “not recognized” style error, close the window and open it again.',
+    },
+  },
+  {
+    only: ['linux'],
+    text: {
+      tr: 'Terminal penceresini kapatıp yeni bir tane açın, sonra kurulumu kontrol edin.',
+      en: 'Close the terminal window, open a new one and check the installation.',
+    },
+    blocks: [block('command', 'bash', 'claude --version')],
+    shots: [
+      shot(
+        'linux-versie',
+        306,
+        'Linux terminalinde claude --version komutu ve altında “2.1.311 (Claude Code)” sürüm satırı.',
+        'claude --version in a Linux terminal with “2.1.311 (Claude Code)” on the line below it.',
+        516
+      ),
+    ],
+    see: {
+      tr: 'Bir sürüm numarası görünür, örneğin 2.1.x. “command not found” gibi bir hata görürseniz pencereyi kapatıp yeniden açın.',
+      en: 'A version number appears, for example 2.1.x. If you see a “command not found” style error, close the window and open it again.',
+    },
+  },
+  {
+    only: ['macos'],
+    unverified: true,
+    text: {
+      tr: 'Terminal penceresini kapatıp yeni bir tane açın, sonra kurulumu kontrol edin.',
+      en: 'Close the terminal window, open a new one and check the installation.',
+    },
+    blocks: [block('command', 'bash', 'claude --version')],
+    see: {
+      tr: 'Bir sürüm numarası görünür, örneğin 2.1.x. “command not found” gibi bir hata görürseniz pencereyi kapatıp yeniden açın.',
+      en: 'A version number appears, for example 2.1.x. If you see a “command not found” style error, close the window and open it again.',
     },
   },
 ]
@@ -250,6 +285,7 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
           ],
         },
         {
+          only: ['windows'],
           text: {
             tr: 'Karşılama ekranı açılır. Kutuya bir soru yazıp Enter’a basın.',
             en: 'The welcome screen opens. Type a question in the box and press Enter.',
@@ -281,6 +317,38 @@ notepad "$env:USERPROFILE\.claude\settings.json"`
               744
             ),
           ],
+        },
+        {
+          only: ['linux'],
+          text: {
+            tr: 'Karşılama ekranı açılır. Kutuya bir soru yazıp Enter’a basın.',
+            en: 'The welcome screen opens. Type a question in the box and press Enter.',
+          },
+          see: {
+            tr: 'Soru kutusu, altında kullandığınız model adı görünür. “Model listesinde yok” türünde bir uyarı çıkabilir; bu zararsızdır, model çalışır.',
+            en: 'A question box with your model name under it. A notice that the model is not in its list may appear; that is harmless and the model works.',
+          },
+          shots: [
+            shot(
+              'linux-start',
+              980,
+              'Linux terminalinde Claude Code karşılama ekranı ve boş soru kutusu.',
+              'The Claude Code welcome screen with an empty question box in a Linux terminal.',
+              560
+            ),
+          ],
+        },
+        {
+          only: ['macos'],
+          unverified: true,
+          text: {
+            tr: 'Karşılama ekranı açılır. Kutuya bir soru yazıp Enter’a basın.',
+            en: 'The welcome screen opens. Type a question in the box and press Enter.',
+          },
+          see: {
+            tr: 'Soru kutusu, altında kullandığınız model adı görünür. “Model listesinde yok” türünde bir uyarı çıkabilir; bu zararsızdır, model çalışır.',
+            en: 'A question box with your model name under it. A notice that the model is not in its list may appear; that is harmless and the model works.',
+          },
         },
         {
           text: {
