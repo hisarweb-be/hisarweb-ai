@@ -744,3 +744,80 @@ func TestHwStatusProbeCallsAreBounded(t *testing.T) {
 	require.NoError(t, DB.Model(&HwStatusSample{}).Where("model = ? AND ok = ?", "claude-sonnet-5-5", true).Count(&good).Error)
 	assert.EqualValues(t, 10, good, "a reused answer is the same verdict as the answered minute")
 }
+
+// A failed probe is asked again the next minute instead of remembered. A deploy
+// stops the upstream for a few seconds, and reusing that one bad minute across
+// the whole interval turned a three-second restart into a five-minute public
+// outage with a 300-second incident row (HIS-7967, INC-20261106). A good
+// outcome keeps the reuse, so the cost bound from TestHwStatusProbeCallsAreBounded
+// still holds.
+func TestHwStatusProbeReusesOnlyAGoodOutcome(t *testing.T) {
+	hwStatusTestSetup(t)
+	require.NoError(t, DB.AutoMigrate(&Ability{}, &Log{}))
+	require.NoError(t, DB.Exec("DELETE FROM abilities").Error)
+	t.Cleanup(func() { DB.Exec("DELETE FROM abilities") })
+	require.NoError(t, DB.Create(&Ability{Group: HwPaidGroupName, Model: "claude-sonnet-5-5", ChannelId: 1, Enabled: true}).Error)
+	t.Cleanup(func() { SetHwStatusProbe(nil, 0) })
+
+	name := "claude-sonnet-5-5"
+	base := int64(1_800_000_000)
+	minute := base + 60
+
+	hwStatusProbeRemember(name, hwStatusProbeResult{ok: false, reason: HwStatusReasonProbeFailed, minute: minute})
+	_, reused := hwStatusProbeReuse(name, minute+60)
+	assert.False(t, reused, "a failed minute is measured again, not remembered")
+
+	hwStatusProbeRemember(name, hwStatusProbeResult{ok: true, minute: minute})
+	good, reused := hwStatusProbeReuse(name, minute+60)
+	assert.True(t, reused, "a good minute is still reused inside the interval")
+	assert.True(t, good.ok)
+
+	_, reused = hwStatusProbeReuse(name, minute+hwStatusProbeIntervalSeconds)
+	assert.False(t, reused, "the interval still ends the reuse")
+}
+
+// The end-to-end shape of INC-20261106: the upstream answers, stops for one
+// minute because a deploy restarted it, and answers again. The bad minute must
+// stay a single bad minute, so the three-minute chain never sees an outage.
+func TestHwStatusProbeRestartCostsOneBadMinute(t *testing.T) {
+	hwStatusTestSetup(t)
+	require.NoError(t, DB.AutoMigrate(&Ability{}, &Log{}))
+	require.NoError(t, DB.Exec("DELETE FROM abilities").Error)
+	t.Cleanup(func() { DB.Exec("DELETE FROM abilities") })
+	require.NoError(t, DB.Create(&Ability{Group: HwPaidGroupName, Model: "claude-sonnet-5-5", ChannelId: 1, Enabled: true}).Error)
+	t.Cleanup(func() { SetHwStatusProbe(nil, 0) })
+
+	base := int64(1_800_000_000)
+	// Minute one answers and is reused until the interval runs out, so the second
+	// call — the one that hits the restarted upstream — lands on this minute.
+	down := base + 60 + hwStatusProbeIntervalSeconds
+	calls := 0
+	SetHwStatusProbe(func(ctx context.Context, modelName string) HwStatusProbeOutcome {
+		calls++
+		if calls == 2 {
+			return HwStatusProbeNoAnswer
+		}
+		return HwStatusProbeAnswered
+	}, 0)
+
+	models := []string{"claude-sonnet-5-5"}
+	for i := int64(1); i <= 8; i++ {
+		require.NoError(t, HwMeasureStatusOnce(time.Unix(base+i*60, 0), models))
+	}
+
+	var samples []HwStatusSample
+	require.NoError(t, DB.Where("model = ?", "claude-sonnet-5-5").Order("minute").Find(&samples).Error)
+	require.Len(t, samples, 8, "every minute keeps its sample")
+	bad := 0
+	for _, sample := range samples {
+		if !sample.Ok {
+			bad++
+			assert.Equal(t, down, sample.Minute, "only the minute of the restart is bad")
+		}
+	}
+	assert.Equal(t, 1, bad, "a restart no longer repeats its bad minute across the interval")
+
+	var opened int64
+	require.NoError(t, DB.Model(&HwIncident{}).Count(&opened).Error)
+	assert.Zero(t, opened, "three seconds of restart never reach the three-minute outage chain")
+}
