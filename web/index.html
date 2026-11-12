@@ -35,10 +35,6 @@
          head instead of after the deferred script tags. Paths and names are
          fixed because a cache-busting stamp is only appended in production
          (`stamp: true` in rsbuild.config.ts) and never in the filename. -->
-    <link rel="modulepreload" href="/static/js/vendor-tanstack.js" />
-    <link rel="modulepreload" href="/static/js/vendor-ui-primitives.js" />
-    <link rel="modulepreload" href="/static/js/lib-react.js" />
-    <link rel="modulepreload" href="/static/js/index.js" />
     <link rel="preload" href="/static/js/index.js" as="script" />
     <link rel="preload" href="/static/css/index.css" as="style" />
     <!-- Resolve the theme before first paint so the page never flashes light
