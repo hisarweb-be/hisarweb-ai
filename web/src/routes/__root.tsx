@@ -23,7 +23,7 @@ import {
   redirect,
   useNavigate,
 } from '@tanstack/react-router'
-import { lazy, Suspense, useEffect } from 'react'
+import { useEffect } from 'react'
 
 import { NavigationProgress } from '@/components/navigation-progress'
 import { Toaster } from '@/components/ui/sonner'
@@ -31,6 +31,7 @@ import { ThemeCustomizationProvider } from '@/context/theme-customization-provid
 import { saveAffiliateCode } from '@/features/auth/lib/storage'
 import { GeneralError } from '@/features/errors/general-error'
 import { NotFoundError } from '@/features/errors/not-found-error'
+import { RootExtras } from '@/features/hw/root-extras'
 import { getSetupStatus } from '@/features/setup/api'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import {
@@ -41,19 +42,6 @@ import {
 import { subscribeAuthSessionEvents } from '@/lib/auth-session-sync'
 import { resolveLegacyRoute } from '@/lib/legacy-route'
 import { useAuthStore } from '@/stores/auth-store'
-
-// The assistant widget and the devtools are not needed for the first paint and
-// are not part of the customer-facing landing page, so they load after it
-// instead of in the first JS bundle (HIS-7996).
-const AssistantWidget = lazy(() =>
-  import('@/features/hw/admin-agent/assistant-widget').then((m) => ({
-    default: m.AssistantWidget,
-  }))
-)
-
-const Devtools = lazy(() =>
-  import('@/components/devtools').then((m) => ({ default: m.Devtools }))
-)
 
 function RootComponent() {
   const navigate = useNavigate()
@@ -107,15 +95,8 @@ function RootComponent() {
     <ThemeCustomizationProvider>
       <NavigationProgress />
       <Outlet />
-      <Suspense fallback={null}>
-        <AssistantWidget />
-      </Suspense>
+      <RootExtras />
       <Toaster closeButton duration={5000} position='top-center' richColors />
-      {import.meta.env.MODE === 'development' && (
-        <Suspense fallback={null}>
-          <Devtools />
-        </Suspense>
-      )}
     </ThemeCustomizationProvider>
   )
 }
