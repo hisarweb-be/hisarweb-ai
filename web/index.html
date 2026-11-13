@@ -30,13 +30,6 @@
     <!-- Based on New API (AGPL-3.0), https://github.com/hisarweb-be/hisarweb-ai -->
 
     <meta name="theme-color" content="#fff" />
-    <!-- Resource hints (HIS-7996): the entry chunk and the stylesheet carry the
-         first paint, so the browser starts fetching them while it parses this
-         head instead of after the deferred script tags. Paths and names are
-         fixed because a cache-busting stamp is only appended in production
-         (`stamp: true` in rsbuild.config.ts) and never in the filename. -->
-    <link rel="preload" href="/static/js/index.js" as="script" />
-    <link rel="preload" href="/static/css/index.css" as="style" />
     <!-- Resolve the theme before first paint so the page never flashes light
          and one-shot detectors (e.g. Dark Reader) see the real theme.
          Keep in sync with ThemeProvider and THEME_STORAGE_KEYS.mode. -->
