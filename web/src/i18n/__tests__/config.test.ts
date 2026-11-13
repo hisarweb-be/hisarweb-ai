@@ -23,8 +23,10 @@ import { beforeEach, describe, expect, test } from 'vitest'
 import {
   INTERFACE_I18N_OPTIONS,
   applyDocumentLanguage,
+  bundledLanguages,
   lazyLocaleBackend,
 } from '../config'
+import enTranslations from '../locales/en.json'
 import zhTranslations from '../locales/zh.json'
 
 // The application singleton is initialized by the shared test setup, so the
@@ -86,9 +88,22 @@ describe('language files', () => {
     localStorage.clear()
   })
 
-  test('only Turkish and English ship in the main bundle', () => {
-    // The other six files are about 4 MB together; they load when chosen.
-    expect(Object.keys(INTERFACE_I18N_OPTIONS.resources)).toEqual(['tr', 'en'])
+  test('only Turkish ships in the main bundle', () => {
+    // English is the fallback text but loads as its own chunk (about 108 kB
+    // gzip); the other six files are about 4 MB together and load when chosen.
+    expect(bundledLanguages).toEqual(['tr'])
+  })
+
+  test('the English file is no longer part of the bundle but arrives on demand', async () => {
+    // Not `resources`: i18next adds every language the backend loads to it.
+    expect(bundledLanguages).not.toContain('en')
+
+    const served = await lazyLocaleBackend.read('en', 'translation')
+    expect(served['About']).toBe(enTranslations.translation.About)
+
+    const i18n = await createInterfaceI18n()
+    await i18n.changeLanguage('en')
+    expect(i18n.t('About')).toBe(enTranslations.translation.About)
   })
 
   test('a stored other language is loaded before the interface starts in it', async () => {
