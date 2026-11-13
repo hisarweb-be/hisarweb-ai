@@ -22,21 +22,28 @@ import { initReactI18next } from 'react-i18next'
 
 import { withHwText } from './hw'
 import { convertDetectedLanguage, toIntlLocale } from './languages'
-import en from './locales/en.json'
 import tr from './locales/tr.json'
 import { loadTextOverrides } from './text-overrides'
 
-// Only the two languages every visitor can fall back to ship in the main
-// bundle; the other six files are about 4 MB together and load when chosen.
+// Turkish is the only language every visitor gets, so it is the only one that
+// ships in the main bundle. English stays the fallback text but loads as its
+// own chunk, which keeps about 108 kB gzip of it out of the first JS file; the
+// other six files are about 4 MB together and load when chosen as well.
 export const resources = {
   tr,
-  en: withHwText('en', en),
 } as const
+
+/**
+ * The languages whose file is part of the main bundle. Taken before i18next
+ * starts, because it adds every language it loads to the object above.
+ */
+export const bundledLanguages = Object.keys(resources)
 
 const LAZY_LOCALES: Record<
   string,
   () => Promise<{ default: { translation: Record<string, string> } }>
 > = {
+  en: () => import('./locales/en.json'),
   zhCN: () => import('./locales/zh.json'),
   fr: () => import('./locales/fr.json'),
   ru: () => import('./locales/ru.json'),

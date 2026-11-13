@@ -20,8 +20,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, test } from 'vitest'
 
-import { resources } from '../config'
 import { withHwText } from '../hw'
+import enUpstream from '../locales/en.json'
 
 const dir = path.resolve(__dirname, '../locales')
 const hwDir = path.resolve(__dirname, '../hw')
@@ -59,12 +59,14 @@ describe('our own texts', () => {
   test('a language without our own file keeps the upstream bundle untouched', () => {
     const bundle = { translation: { 'Sign in': 'Sign in' } }
     expect(withHwText('de', bundle)).toBe(bundle)
-    expect(resources.en.translation['Sign in']).toBe('Sign in')
+    expect(withHwText('en', enUpstream).translation['Sign in']).toBe('Sign in')
   })
 
   test('tr.json keeps every key readable through the merged English bundle', () => {
+    // Merged once: merging inside the filter rebuilds the bundle per key.
+    const mergedEn = withHwText('en', enUpstream).translation
     const unknown = Object.keys(read(dir, 'tr.json')).filter(
-      (key) => !Object.hasOwn(resources.en.translation, key)
+      (key) => !Object.hasOwn(mergedEn, key)
     )
     expect(unknown).toEqual([])
   })
