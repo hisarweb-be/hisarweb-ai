@@ -570,12 +570,13 @@ func TestHwQualityRunOptionsFromEnvTrimsAndLeavesMissingValuesEmpty(t *testing.T
 // real 503.
 func TestHwToStatusProbeCallsAQuotaRefusalNoEvidence(t *testing.T) {
 	cases := []struct {
-		name    string
-		status  int
-		body    string
-		network bool
-		slow    bool
-		want    model.HwStatusProbeOutcome
+		name        string
+		status      int
+		body        string
+		contentType string
+		network     bool
+		slow        bool
+		want        model.HwStatusProbeOutcome
 	}{
 		{name: "answered", status: http.StatusOK, body: `{"choices":[{"message":{"role":"assistant","content":"pong"}}]}`, want: model.HwStatusProbeAnswered},
 		{name: "quota exhausted", status: http.StatusTooManyRequests, body: `{"error":"rate limited"}`, want: model.HwStatusProbeUnavailable},
@@ -584,6 +585,7 @@ func TestHwToStatusProbeCallsAQuotaRefusalNoEvidence(t *testing.T) {
 		{name: "upstream broken", status: http.StatusInternalServerError, body: `{"error":"boom"}`, want: model.HwStatusProbeNoAnswer},
 		{name: "upstream unavailable", status: http.StatusServiceUnavailable, body: `{"error":"down"}`, want: model.HwStatusProbeNoAnswer},
 		{name: "no answer in the body", status: http.StatusOK, body: `{"choices":[]}`, want: model.HwStatusProbeNoAnswer},
+		{name: "web page instead of an answer", status: http.StatusOK, contentType: "text/html; charset=utf-8", body: "<!doctype html><html lang=\"tr\"><body>New API</body></html>", want: model.HwStatusProbeUnavailable},
 		{name: "network error", network: true, want: model.HwStatusProbeNoAnswer},
 		{name: "slower than the deadline", slow: true, want: model.HwStatusProbeUnavailable},
 	}
@@ -606,7 +608,11 @@ func TestHwToStatusProbeCallsAQuotaRefusalNoEvidence(t *testing.T) {
 					conn.Close()
 					return
 				}
-				w.Header().Set("Content-Type", "application/json")
+				contentType := tc.contentType
+				if contentType == "" {
+					contentType = "application/json"
+				}
+				w.Header().Set("Content-Type", contentType)
 				w.WriteHeader(tc.status)
 				_, _ = w.Write([]byte(tc.body))
 			}))

@@ -218,6 +218,8 @@ func hwStatusProbeFromEnv() func(ctx context.Context, modelName string) model.Hw
 // of them only after 28-101 seconds, and the eight second deadline turned that
 // slow but working supplier into a public outage of every model. Everything
 // else (a 5xx, an empty body, a network error) means the model did not answer.
+// A 200 whose body is not a chat completion (a web page) is not the model
+// either: it is something else answering, so it counts as no evidence.
 func hwToStatusProbe(client *http.Client, baseURL string, apiKey string) func(ctx context.Context, modelName string) model.HwStatusProbeOutcome {
 	return func(ctx context.Context, modelName string) model.HwStatusProbeOutcome {
 		_, _, err := hwCallChat(ctx, client, baseURL, apiKey, hwChatRequest{
@@ -230,6 +232,12 @@ func hwToStatusProbe(client *http.Client, baseURL string, apiKey string) func(ct
 			return model.HwStatusProbeAnswered
 		case hwChatStatusRefused(err):
 			// A quota or key refusal is no evidence about the model.
+			return model.HwStatusProbeUnavailable
+		case hwChatBodyUnreadable(err):
+			// A 200 that is not a chat completion is not the model failing: the
+			// web page on every path the API does not serve answers exactly like
+			// this. Counting it as "no answer" turned one wrong base URL into a
+			// public outage of all eleven models in the same minute.
 			return model.HwStatusProbeUnavailable
 		case errors.Is(err, context.DeadlineExceeded):
 			// Slow is not down: real customer traffic still measures the model.
