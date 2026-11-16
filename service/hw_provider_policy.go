@@ -864,12 +864,15 @@ func hwIsOutageError(apiErr *types.NewAPIError) bool {
 // with the model vendor has no credit left. Lumia answers with the vendor's 400
 // "Your credit balance is too low ..." for some models while others keep
 // working (4 Nov 2026), so it is no customer mistake and no reason to cool the
-// whole supplier.
+// whole supplier. Lumia also refuses with "Insufficient account balance"
+// (14 Nov 2026); without that wording the refusal was handled as a plain
+// channel error, so the health WARN and the CEO counter stayed empty.
 var hwSupplierCreditPhrases = []string{
 	"credit balance is too low",
 	"insufficient_quota",
 	"exceeded your current quota",
 	"insufficient balance",
+	"insufficient account balance",
 	"purchase credits",
 }
 

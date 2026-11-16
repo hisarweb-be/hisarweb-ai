@@ -43,7 +43,7 @@ func TestHwTerminalErrorTurnsSupplierCreditIntoModelUnavailable(t *testing.T) {
 	c := hwClientErrorContext("")
 	c.Set(hwRouteContextKey, hwPolicyRoute(nil, nil))
 	assert.Nil(t, HwTerminalError(c, hwPolicyError(http.StatusBadRequest, "invalid_request"), stop), "a real client error keeps its class")
-	for _, message := range []string{"insufficient_quota", "You exceeded your current quota, please check your plan and billing details", "Insufficient balance"} {
+	for _, message := range []string{"insufficient_quota", "You exceeded your current quota, please check your plan and billing details", "Insufficient balance", "Insufficient account balance"} {
 		assert.True(t, hwIsSupplierCreditError(types.NewErrorWithStatusCode(errors.New(message), "x", http.StatusBadRequest)), message)
 	}
 	assert.False(t, hwIsSupplierCreditError(hwPolicyError(http.StatusBadRequest, "invalid_request")))
