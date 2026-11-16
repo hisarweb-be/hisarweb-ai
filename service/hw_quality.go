@@ -192,6 +192,29 @@ func (e *hwChatStatusError) Error() string {
 	return fmt.Sprintf("customer route returned status %d", e.StatusCode)
 }
 
+// hwChatUnreadableBodyError says the route answered with a 200 whose body is
+// not a chat completion. That happens when something other than the route
+// answers: every path the API does not serve answers with the web page and a
+// 200, so a base URL carrying a path turns every probe into an unreadable body.
+// Such an answer says nothing about the model.
+type hwChatUnreadableBodyError struct {
+	Err error
+}
+
+func (e *hwChatUnreadableBodyError) Error() string {
+	return fmt.Sprintf("customer route returned an unreadable body: %v", e.Err)
+}
+
+func (e *hwChatUnreadableBodyError) Unwrap() error { return e.Err }
+
+// hwChatBodyUnreadable reports whether the error is an answer that is not a
+// chat completion, so a caller can tell "something else answered" from "the
+// model did not answer". The answer itself said nothing about the model.
+func hwChatBodyUnreadable(err error) bool {
+	var bodyErr *hwChatUnreadableBodyError
+	return errors.As(err, &bodyErr)
+}
+
 // hwChatStatusRefused reports whether the error is a refusal of the route
 // itself (quota exhausted, key rejected) instead of an answer about the model.
 // Such a call says nothing about the model.
@@ -231,7 +254,7 @@ func hwCallChat(ctx context.Context, client *http.Client, baseURL string, apiKey
 	}
 	var answer hwChatResponse
 	if err := common.DecodeJson(resp.Body, &answer); err != nil {
-		return "", hwChatUsage{}, fmt.Errorf("customer route returned an unreadable body: %w", err)
+		return "", hwChatUsage{}, &hwChatUnreadableBodyError{Err: err}
 	}
 	if len(answer.Choices) == 0 {
 		return "", hwChatUsage{}, errors.New("customer route returned no answer")
